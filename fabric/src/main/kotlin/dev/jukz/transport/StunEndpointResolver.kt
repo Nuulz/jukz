@@ -2,19 +2,29 @@ package dev.jukz.transport
 
 import dev.jukz.core.host.EndpointResolver
 import dev.jukz.core.model.Endpoint
+import dev.jukz.net.StunClient
+import dev.jukz.net.UpnpMapper
 
 /**
- * Public, cross-NAT [EndpointResolver] (FLAGGED — requires live-network testing).
+ * Public, cross-NAT [EndpointResolver] for the internet path (pairs with the DHT registry). It makes
+ * the host's TCP listener reachable from another network:
+ *  1. UPnP IGD ([UpnpMapper]) — map the TCP port and read the router's public IP. When the router
+ *     supports it (common at home), this yields a directly-reachable `publicIp:port`.
+ *  2. STUN fallback ([StunClient]) — learn the public IP; the port must then be forwarded manually.
  *
- * Real implementation (spec §4.3): obtain the server-reflexive address with a STUN binding request
- * ([dev.jukz.net.StunClient] already provides this), then publish a reachable mapping — a UPnP IGD
- * port-map ([dev.jukz.net.UpnpMapper]) or, when that fails, a TURN/relay allocation. The resolved
- * [Endpoint] is what guests dial; [dev.jukz.transport.IceTransport] hole-punches to it. Swapping
- * this in for [LocalEndpointResolver] is what turns a LAN share into a cross-country one.
+ * FLAGGED: both rungs touch real network gear (an IGD / a STUN server), so this needs live-network
+ * testing on real NATs. The LAN path uses [LocalEndpointResolver] instead, where the LAN address is
+ * directly dialable. Hole-punch / TURN relay (for symmetric NATs with no UPnP) remain in
+ * [dev.jukz.transport.IceTransport], still to be wired.
  */
-class StunEndpointResolver : EndpointResolver {
-    override fun resolve(port: Int): Endpoint =
-        throw NotImplementedError(
-            "StunEndpointResolver requires STUN reflexive address + UPnP/TURN mapping and live-network testing",
-        )
+class StunEndpointResolver(
+    private val upnp: UpnpMapper = UpnpMapper(),
+    private val stun: StunClient = StunClient(),
+) : EndpointResolver {
+
+    override fun resolve(port: Int): Endpoint {
+        upnp.mapPort(port)?.let { return Endpoint(it.externalIp, it.externalPort) }
+        stun.discover()?.let { return Endpoint(it.host, port) }
+        throw IllegalStateException("no public endpoint: UPnP IGD unavailable and STUN unreachable")
+    }
 }
