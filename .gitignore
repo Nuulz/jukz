@@ -32,3 +32,6 @@ hs_err_pid*
 # jukz local
 /local-secret
 *.log
+
+# Superpowers brainstorming scaffolding (local only)
+.superpowers/
