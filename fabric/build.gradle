@@ -1,0 +1,64 @@
+// Minecraft-facing module: wires the pure-Kotlin :core into Fabric 1.21.1.
+plugins {
+    id 'fabric-loom'
+    id 'org.jetbrains.kotlin.jvm'
+}
+
+version = project.mod_version
+group = project.maven_group
+base { archivesName = project.archives_base_name }
+
+repositories {
+    maven { name = 'FabricMC'; url = 'https://maven.fabricmc.net/' }
+    maven { name = 'JitPack'; url = 'https://jitpack.io' }
+    mavenCentral()
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings "net.fabricmc:yarn:${yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+    modImplementation "net.fabricmc:fabric-language-kotlin:${fabric_kotlin_version}"
+
+    // The deterministic core. include() jar-in-jars it so it ships inside the mod.
+    implementation project(':core')
+    include project(':core')
+
+    // JGit world-sync (Maven Central, EDL-1.0, Java 17+). Real adapter compiles against this.
+    // NOTE: for a shippable mod the JGit transitive deps must also be JIJ-bundled (flagged).
+    implementation "org.eclipse.jgit:org.eclipse.jgit:7.1.0.202411261347-r"
+
+    // ---- FLAGGED network libs (requires live-network testing + shading) ----
+    // MC ships its own Netty; ice4j + netty-codec-native-quic MUST be shaded/relocated to
+    // avoid classpath clashes. mldht is on JitPack and dormant. Left out of the active build
+    // so the scaffold compiles offline; the adapters document the exact calls and are wired
+    // behind core interfaces, so enabling these is additive.
+    // modImplementation "com.github.the8472:mldht:master-SNAPSHOT"     // DHT (BEP44)
+    // implementation "org.jitsi:ice4j:3.2-15-g6da2b08"                  // STUN/ICE/TURN + UPnP
+    // implementation "io.netty:netty-codec-native-quic:4.2.9.Final"    // reliable UDP tunnel
+}
+
+loom {
+    // Single source set; client-only classes are guarded with @Environment(CLIENT).
+}
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(21) }
+    withSourcesJar()
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 21
+}
+
+processResources {
+    inputs.property "version", project.version
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version
+    }
+}

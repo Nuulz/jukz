@@ -1,0 +1,29 @@
+// Pure-Kotlin module: the deterministic jukz core (election, handshake, registry,
+// relay, world-id model). NO Minecraft / Fabric dependency, so it compiles and
+// unit-tests on plain Kotlin + JUnit5 without the Loom toolchain.
+plugins {
+    id 'org.jetbrains.kotlin.jvm'
+    id 'java-library'
+}
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(21) }
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:${coroutines_version}"
+
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:${coroutines_version}"
+}
+
+test {
+    useJUnitPlatform()
+    testLogging { events "passed", "skipped", "failed" }
+}

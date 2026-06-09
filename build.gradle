@@ -1,0 +1,13 @@
+// Root project: declares plugin versions for the subprojects.
+// Loom is applied only in :fabric; :core is plain Kotlin/JVM so it builds and
+// tests without the Minecraft toolchain on the classpath.
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version "${kotlin_version}" apply false
+    id 'fabric-loom' version '1.7-SNAPSHOT' apply false
+}
+
+allprojects {
+    repositories {
+        mavenCentral()
+    }
+}
