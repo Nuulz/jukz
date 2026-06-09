@@ -1,6 +1,6 @@
 package dev.jukz
 
-import dev.jukz.runtime.HostController
+import dev.jukz.runtime.HostSession
 import dev.jukz.world.WorldIdSidecar
 import dev.jukz.world.WorldIdState
 import net.fabricmc.api.ModInitializer
@@ -13,14 +13,15 @@ import org.slf4j.LoggerFactory
  * Common entrypoint. Wires the integrated-server lifecycle (which fires for singleplayer too):
  *  - ServerWorldEvents.LOAD (overworld) -> ensure the world UUID + generation exist and mirror them
  *    to the pre-start sidecar.
- *  - SERVER_STARTED -> advertise the host. SERVER_STOPPING -> withdraw (covers exit-to-menu AND
- *    quit, unlike CLIENT_STOPPING which would leak a stale host record).
+ *  - SERVER_STOPPING -> withdraw whatever the player shared (covers exit-to-menu AND quit, unlike
+ *    CLIENT_STOPPING which would leak a stale host record).
+ *
+ * Sharing is explicit (the client "Play together" button drives `ShareCoordinator`), so there is no
+ * host-on-start hook here — a singleplayer world stays private until the player opens it.
  */
 object JukzMod : ModInitializer {
     const val MOD_ID = "jukz"
     val logger = LoggerFactory.getLogger(MOD_ID)
-
-    private val controller = HostController()
 
     override fun onInitialize() {
         ServerWorldEvents.LOAD.register { server, world ->
@@ -31,13 +32,7 @@ object JukzMod : ModInitializer {
             }
         }
 
-        ServerLifecycleEvents.SERVER_STARTED.register { server ->
-            controller.onServerStarted(server)
-        }
-
-        ServerLifecycleEvents.SERVER_STOPPING.register { server ->
-            controller.onServerStopping(server)
-        }
+        ServerLifecycleEvents.SERVER_STOPPING.register { HostSession.onServerStopping() }
 
         logger.info("jukz initialized")
     }

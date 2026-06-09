@@ -41,7 +41,8 @@ class JoinPromptScreen(private val parent: Screen?) : Screen(Text.literal("Join 
 
     override fun render(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
         super.render(context, mouseX, mouseY, delta)
-        context.drawCenteredTextWithShadow(textRenderer, title, width / 2, height / 3, 0xFFFFFF)
-        error?.let { context.drawCenteredTextWithShadow(textRenderer, it, width / 2, height / 2 + 48, 0xFF5555) }
+        // Full ARGB: a missing alpha byte renders the text transparent on 1.21.1 (see JukzStatusScreen).
+        context.drawCenteredTextWithShadow(textRenderer, title, width / 2, height / 3, 0xFFFFFFFF.toInt())
+        error?.let { context.drawCenteredTextWithShadow(textRenderer, it, width / 2, height / 2 + 48, 0xFFFF5555.toInt()) }
     }
 }

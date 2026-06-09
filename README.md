@@ -24,7 +24,7 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
 
 ## What is real and tested
 
-- **`core` (30 passing tests):**
+- **`core` (36 passing tests):**
   - `WorldId` with a copyable Base32 share code; `NodeId`; `Endpoint`; `ClaimToken` (the fencing
     token: `generation → millis → nodeId`).
   - `WorldRegistry` + `InMemoryWorldRegistry` — CAS-on-token publish, TTL expiry, heartbeat refresh.
@@ -37,6 +37,10 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
   - `join` — `JoinController`: the guest flow (lookup → control-channel handshake → relay →
     game hand-off), with `GameHandoff` kept Minecraft-free. Validated end-to-end over loopback
     against a stand-in host (connected / should-host / host-unavailable).
+  - `host` — `HostController`: the host flow (open → publish under a fencing `ClaimToken` →
+    heartbeat → withdraw), with `LanOpener` and `EndpointResolver` (the NAT frontier) kept
+    Minecraft-free. Unit-tested against `InMemoryWorldRegistry` (hosting / superseded / heartbeat
+    re-announce / loss / withdraw / open-failure).
 - **`fabric` (compiles, builds the mod jar):**
   - `WorldIdState` (verified 1.21.1 `PersistentState` API) + `WorldIdSidecar` (pre-start `jukz.dat`).
   - Lifecycle wiring (`ServerWorldEvents.LOAD`, `SERVER_STARTED/STOPPING`) and `HostController`.
@@ -44,6 +48,10 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     off-thread and maps the result to animated status screens (searching / connecting / nobody-
     hosting / error), with `MinecraftGameHandoff` opening the vanilla `ConnectScreen` on success.
     Until the live DHT is wired, a code lookup ends cleanly on the "nobody is hosting" screen.
+  - Host share flow wired: the pause-menu "Open to LAN" button is replaced with **"Play together"**
+    (`ScreenEvents.AFTER_INIT`, no mixin) → `ShareCoordinator` bumps the fence, runs `HostController`
+    with `MinecraftLanOpener` (real `IntegratedServer.openToLan`) + `LocalEndpointResolver`, and
+    shows `ShareWorldScreen` with the copyable code. `HostSession` withdraws on world close.
   - `StunClient` — a real, dependency-free RFC 5389 STUN client.
   - `JGitWorldSync.commit` — real JGit snapshotting.
 
@@ -54,6 +62,9 @@ documented in KDoc. They need real machines behind real NATs to validate:
 
 - `MldhtWorldRegistry` — live DHT (BEP44 mutable items) via the8472/mldht (JitPack).
 - `IceTransport` / `HolePuncher` / `UpnpMapper` — ICE/STUN hole punch, QUIC tunnel, UPnP, TURN.
+- `StunEndpointResolver` — the host's public, cross-NAT endpoint (STUN reflexive address + UPnP/TURN
+  mapping). Swapping it in for `LocalEndpointResolver` is what turns a LAN share into a cross-country
+  one; everything else in the host flow is already real.
 - `JGitWorldSync.pullLatest` — cold-start world transfer over the P2P transport.
 - The client-side mixin that intercepts "open existing local world" to consult the DHT first.
 
