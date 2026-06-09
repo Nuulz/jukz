@@ -25,6 +25,10 @@ dependencies {
     implementation project(':core')
     include project(':core')
 
+    // Coroutines for the client join coordinator (runBlocking). fabric-language-kotlin ships the
+    // same artifact at runtime; declaring it keeps it on the compile classpath.
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:${coroutines_version}"
+
     // JGit world-sync (Maven Central, EDL-1.0, Java 17+). Real adapter compiles against this.
     // NOTE: for a shippable mod the JGit transitive deps must also be JIJ-bundled (flagged).
     implementation "org.eclipse.jgit:org.eclipse.jgit:7.1.0.202411261347-r"

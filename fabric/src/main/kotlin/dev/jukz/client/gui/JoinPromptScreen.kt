@@ -1,5 +1,6 @@
 package dev.jukz.client.gui
 
+import dev.jukz.client.JoinCoordinator
 import dev.jukz.core.model.WorldId
 import net.minecraft.client.gui.DrawContext
 import net.minecraft.client.gui.screen.Screen
@@ -25,7 +26,7 @@ class JoinPromptScreen(private val parent: Screen?) : Screen(Text.literal("Join 
             ButtonWidget.builder(Text.literal("Join")) {
                 val parsed = runCatching { WorldId.fromShortCode(codeField.text) }.getOrNull()
                 if (parsed != null) {
-                    client?.setScreen(SearchingHostScreen(parsed.shortCode()))
+                    JoinCoordinator.start(parsed, parsed.shortCode(), parent)
                 } else {
                     error = Text.literal("Invalid world code")
                 }

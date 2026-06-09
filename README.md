@@ -30,14 +30,20 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
   - `WorldRegistry` + `InMemoryWorldRegistry` — CAS-on-token publish, TTL expiry, heartbeat refresh.
   - `HostElection` — split-brain tie-break, ghost detection + fenced takeover (`generation+1`),
     stale-token rejection (rules R1–R14 from the spec). `HeartbeatLivenessProbe` for R10/R11.
-  - `handshake` — sealed `Message` set, byte-exact binary `MessageCodec`, host/joiner state machines.
+  - `handshake` — sealed `Message` set, byte-exact binary `MessageCodec`, host/joiner state
+    machines, and `FramedMessageChannel` (length-prefixed messages over a channel).
   - `transport` — `LocalTcpRelay` (transparent TCP byte pump, verified over loopback),
-    `DirectTcpTransport`, `SocketChannel`.
+    `DirectTcpTransport`, `SocketChannel`, `ConnectionType` (control/data discriminator byte).
+  - `join` — `JoinController`: the guest flow (lookup → control-channel handshake → relay →
+    game hand-off), with `GameHandoff` kept Minecraft-free. Validated end-to-end over loopback
+    against a stand-in host (connected / should-host / host-unavailable).
 - **`fabric` (compiles, builds the mod jar):**
   - `WorldIdState` (verified 1.21.1 `PersistentState` API) + `WorldIdSidecar` (pre-start `jukz.dat`).
   - Lifecycle wiring (`ServerWorldEvents.LOAD`, `SERVER_STARTED/STOPPING`) and `HostController`.
-  - Client UI: "Join via jukz" title-screen button + status screens (searching / connecting /
-    NAT error / share / join-by-code).
+  - Client join flow wired end-to-end: "Join via jukz" → `JoinCoordinator` runs `JoinController`
+    off-thread and maps the result to animated status screens (searching / connecting / nobody-
+    hosting / error), with `MinecraftGameHandoff` opening the vanilla `ConnectScreen` on success.
+    Until the live DHT is wired, a code lookup ends cleanly on the "nobody is hosting" screen.
   - `StunClient` — a real, dependency-free RFC 5389 STUN client.
   - `JGitWorldSync.commit` — real JGit snapshotting.
 
