@@ -13,9 +13,10 @@ import dev.jukz.core.util.SystemClock
  * Composition (per the WorldSync decisions):
  *  - LAN layer: real cross-machine [LanMulticastWorldRegistry]; falls back to the loopback-safe
  *    [InMemoryWorldRegistry] if multicast can't be set up (no network, blocked).
- *  - Internet layer: [RendezvousWorldRegistry], only when `rendezvous.url` is configured in
- *    `config/jukz.properties`. Both are combined by [CompositeWorldRegistry] (LAN first, token
- *    order resolves discrepancies). With no URL configured the mod is LAN-only.
+ *  - Internet layer: [RendezvousWorldRegistry] against the public instance by default
+ *    ([JukzConfig.DEFAULT_RENDEZVOUS_URL]); overridden by `rendezvous.url` in
+ *    `config/jukz.properties`. Set to "none" for LAN-only. Both layers are combined by
+ *    [CompositeWorldRegistry] (LAN first, token order resolves discrepancies).
  */
 object Discovery {
     val registry: WorldRegistry = build()
@@ -27,7 +28,7 @@ object Discovery {
                 InMemoryWorldRegistry(SystemClock)
             }
         val url = JukzConfig.rendezvousUrl ?: run {
-            JukzMod.logger.info("jukz: no rendezvous.url configured; discovery is LAN-only")
+            JukzMod.logger.info("jukz: rendezvous.url=none; discovery is LAN-only")
             return lan
         }
         JukzMod.logger.info("jukz: rendezvous discovery enabled via {}", url)

@@ -11,9 +11,9 @@ import java.util.Properties
  * hand. Loaded once on first access; a missing file is created from a commented template so the
  * available keys are discoverable without docs.
  *
- * `rendezvous.url` is deliberately empty by default: with no URL the mod is LAN-only (multicast
- * discovery keeps working) and never talks to any external service. Pointing it at a rendezvous
- * server — self-hosted or public — turns on internet-wide discovery.
+ * By default the mod connects to the public rendezvous server at [DEFAULT_RENDEZVOUS_URL] so
+ * internet-wide discovery works out of the box. Override `rendezvous.url` in the config file to
+ * point at a self-hosted instance, or set it to `none` to run LAN-only.
  */
 object JukzConfig {
 
@@ -21,13 +21,16 @@ object JukzConfig {
     private const val KEY_RENDEZVOUS_URL = "rendezvous.url"
     private const val KEY_RENDEZVOUS_AUTH_TOKEN = "rendezvous.auth-token"
 
+    /** Public rendezvous server used when no override is configured. */
+    const val DEFAULT_RENDEZVOUS_URL = "https://jukz-rendezvous-production.up.railway.app"
+
     private val TEMPLATE = """
         # jukz configuration
         #
         # rendezvous.url
-        #   Base URL of a jukz rendezvous server (e.g. https://my-jukz.fly.dev) used for
-        #   internet-wide world discovery. Leave empty to stay LAN-only: worlds are then only
-        #   discoverable on your local network via multicast.
+        #   Base URL of the jukz rendezvous server used for internet-wide world discovery.
+        #   Defaults to the public instance when this is blank.
+        #   Set to "none" to disable internet discovery and stay LAN-only.
         #   Self-hosting: see rendezvous/README.md in the jukz repository.
         #
         # rendezvous.auth-token
@@ -39,10 +42,20 @@ object JukzConfig {
 
     private val properties: Properties by lazy { load() }
 
-    /** Normalised rendezvous base URL (no trailing slash), or null when unset → LAN-only. */
+    /**
+     * Normalised rendezvous base URL (no trailing slash).
+     * Falls back to [DEFAULT_RENDEZVOUS_URL] when unconfigured.
+     * Returns null only when explicitly set to "none" → LAN-only.
+     */
     val rendezvousUrl: String?
-        get() = properties.getProperty(KEY_RENDEZVOUS_URL)
-            ?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() }
+        get() {
+            val raw = properties.getProperty(KEY_RENDEZVOUS_URL)?.trim()?.trimEnd('/') ?: ""
+            return when {
+                raw.equals("none", ignoreCase = true) -> null
+                raw.isEmpty() -> DEFAULT_RENDEZVOUS_URL
+                else -> raw
+            }
+        }
 
     /** Optional bearer token for the rendezvous server, or null when unset. */
     val rendezvousAuthToken: String?
