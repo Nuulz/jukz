@@ -22,7 +22,7 @@ object JukzConfig {
     private const val KEY_RENDEZVOUS_AUTH_TOKEN = "rendezvous.auth-token"
 
     /** Public rendezvous server used when no override is configured. */
-    const val DEFAULT_RENDEZVOUS_URL = "https://jukz-rendezvous-production.up.railway.app"
+    const val DEFAULT_RENDEZVOUS_URL = "https://jukz.nuulm.com"
 
     private val TEMPLATE = """
         # jukz configuration
