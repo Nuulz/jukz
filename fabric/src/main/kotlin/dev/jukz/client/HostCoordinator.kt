@@ -1,6 +1,7 @@
 package dev.jukz.client
 
 import dev.jukz.JukzMod
+import dev.jukz.core.host.HostConnectionServer
 import dev.jukz.core.host.HostController
 import dev.jukz.core.host.HostResult
 import dev.jukz.core.model.NodeId
@@ -54,6 +55,7 @@ object HostCoordinator {
         val controller = HostController(
             registry = Discovery.registry,
             lanOpener = MinecraftLanOpener(server),
+            connectionServer = HostConnectionServer(),
             endpointResolver = LocalEndpointResolver(),
             nodeId = NodeId.random(), // TODO(persist): stable per-install identity once the DHT is live
             clock = SystemClock,

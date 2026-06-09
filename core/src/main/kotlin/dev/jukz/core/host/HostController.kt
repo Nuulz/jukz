@@ -4,6 +4,7 @@ import dev.jukz.core.discovery.PublishResult
 import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.discovery.WorldRegistry
 import dev.jukz.core.model.ClaimToken
+import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.NodeId
 import dev.jukz.core.model.WorldId
 import dev.jukz.core.util.JukzClock
@@ -19,15 +20,17 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Host side of the world-sharing flow (spec 2026-06-09-host). Opens the local world to the network
- * via a [LanOpener], resolves a reachable [dev.jukz.core.model.Endpoint] through an
- * [EndpointResolver], publishes the discovery [WorldRecord] under a fencing [ClaimToken], and keeps
- * it alive with periodic heartbeats. The fencing/CAS decisions live in the [WorldRegistry]; this
- * class only drives the open → publish → heartbeat → withdraw lifecycle.
+ * via a [LanOpener], starts a [ConnectionServer] that answers guests' jukz handshakes and pipes their
+ * data to the local game, resolves the server's reachable [Endpoint] through an [EndpointResolver],
+ * publishes the discovery [WorldRecord] under a fencing [ClaimToken], and keeps it alive with
+ * periodic heartbeats. The fencing/CAS decisions live in the [WorldRegistry]; this class drives the
+ * open → serve → publish → heartbeat → withdraw lifecycle.
  *
- * Control/data transport is the guest's concern ([dev.jukz.core.join.JoinController]); a real host
- * answers those once the live network adapters are wired. Against [dev.jukz.core.discovery
- * .InMemoryWorldRegistry] the published record is real but only locally visible, so this is fully
- * deterministic to unit-test while the live DHT is still flagged.
+ * The guest side ([dev.jukz.core.join.JoinController]) connects to the announced endpoint and is
+ * answered by the [ConnectionServer] — the host is no longer a test double. Against
+ * [dev.jukz.core.discovery.InMemoryWorldRegistry] with a loopback [EndpointResolver] the whole path
+ * is exercisable in-process, so it is fully deterministic to unit-test while the live DHT/NAT
+ * adapters are still flagged.
  *
  * The fencing [generation] is incremented (and persisted) by the caller before [host] is invoked,
  * keeping Minecraft persistence out of `core`.
@@ -35,6 +38,7 @@ import java.util.concurrent.atomic.AtomicLong
 class HostController(
     private val registry: WorldRegistry,
     private val lanOpener: LanOpener,
+    private val connectionServer: ConnectionServer,
     private val endpointResolver: EndpointResolver,
     private val nodeId: NodeId,
     private val clock: JukzClock,
@@ -51,20 +55,28 @@ class HostController(
 
     /** Run the full host-open. Safe to call once per controller; build a new one to re-host. */
     suspend fun host(worldId: WorldId, generation: Long): HostResult {
-        val port = lanOpener.open() ?: return HostResult.Failed("could not open local port")
+        val gamePort = lanOpener.open() ?: return HostResult.Failed("could not open local port")
         return try {
-            val endpoint = endpointResolver.resolve(port)
             val token = ClaimToken(generation, clock.nowMillis(), nodeId)
+            // The connection server fronts the local game; the announced endpoint is its listen port.
+            val listenPort = connectionServer.start(worldId, token, Endpoint("127.0.0.1", gamePort)) {
+                record?.heartbeatSeq ?: 0L
+            }
+            val endpoint = endpointResolver.resolve(listenPort)
             val candidate = WorldRecord(worldId, token, endpoint, heartbeatSeq = 0)
             when (val result = registry.publishIfNewer(candidate)) {
                 is PublishResult.Published -> {
                     record = result.record
                     startHeartbeat(worldId)
-                    HostResult.Hosting(worldId.shortCode(), port)
+                    HostResult.Hosting(worldId.shortCode(), listenPort)
                 }
-                is PublishResult.Rejected -> HostResult.Superseded(result.current)
+                is PublishResult.Rejected -> {
+                    connectionServer.close()
+                    HostResult.Superseded(result.current)
+                }
             }
         } catch (e: Exception) {
+            connectionServer.close()
             HostResult.Failed(e.message ?: e.toString())
         }
     }
@@ -118,6 +130,7 @@ class HostController(
     suspend fun stop() {
         heartbeatJob?.let { runCatching { it.cancel() } }
         heartbeatJob = null
+        runCatching { connectionServer.close() }
         val current = record ?: return
         record = null
         runCatching { registry.withdraw(current.worldId, current.token) }

@@ -31,14 +31,22 @@ class HostControllerTest {
     /** A [LanOpener] that always succeeds with a fixed port. */
     private fun opener(port: Int) = LanOpener { port }
 
-    /** A loopback-style resolver: the guest would dial 127.0.0.1:<port>. */
+    /** A loopback-style resolver: the guest would dial 127.0.0.1:<the listener port>. */
     private val resolver = EndpointResolver { port -> Endpoint("127.0.0.1", port) }
+
+    // The announced endpoint is the connection server's listen port, not the game (openToLan) port,
+    // so the fake server returns a fixed, distinct listen port to make that boundary visible.
+    private val listenPort = 50_000
+    private fun fakeServer() = object : ConnectionServer {
+        override fun start(worldId: WorldId, token: ClaimToken, gameEndpoint: Endpoint, heartbeatSeq: () -> Long) = listenPort
+        override fun close() {}
+    }
 
     private fun controller(
         registry: InMemoryWorldRegistry,
         clock: FakeClock,
         lan: LanOpener = opener(54321),
-    ) = HostController(registry, lan, resolver, nodeId, clock)
+    ) = HostController(registry, lan, fakeServer(), resolver, nodeId, clock)
 
     @Test
     fun `opens and publishes a live record`() = runBlocking {
@@ -50,13 +58,13 @@ class HostControllerTest {
 
         val hosting = assertInstanceOf(HostResult.Hosting::class.java, result)
         assertEquals(world.shortCode(), hosting.shortCode)
-        assertEquals(45678, hosting.port)
+        assertEquals(listenPort, hosting.port) // the served listen port, not the openToLan game port
 
         val record = registry.lookup(world)
         assertNotNull(record)
         assertEquals(3, record!!.token.hostGeneration)
         assertEquals(nodeId, record.token.nodeId)
-        assertEquals(Endpoint("127.0.0.1", 45678), record.endpoint)
+        assertEquals(Endpoint("127.0.0.1", listenPort), record.endpoint)
 
         host.close()
     }
@@ -134,7 +142,7 @@ class HostControllerTest {
         val live = host.status()
         assertNotNull(live)
         assertTrue(live!!.live)
-        assertEquals(Endpoint("127.0.0.1", 45678), live.endpoint)
+        assertEquals(Endpoint("127.0.0.1", listenPort), live.endpoint)
 
         // A competitor takes over with a higher token: we are no longer the announced host.
         registry.publishIfNewer(WorldRecord(world, ClaimToken(2, 1_000, node(1)), Endpoint("10.0.0.2", 25565), 0))
@@ -163,7 +171,7 @@ class HostControllerTest {
     fun `reports Failed when the world cannot be opened`() = runBlocking {
         val clock = FakeClock(1_000)
         val registry = InMemoryWorldRegistry(clock)
-        val host = HostController(registry, LanOpener { null }, resolver, nodeId, clock)
+        val host = HostController(registry, LanOpener { null }, fakeServer(), resolver, nodeId, clock)
 
         val result = host.host(world, generation = 1)
 
