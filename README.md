@@ -48,16 +48,18 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     off-thread and maps the result to animated status screens (searching / connecting / nobody-
     hosting / error), with `MinecraftGameHandoff` opening the vanilla `ConnectScreen` on success.
     Until the live DHT is wired, a code lookup ends cleanly on the "nobody is hosting" screen.
-  - Host share flow wired: the pause-menu "Open to LAN" button is replaced with **"Play together"**
-    (`ScreenEvents.AFTER_INIT`, no mixin) → `ShareCoordinator` bumps the fence, runs `HostController`
-    with `MinecraftLanOpener` (real `IntegratedServer.openToLan`) + `LocalEndpointResolver`. Once
-    hosting, the button becomes **"Hosting · world info"** opening `HostInfoScreen` (share code +
-    copy, UUID, generation, endpoint, and a live self-check). `HostSession` withdraws on world close.
-  - Auto-join on open (mixin): opening a singleplayer world first consults discovery — a tiny Java
+  - Auto-host on open: every jukz world is permanently shareable. When a world boots locally,
+    `HostCoordinator` (on `SERVER_STARTED`) bumps the fence and runs `HostController` with
+    `MinecraftLanOpener` (real `IntegratedServer.openToLan`) + `LocalEndpointResolver`, announcing it
+    so others can join. Silent; `HostSession` withdraws on world close. The pause-menu "Open to LAN"
+    button is replaced (`ScreenEvents.AFTER_INIT`, no mixin) with an informational **"World info
+    (jukz)"** opening `HostInfoScreen` (share code + copy, UUID, generation, endpoint, live self-check).
+  - Auto-join on open (mixin): the flip side — opening a world first consults discovery. A tiny Java
     `IntegratedServerLoaderMixin` at the head of `IntegratedServerLoader.start` reads the world's
-    `jukz.dat` UUID and, via `WorldOpenInterceptor`, looks it up; a live host cancels the local boot
-    and joins as a guest, otherwise the world boots locally. Joining is intrinsic to opening, not a
-    button. With the in-memory registry the lookup is always empty, so worlds still open locally.
+    `jukz.dat` UUID and, via `WorldOpenInterceptor`, looks it up in the shared `Discovery` registry; a
+    live host cancels the local boot and joins as a guest, otherwise the world boots locally (and then
+    auto-hosts). Joining/hosting is intrinsic to opening a world, never a button. With the in-memory
+    registry the lookup is always empty, so worlds open locally and shares are only locally visible.
   - `StunClient` — a real, dependency-free RFC 5389 STUN client.
   - `JGitWorldSync.commit` — real JGit snapshotting.
 

@@ -2,10 +2,8 @@ package dev.jukz.client
 
 import dev.jukz.JukzMod
 import dev.jukz.client.gui.SearchingHostScreen
-import dev.jukz.core.discovery.InMemoryWorldRegistry
-import dev.jukz.core.discovery.WorldRegistry
 import dev.jukz.core.model.WorldId
-import dev.jukz.core.util.SystemClock
+import dev.jukz.discovery.Discovery
 import dev.jukz.world.WorldIdSidecar
 import kotlinx.coroutines.runBlocking
 import net.minecraft.client.MinecraftClient
@@ -18,13 +16,12 @@ import net.minecraft.client.MinecraftClient
  * to that host as a guest; otherwise the world opens locally as usual. No button — joining is an
  * intrinsic property of opening the world.
  *
- * Discovery defaults to the loopback-safe [InMemoryWorldRegistry], so today the lookup always comes
- * back empty and every world opens locally. The live DHT registry drops in behind [WorldRegistry] and
- * turns this into real cross-machine detection without any change here.
+ * Discovery comes from the shared [Discovery] registry — loopback-safe today, so the lookup always
+ * comes back empty and every world opens locally (then auto-hosts via [HostCoordinator]). The live
+ * DHT registry drops in behind it and turns this into real cross-machine detection with no change
+ * here.
  */
 object WorldOpenInterceptor {
-
-    private val registry: WorldRegistry = InMemoryWorldRegistry(SystemClock)
 
     // Guards the re-entrant local boot we trigger ourselves (openLocally) from being intercepted
     // again. Only ever touched on the render thread, so a plain volatile flag is enough.
@@ -60,7 +57,7 @@ object WorldOpenInterceptor {
 
         Thread {
             val live = try {
-                runBlocking { registry.lookup(worldId) }
+                runBlocking { Discovery.registry.lookup(worldId) }
             } catch (e: Throwable) {
                 null
             }

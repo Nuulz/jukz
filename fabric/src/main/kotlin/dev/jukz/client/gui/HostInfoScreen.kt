@@ -1,5 +1,6 @@
 package dev.jukz.client.gui
 
+import dev.jukz.client.HostCoordinator
 import dev.jukz.core.host.HostStatus
 import dev.jukz.runtime.HostSession
 import net.minecraft.client.gui.DrawContext
@@ -16,7 +17,7 @@ import net.minecraft.text.Text
  */
 class HostInfoScreen(private val parent: Screen?) : Screen(Text.literal("World info")) {
 
-    private val record = HostSession.record
+    private val record get() = HostSession.record
 
     @Volatile private var status: HostStatus? = null
     @Volatile private var checking = true
@@ -37,6 +38,11 @@ class HostInfoScreen(private val parent: Screen?) : Screen(Text.literal("World i
             ButtonWidget.builder(Text.literal("Done")) { client?.setScreen(parent) }
                 .dimensions(cx + 54, y, 100, 20).build(),
         )
+        // Self-heal: every jukz world is auto-hosted on open, but if that hasn't taken (or failed),
+        // kick it off now so opening this panel always ends with the world online.
+        if (!HostSession.isHosting) {
+            client?.server?.let { HostCoordinator.autoHost(it) }
+        }
         refresh()
     }
 
