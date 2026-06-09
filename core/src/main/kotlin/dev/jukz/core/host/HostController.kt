@@ -69,6 +69,22 @@ class HostController(
         }
     }
 
+    /** The record we are currently announcing, or null when not hosting. Static info for the host UI. */
+    val sharedRecord: WorldRecord? get() = record
+
+    /**
+     * Poll the registry to confirm our record is still the live, announced one. Returns null when not
+     * hosting; otherwise [HostStatus.live] is true only when the registry holds our exact token. With
+     * the in-memory registry this is the same process, so it reflects the heartbeat; with the live
+     * DHT it is a real reachability/ownership check.
+     */
+    suspend fun status(): HostStatus? {
+        val current = record ?: return null
+        val found = registry.lookup(current.worldId)
+        val live = found != null && found.token == current.token
+        return HostStatus(live, found?.heartbeatSeq ?: current.heartbeatSeq, current.endpoint)
+    }
+
     /**
      * One heartbeat tick: re-announce with an advanced sequence and reset the record's TTL. Returns
      * false when we are no longer the live host (superseded or expired) — the caller should stop.

@@ -2,8 +2,8 @@ package dev.jukz.client
 
 import dev.jukz.JukzMod
 import dev.jukz.client.gui.HostErrorScreen
+import dev.jukz.client.gui.HostInfoScreen
 import dev.jukz.client.gui.OpeningWorldScreen
-import dev.jukz.client.gui.ShareWorldScreen
 import dev.jukz.core.discovery.InMemoryWorldRegistry
 import dev.jukz.core.host.HostController
 import dev.jukz.core.host.HostResult
@@ -36,9 +36,9 @@ object ShareCoordinator {
         val client = MinecraftClient.getInstance()
         val server = client.server ?: return // only the local host of a singleplayer world can share
 
-        // Already hosting this session: skip re-opening, just re-show the code.
-        HostSession.shareInfo?.let { info ->
-            client.setScreen(ShareWorldScreen(info.shortCode, parent))
+        // Already hosting this session: skip re-opening, just show the world info.
+        if (HostSession.isHosting) {
+            client.setScreen(HostInfoScreen(parent))
             return
         }
 
@@ -67,7 +67,7 @@ object ShareCoordinator {
         )
         val result = runBlocking { controller.host(worldId, generation) }
         if (result is HostResult.Hosting) {
-            HostSession.install(controller, HostSession.ShareInfo(result.shortCode, result.port))
+            HostSession.install(controller)
             JukzMod.logger.info("jukz: hosting {} on port {}", result.shortCode, result.port)
         } else {
             controller.close()
@@ -89,7 +89,7 @@ object ShareCoordinator {
     private fun applyResult(client: MinecraftClient, result: HostResult, parent: Screen?) {
         when (result) {
             is HostResult.Hosting ->
-                client.setScreen(ShareWorldScreen(result.shortCode, parent))
+                client.setScreen(HostInfoScreen(parent))
             is HostResult.Superseded ->
                 client.setScreen(
                     HostErrorScreen(

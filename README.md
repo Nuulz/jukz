@@ -24,7 +24,7 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
 
 ## What is real and tested
 
-- **`core` (36 passing tests):**
+- **`core` (38 passing tests):**
   - `WorldId` with a copyable Base32 share code; `NodeId`; `Endpoint`; `ClaimToken` (the fencing
     token: `generation → millis → nodeId`).
   - `WorldRegistry` + `InMemoryWorldRegistry` — CAS-on-token publish, TTL expiry, heartbeat refresh.
@@ -40,18 +40,24 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
   - `host` — `HostController`: the host flow (open → publish under a fencing `ClaimToken` →
     heartbeat → withdraw), with `LanOpener` and `EndpointResolver` (the NAT frontier) kept
     Minecraft-free. Unit-tested against `InMemoryWorldRegistry` (hosting / superseded / heartbeat
-    re-announce / loss / withdraw / open-failure).
+    re-announce / loss / withdraw / open-failure / live-status).
 - **`fabric` (compiles, builds the mod jar):**
   - `WorldIdState` (verified 1.21.1 `PersistentState` API) + `WorldIdSidecar` (pre-start `jukz.dat`).
-  - Lifecycle wiring (`ServerWorldEvents.LOAD`, `SERVER_STARTED/STOPPING`) and `HostController`.
+  - Lifecycle wiring (`ServerWorldEvents.LOAD`, `SERVER_STOPPING`) and `HostSession` (host withdrawal).
   - Client join flow wired end-to-end: "Join via jukz" → `JoinCoordinator` runs `JoinController`
     off-thread and maps the result to animated status screens (searching / connecting / nobody-
     hosting / error), with `MinecraftGameHandoff` opening the vanilla `ConnectScreen` on success.
     Until the live DHT is wired, a code lookup ends cleanly on the "nobody is hosting" screen.
   - Host share flow wired: the pause-menu "Open to LAN" button is replaced with **"Play together"**
     (`ScreenEvents.AFTER_INIT`, no mixin) → `ShareCoordinator` bumps the fence, runs `HostController`
-    with `MinecraftLanOpener` (real `IntegratedServer.openToLan`) + `LocalEndpointResolver`, and
-    shows `ShareWorldScreen` with the copyable code. `HostSession` withdraws on world close.
+    with `MinecraftLanOpener` (real `IntegratedServer.openToLan`) + `LocalEndpointResolver`. Once
+    hosting, the button becomes **"Hosting · world info"** opening `HostInfoScreen` (share code +
+    copy, UUID, generation, endpoint, and a live self-check). `HostSession` withdraws on world close.
+  - Auto-join on open (mixin): opening a singleplayer world first consults discovery — a tiny Java
+    `IntegratedServerLoaderMixin` at the head of `IntegratedServerLoader.start` reads the world's
+    `jukz.dat` UUID and, via `WorldOpenInterceptor`, looks it up; a live host cancels the local boot
+    and joins as a guest, otherwise the world boots locally. Joining is intrinsic to opening, not a
+    button. With the in-memory registry the lookup is always empty, so worlds still open locally.
   - `StunClient` — a real, dependency-free RFC 5389 STUN client.
   - `JGitWorldSync.commit` — real JGit snapshotting.
 
@@ -66,7 +72,9 @@ documented in KDoc. They need real machines behind real NATs to validate:
   mapping). Swapping it in for `LocalEndpointResolver` is what turns a LAN share into a cross-country
   one; everything else in the host flow is already real.
 - `JGitWorldSync.pullLatest` — cold-start world transfer over the P2P transport.
-- The client-side mixin that intercepts "open existing local world" to consult the DHT first.
+
+The world-open interception itself is real (`IntegratedServerLoaderMixin` + `WorldOpenInterceptor`);
+only the shared discovery backend it queries is flagged, so today every world still opens locally.
 
 ## Build & test
 

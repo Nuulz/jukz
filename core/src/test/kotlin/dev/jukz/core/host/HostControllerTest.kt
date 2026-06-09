@@ -125,6 +125,41 @@ class HostControllerTest {
     }
 
     @Test
+    fun `status reports live while hosting and not-live after a takeover`() = runBlocking {
+        val clock = FakeClock(1_000)
+        val registry = InMemoryWorldRegistry(clock)
+        val host = controller(registry, clock, opener(45678))
+        host.host(world, generation = 1)
+
+        val live = host.status()
+        assertNotNull(live)
+        assertTrue(live!!.live)
+        assertEquals(Endpoint("127.0.0.1", 45678), live.endpoint)
+
+        // A competitor takes over with a higher token: we are no longer the announced host.
+        registry.publishIfNewer(WorldRecord(world, ClaimToken(2, 1_000, node(1)), Endpoint("10.0.0.2", 25565), 0))
+        val after = host.status()
+        assertNotNull(after)
+        assertFalse(after!!.live)
+
+        host.close()
+    }
+
+    @Test
+    fun `status is null before hosting and after stop`() = runBlocking {
+        val clock = FakeClock(1_000)
+        val registry = InMemoryWorldRegistry(clock)
+        val host = controller(registry, clock)
+        assertNull(host.status())
+
+        host.host(world, generation = 1)
+        assertNotNull(host.status())
+
+        host.stop()
+        assertNull(host.status())
+    }
+
+    @Test
     fun `reports Failed when the world cannot be opened`() = runBlocking {
         val clock = FakeClock(1_000)
         val registry = InMemoryWorldRegistry(clock)

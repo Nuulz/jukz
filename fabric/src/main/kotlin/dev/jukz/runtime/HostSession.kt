@@ -1,34 +1,35 @@
 package dev.jukz.runtime
 
 import dev.jukz.JukzMod
+import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.host.HostController
+import dev.jukz.core.host.HostStatus
+import kotlinx.coroutines.runBlocking
 
 /**
  * Holds the live host session — the `core` [HostController] driving publish + heartbeat — so the
- * client-side share action can start it and the server lifecycle can withdraw it. Common-safe: it
- * touches only `core` types, never client-only Minecraft classes, so it also loads on a dedicated
- * server. The client-side `dev.jukz.client.ShareCoordinator` installs the controller here once a
- * world is shared; [JukzMod] calls [onServerStopping] to tear it down when the world closes.
+ * client-side share action can start it, the host-info screen can read it, and the server lifecycle
+ * can withdraw it. Common-safe: it touches only `core` types, never client-only Minecraft classes,
+ * so it also loads on a dedicated server. `dev.jukz.client.ShareCoordinator` installs the controller
+ * once a world is shared; [JukzMod] calls [onServerStopping] to tear it down when the world closes.
  */
 object HostSession {
-
-    /** What the share screen needs to re-display the code without re-opening the world. */
-    data class ShareInfo(val shortCode: String, val port: Int)
 
     @Volatile
     private var controller: HostController? = null
 
-    @Volatile
-    var shareInfo: ShareInfo? = null
-        private set
-
     val isHosting: Boolean get() = controller != null
 
-    /** Record a freshly-started host controller and the info needed to re-show its share code. */
-    fun install(controller: HostController, info: ShareInfo) {
+    /** The record we are currently announcing (static info for the host UI), or null. */
+    val record: WorldRecord? get() = controller?.sharedRecord
+
+    /** Record a freshly-started host controller. */
+    fun install(controller: HostController) {
         this.controller = controller
-        this.shareInfo = info
     }
+
+    /** Live ownership/heartbeat snapshot; blocks briefly on the registry, so call off the render thread. */
+    fun currentStatus(): HostStatus? = controller?.let { runBlocking { it.status() } }
 
     /** Withdraw the discovery record and stop heartbeating. Safe to call when not hosting. */
     fun onServerStopping() {
@@ -37,6 +38,5 @@ object HostSession {
             JukzMod.logger.info("jukz: host withdrawn on world close")
         }
         controller = null
-        shareInfo = null
     }
 }

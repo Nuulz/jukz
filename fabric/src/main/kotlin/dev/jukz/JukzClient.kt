@@ -1,10 +1,13 @@
 package dev.jukz
 
 import dev.jukz.client.ShareCoordinator
+import dev.jukz.client.gui.HostInfoScreen
 import dev.jukz.client.gui.JoinPromptScreen
+import dev.jukz.runtime.HostSession
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.fabric.api.client.screen.v1.Screens
+import net.minecraft.client.MinecraftClient
 import net.minecraft.client.gui.screen.GameMenuScreen
 import net.minecraft.client.gui.screen.TitleScreen
 import net.minecraft.client.gui.widget.ButtonWidget
@@ -35,10 +38,11 @@ object JukzClient : ClientModInitializer {
     }
 
     /**
-     * Swap the vanilla "Open to LAN" button for "Play together" in the same slot. The vanilla button
-     * is hidden and disabled (rather than removed) so it can never capture a click, and our button is
-     * added at its exact dimensions. Matching is by the resolved label of `menu.shareToLan`, which
-     * both sides resolve through the same Language, so it is locale-independent.
+     * Swap the vanilla "Open to LAN" button in the same slot. Before sharing it reads "Play together"
+     * and opens the world to jukz; once hosting it becomes "Hosting · world info" and opens the host
+     * status panel. The vanilla button is hidden and disabled (rather than removed) so it can never
+     * capture a click. Matching is by the resolved label of `menu.shareToLan`, which both sides
+     * resolve through the same Language, so it is locale-independent.
      */
     private fun replaceOpenToLanButton(screen: GameMenuScreen) {
         val buttons = Screens.getButtons(screen)
@@ -47,10 +51,16 @@ object JukzClient : ClientModInitializer {
 
         lan.visible = false
         lan.active = false
-        buttons.add(
+
+        val builder = if (HostSession.isHosting) {
+            ButtonWidget.builder(Text.literal("Hosting · world info")) {
+                MinecraftClient.getInstance().setScreen(HostInfoScreen(screen))
+            }
+        } else {
             ButtonWidget.builder(Text.literal("Play together")) {
                 ShareCoordinator.share(screen)
-            }.dimensions(lan.x, lan.y, lan.width, lan.height).build(),
-        )
+            }
+        }
+        buttons.add(builder.dimensions(lan.x, lan.y, lan.width, lan.height).build())
     }
 }
