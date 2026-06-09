@@ -48,7 +48,7 @@ class HostJoinLoopbackTest {
 
         val hosting = assertInstanceOf(HostResult.Hosting::class.java, host.host(world, generation = 4))
         // The announced endpoint is the connection server, not the game port.
-        assertEquals(Endpoint("127.0.0.1", hosting.port), registry.lookup(world)!!.endpoint)
+        assertEquals(listOf(Endpoint("127.0.0.1", hosting.port)), registry.lookup(world)!!.endpoints)
 
         val handoff = CapturingHandoff()
         val joiner = JoinController(registry, DirectTcpTransport(), handoff, SystemClock, config)

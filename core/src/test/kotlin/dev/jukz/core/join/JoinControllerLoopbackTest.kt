@@ -64,6 +64,27 @@ class JoinControllerLoopbackTest {
     }
 
     @Test
+    fun `tries the next announced endpoint when the first is unreachable`() = runBlocking {
+        val host = LoopbackTestHost(world, hostToken, LoopbackTestHost.Mode.ALIVE).also { it.start() }
+        // A dead endpoint: bind to grab a free port, then close it so connects are refused.
+        val dead = ServerSocket().apply { bind(InetSocketAddress("127.0.0.1", 0)) }
+        val deadEndpoint = Endpoint("127.0.0.1", dead.localPort)
+        dead.close()
+        val registry = InMemoryWorldRegistry(SystemClock)
+        registry.publishIfNewer(WorldRecord(world, hostToken, listOf(deadEndpoint, host.endpoint), 0))
+        val handoff = FakeGameHandoff()
+        val controller = JoinController(registry, DirectTcpTransport(), handoff, SystemClock, config)
+
+        val result = controller.join(world)
+
+        val connected = assertInstanceOf(JoinResult.Connected::class.java, result)
+        assertEquals(connected.host to connected.port, handoff.connectedTo)
+
+        controller.close()
+        host.close()
+    }
+
+    @Test
     fun `reports ShouldHost when the announced host is a ghost`() = runBlocking {
         val host = LoopbackTestHost(world, hostToken, LoopbackTestHost.Mode.GHOST_NACK).also { it.start() }
         val registry = InMemoryWorldRegistry(SystemClock)

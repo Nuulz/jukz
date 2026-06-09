@@ -73,7 +73,7 @@ class HostInfoScreen(private val parent: Screen?) : Screen(Text.literal("World i
             "Share code" to rec.worldId.shortCode(),
             "World UUID" to rec.worldId.uuid.toString(),
             "Generation" to rec.token.hostGeneration.toString(),
-            "Endpoint" to rec.endpoint.format(),
+            "Endpoints" to rec.endpoints.joinToString(", ") { it.format() },
         )
         var y = 78
         for ((label, value) in rows) {

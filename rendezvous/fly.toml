@@ -1,0 +1,26 @@
+# Fly.io app definition for the jukz rendezvous server.
+# Deploy: fly launch --no-deploy (once, pick your app name), then fly deploy.
+app = "jukz-rendezvous"
+primary_region = "mia"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  RENDEZVOUS_TTL_MS = "90000"
+  # RENDEZVOUS_AUTH_TOKEN: set as a secret instead, never here:
+  #   fly secrets set RENDEZVOUS_AUTH_TOKEN=...
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "4s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/healthz"

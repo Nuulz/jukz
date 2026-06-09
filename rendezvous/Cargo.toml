@@ -1,0 +1,18 @@
+[package]
+name = "jukz-rendezvous"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal rendezvous server for jukz world discovery: announce / heartbeat / lookup / withdraw with ClaimToken CAS and lease TTL"
+license = "MIT"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde", "v4"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+strip = true

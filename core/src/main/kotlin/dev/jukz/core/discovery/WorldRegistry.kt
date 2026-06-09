@@ -37,4 +37,11 @@ interface WorldRegistry {
 
     /** Remove the record only if its token equals [token] (don't clobber a newer host). */
     suspend fun withdraw(worldId: WorldId, token: ClaimToken)
+
+    /**
+     * The lease TTL this registry's backend enforces, in milliseconds, or null when unknown.
+     * A rendezvous backend learns it from the announce response; the host derives its heartbeat
+     * interval from it (TTL/3) so the two can never drift apart by configuration.
+     */
+    fun leaseTtlMs(): Long? = null
 }

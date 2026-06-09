@@ -2,6 +2,7 @@ package dev.jukz.core.host
 
 import dev.jukz.core.discovery.InMemoryWorldRegistry
 import dev.jukz.core.discovery.WorldRecord
+import dev.jukz.core.discovery.WorldRegistry
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.NodeId
@@ -64,7 +65,7 @@ class HostControllerTest {
         assertNotNull(record)
         assertEquals(3, record!!.token.hostGeneration)
         assertEquals(nodeId, record.token.nodeId)
-        assertEquals(Endpoint("127.0.0.1", listenPort), record.endpoint)
+        assertEquals(listOf(Endpoint("127.0.0.1", listenPort)), record.endpoints)
 
         host.close()
     }
@@ -142,7 +143,7 @@ class HostControllerTest {
         val live = host.status()
         assertNotNull(live)
         assertTrue(live!!.live)
-        assertEquals(Endpoint("127.0.0.1", listenPort), live.endpoint)
+        assertEquals(listOf(Endpoint("127.0.0.1", listenPort)), live.endpoints)
 
         // A competitor takes over with a higher token: we are no longer the announced host.
         registry.publishIfNewer(WorldRecord(world, ClaimToken(2, 1_000, node(1)), Endpoint("10.0.0.2", 25565), 0))
@@ -165,6 +166,29 @@ class HostControllerTest {
 
         host.stop()
         assertNull(host.status())
+    }
+
+    @Test
+    fun `heartbeat delay follows the registry lease TTL when it advertises one`() = runBlocking {
+        val clock = FakeClock(1_000)
+        val base = InMemoryWorldRegistry(clock)
+        // A registry that learned its lease TTL from the rendezvous server (90 s -> beat at TTL/3).
+        val withTtl = object : WorldRegistry by base {
+            override fun leaseTtlMs(): Long = 90_000
+        }
+        val host = HostController(withTtl, opener(54321), fakeServer(), resolver, nodeId, clock)
+
+        assertEquals(30_000L, host.heartbeatDelayMs())
+        host.close()
+    }
+
+    @Test
+    fun `heartbeat delay falls back to the configured interval`() = runBlocking {
+        val clock = FakeClock(1_000)
+        val host = controller(InMemoryWorldRegistry(clock), clock)
+
+        assertEquals(HostConfig().heartbeatIntervalMs, host.heartbeatDelayMs())
+        host.close()
     }
 
     @Test

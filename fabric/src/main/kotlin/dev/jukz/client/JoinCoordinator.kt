@@ -5,8 +5,8 @@ import dev.jukz.client.gui.ConnectingScreen
 import dev.jukz.client.gui.NatErrorScreen
 import dev.jukz.client.gui.SearchingHostScreen
 import dev.jukz.client.gui.ShouldHostScreen
-import dev.jukz.core.discovery.InMemoryWorldRegistry
 import dev.jukz.core.discovery.WorldRegistry
+import dev.jukz.discovery.Discovery
 import dev.jukz.core.join.GameHandoff
 import dev.jukz.core.join.JoinController
 import dev.jukz.core.join.JoinResult
@@ -24,10 +24,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * the render thread, and maps each [JoinResult] back to a screen on the client thread. Every path
  * is wrapped so a failure surfaces as a readable screen, never a crash.
  *
- * Discovery and transport are injected; the defaults are the loopback-safe fakes. The real DHT /
- * NAT adapters drop in here behind the same interfaces without touching this class. With the
- * in-memory registry there is no live host to find, so a code lookup ends cleanly on the
- * "nobody is hosting" screen rather than connecting — that is expected until the DHT is wired.
+ * Discovery and transport are injected; the defaults are the shared [Discovery] registry (LAN
+ * multicast + rendezvous when configured) and a direct TCP transport, so a join-by-code reaches
+ * the same backends as the world-open interceptor.
  */
 object JoinCoordinator {
 
@@ -35,7 +34,7 @@ object JoinCoordinator {
         worldId: WorldId,
         shortCode: String,
         parent: Screen?,
-        registry: WorldRegistry = InMemoryWorldRegistry(SystemClock),
+        registry: WorldRegistry = Discovery.registry,
         transport: Transport = DirectTcpTransport(),
     ) {
         val client = MinecraftClient.getInstance()

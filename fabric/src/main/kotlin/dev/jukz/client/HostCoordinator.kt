@@ -1,10 +1,12 @@
 package dev.jukz.client
 
 import dev.jukz.JukzMod
+import dev.jukz.client.gui.SupersededScreen
+import dev.jukz.config.PersistentNodeId
+import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.host.HostConnectionServer
 import dev.jukz.core.host.HostController
 import dev.jukz.core.host.HostResult
-import dev.jukz.core.model.NodeId
 import dev.jukz.core.model.WorldId
 import dev.jukz.core.util.SystemClock
 import dev.jukz.discovery.Discovery
@@ -12,7 +14,11 @@ import dev.jukz.runtime.HostSession
 import dev.jukz.transport.LocalEndpointResolver
 import dev.jukz.world.WorldIdState
 import kotlinx.coroutines.runBlocking
+import net.minecraft.client.MinecraftClient
+import net.minecraft.client.gui.screen.MessageScreen
+import net.minecraft.client.gui.screen.TitleScreen
 import net.minecraft.server.integrated.IntegratedServer
+import net.minecraft.text.Text
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -57,7 +63,7 @@ object HostCoordinator {
             lanOpener = MinecraftLanOpener(server),
             connectionServer = HostConnectionServer(),
             endpointResolver = LocalEndpointResolver(),
-            nodeId = NodeId.random(), // TODO(persist): stable per-install identity once the DHT is live
+            nodeId = PersistentNodeId.nodeId,
             clock = SystemClock,
         )
         val result = runBlocking { controller.host(worldId, generation) }
@@ -80,10 +86,38 @@ object HostCoordinator {
         when (result) {
             is HostResult.Hosting ->
                 JukzMod.logger.info("jukz: auto-hosting {} on port {}", result.shortCode, result.port)
-            is HostResult.Superseded ->
-                JukzMod.logger.info("jukz: not hosting; another host already owns this world")
+            is HostResult.Superseded -> {
+                JukzMod.logger.info("jukz: another host already owns this world — asking the player")
+                promptSuperseded(result.current)
+            }
             is HostResult.Failed ->
                 JukzMod.logger.warn("jukz: could not auto-host this world: {}", result.reason)
         }
+    }
+
+    /**
+     * Decision 4: a rejected announce is never silent. The world already opened locally (the open
+     * raced another host, or discovery was unreachable during the lookup), so the player decides:
+     * keep playing the local copy (it will diverge) or leave it and join the live host as a guest.
+     */
+    private fun promptSuperseded(current: WorldRecord) {
+        val client = MinecraftClient.getInstance()
+        val shortCode = current.worldId.shortCode()
+        client.execute {
+            client.setScreen(
+                SupersededScreen(
+                    shortCode,
+                    onKeepPlaying = { client.setScreen(null) },
+                    onJoinInstead = { leaveAndJoin(client, current.worldId, shortCode) },
+                ),
+            )
+        }
+    }
+
+    /** Save and leave the local copy (the vanilla quit-world sequence), then join the live host. */
+    private fun leaveAndJoin(client: MinecraftClient, worldId: WorldId, shortCode: String) {
+        client.world?.disconnect()
+        client.disconnect(MessageScreen(Text.translatable("menu.savingLevel")))
+        JoinCoordinator.start(worldId, shortCode, TitleScreen())
     }
 }

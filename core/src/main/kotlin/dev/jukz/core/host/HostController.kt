@@ -63,7 +63,7 @@ class HostController(
                 record?.heartbeatSeq ?: 0L
             }
             val endpoint = endpointResolver.resolve(listenPort)
-            val candidate = WorldRecord(worldId, token, endpoint, heartbeatSeq = 0)
+            val candidate = WorldRecord(worldId, token, listOf(endpoint), heartbeatSeq = 0)
             when (val result = registry.publishIfNewer(candidate)) {
                 is PublishResult.Published -> {
                     record = result.record
@@ -94,7 +94,7 @@ class HostController(
         val current = record ?: return null
         val found = registry.lookup(current.worldId)
         val live = found != null && found.token == current.token
-        return HostStatus(live, found?.heartbeatSeq ?: current.heartbeatSeq, current.endpoint)
+        return HostStatus(live, found?.heartbeatSeq ?: current.heartbeatSeq, current.endpoints)
     }
 
     /**
@@ -110,11 +110,17 @@ class HostController(
         return refreshed
     }
 
+    /**
+     * The delay between heartbeat ticks: a third of the registry's advertised lease TTL when it
+     * has one (the rendezvous server publishes it on announce), else [HostConfig.heartbeatIntervalMs].
+     */
+    fun heartbeatDelayMs(): Long = registry.leaseTtlMs()?.let { it / 3 } ?: config.heartbeatIntervalMs
+
     private fun startHeartbeat(worldId: WorldId) {
         heartbeatJob = scope.launch {
             try {
                 while (true) {
-                    delay(config.heartbeatIntervalMs)
+                    delay(heartbeatDelayMs())
                     if (!beat()) {
                         onHostLost(worldId)
                         return@launch

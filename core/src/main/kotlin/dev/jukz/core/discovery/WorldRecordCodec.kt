@@ -18,9 +18,16 @@ import java.util.UUID
 object WorldRecordCodec {
 
     private const val MAGIC = 0x6A_6B_7A_31 // "jkz1"
-    private const val VERSION = 1
+    private const val VERSION = 2
+    private const val LEGACY_VERSION = 1 // single endpoint, no count prefix
+
+    /** Decode guard: a record never carries more candidates than this. */
+    const val MAX_ENDPOINTS = 8
 
     fun encode(record: WorldRecord): ByteArray {
+        require(record.endpoints.size <= MAX_ENDPOINTS) {
+            "too many endpoints: ${record.endpoints.size} > $MAX_ENDPOINTS"
+        }
         val bos = ByteArrayOutputStream(64)
         DataOutputStream(bos).use { o ->
             o.writeInt(MAGIC)
@@ -30,8 +37,11 @@ object WorldRecordCodec {
             o.writeLong(record.token.hostGeneration)
             o.writeLong(record.token.claimEpochMillis)
             o.write(record.token.nodeId.bytes) // exactly NodeId.SIZE bytes
-            o.writeUTF(record.endpoint.host)
-            o.writeInt(record.endpoint.port)
+            o.writeByte(record.endpoints.size)
+            for (endpoint in record.endpoints) {
+                o.writeUTF(endpoint.host)
+                o.writeInt(endpoint.port)
+            }
             o.writeLong(record.heartbeatSeq)
         }
         return bos.toByteArray()
@@ -43,19 +53,25 @@ object WorldRecordCodec {
     fun decode(bytes: ByteArray): WorldRecord {
         DataInputStream(ByteArrayInputStream(bytes)).use { i ->
             require(i.readInt() == MAGIC) { "not a jukz record (bad magic)" }
-            require(i.readUnsignedByte() == VERSION) { "unsupported jukz record version" }
+            val version = i.readUnsignedByte()
+            require(version == VERSION || version == LEGACY_VERSION) { "unsupported jukz record version" }
             val msb = i.readLong()
             val lsb = i.readLong()
             val generation = i.readLong()
             val claimEpochMillis = i.readLong()
             val nodeBytes = ByteArray(NodeId.SIZE).also { i.readFully(it) }
-            val host = i.readUTF()
-            val port = i.readInt()
+            val count = if (version == LEGACY_VERSION) 1 else i.readUnsignedByte()
+            require(count in 1..MAX_ENDPOINTS) { "endpoint count out of range: $count" }
+            val endpoints = List(count) {
+                val host = i.readUTF()
+                val port = i.readInt()
+                Endpoint(host, port)
+            }
             val heartbeatSeq = i.readLong()
             return WorldRecord(
                 worldId = WorldId(UUID(msb, lsb)),
                 token = ClaimToken(generation, claimEpochMillis, NodeId(nodeBytes)),
-                endpoint = Endpoint(host, port),
+                endpoints = endpoints,
                 heartbeatSeq = heartbeatSeq,
             )
         }

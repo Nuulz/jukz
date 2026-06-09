@@ -18,6 +18,7 @@ for the implementation plan.
 |---|---|---|
 | `core` | The deterministic protocol heart — pure Kotlin, fully unit-tested | No |
 | `fabric` | Wires `core` into Minecraft 1.21.1 via Fabric API + network adapters | Yes |
+| `rendezvous` | Self-hostable discovery backend (Rust + Axum, outside Gradle) — see [`rendezvous/README.md`](rendezvous/README.md) | No |
 
 Keeping `core` Minecraft-free means the hard logic (host election, fencing, handshake, registry,
 relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolchain.
@@ -66,6 +67,16 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     backend): hosts multicast their record to a private group; every node caches what it hears with
     the same token-CAS + TTL fencing. Two Minecraft instances on the same network actually find and
     join each other's worlds today — no DHT, no NAT. Falls back to in-memory if multicast is blocked.
+  - **Internet-wide discovery via a rendezvous server** (no DHT): `RendezvousWorldRegistry` speaks
+    the JSON `/v1` contract of the self-hostable Rust + Axum server in [`rendezvous/`](rendezvous/)
+    (90 s leases, heartbeat at TTL/3 derived from the server's announce response, ClaimToken CAS
+    replicated server-side, observed-public-IP appended to the announced endpoints). Enabled by
+    setting `rendezvous.url` in `config/jukz.properties` (written with a commented template on first
+    run; empty = LAN-only). `CompositeWorldRegistry` layers it over LAN multicast — same-network play
+    keeps working with no internet — and `WorldRecord` now carries an ordered **endpoint candidate
+    list** (wire format v2, still decodes v1) that guests dial in order. A rejected announce is no
+    longer silent: `SupersededScreen` lets the player keep the local copy or leave and join the live
+    host. The per-install `NodeId` is persisted (`config/jukz.nodeid`).
   - `StunClient` — a real, dependency-free RFC 5389 STUN client. `UpnpMapper` — a real, dependency-free
     UPnP IGD client (SSDP + SOAP port-map / external-IP).
   - `JGitWorldSync.commit` — real JGit snapshotting.

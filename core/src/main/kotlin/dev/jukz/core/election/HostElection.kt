@@ -50,7 +50,7 @@ class HostElection(
         // R8/R4: if a live host already holds the world, join it as guest.
         val existing = registry.lookup(worldId)
         if (existing != null && probe.isAlive(existing)) {
-            return ElectionOutcome.BecameGuest(existing.endpoint, existing)
+            return ElectionOutcome.BecameGuest(existing.primaryEndpoint, existing)
         }
 
         // No live host, or the existing record is a ghost. Fence above anything seen (R12).
@@ -67,7 +67,7 @@ class HostElection(
                     if (after != null && after.token > myToken) {
                         // R4/R6: lost to a higher claim during settle.
                         if (probe.isAlive(after)) {
-                            return ElectionOutcome.BecameGuest(after.endpoint, after)
+                            return ElectionOutcome.BecameGuest(after.primaryEndpoint, after)
                         }
                         // Higher but a ghost: fence above it and retry (R5).
                         claimGen = after.hostGeneration + 1L
@@ -79,7 +79,7 @@ class HostElection(
                 is PublishResult.Rejected -> {
                     val current = result.current
                     if (probe.isAlive(current)) {
-                        return ElectionOutcome.BecameGuest(current.endpoint, current) // R4
+                        return ElectionOutcome.BecameGuest(current.primaryEndpoint, current) // R4
                     }
                     // Ghost holds a >= token: fence strictly above it and retry (R5/R12).
                     claimGen = current.hostGeneration + 1L

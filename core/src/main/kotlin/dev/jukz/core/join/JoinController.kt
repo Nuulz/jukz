@@ -54,19 +54,28 @@ class JoinController(
     @Volatile private var control: FramedMessageChannel? = null
     @Volatile private var relay: LocalTcpRelay? = null
 
-    /** Run the full join. Safe to call once per controller; build a new one to retry. */
+    /**
+     * Run the full join. Safe to call once per controller; build a new one to retry.
+     * The record's endpoints are candidates tried in order (LAN address first, then the
+     * rendezvous-observed public address); the first one that completes a handshake wins.
+     */
     suspend fun join(worldId: WorldId): JoinResult {
         val record = registry.lookup(worldId) ?: return JoinResult.HostUnavailable
-        return try {
-            runHandshake(worldId, record)
-        } catch (e: Exception) {
-            close()
-            JoinResult.Failed(e.message ?: e.toString())
+        var lastFailure: Exception? = null
+        for (candidate in record.endpoints) {
+            try {
+                return runHandshake(worldId, record, candidate)
+            } catch (e: Exception) {
+                closeControl() // tear down this attempt only; the next candidate gets a fresh channel
+                lastFailure = e
+            }
         }
+        close()
+        return JoinResult.Failed(lastFailure?.message ?: "no reachable endpoint")
     }
 
-    private suspend fun runHandshake(worldId: WorldId, record: WorldRecord): JoinResult {
-        var endpoint = record.endpoint
+    private suspend fun runHandshake(worldId: WorldId, record: WorldRecord, candidate: Endpoint): JoinResult {
+        var endpoint = candidate
         val sm = JoinerStateMachine(worldId, record.token, endpoint)
         sm.begin()
 
