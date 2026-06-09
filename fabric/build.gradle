@@ -39,6 +39,7 @@ dependencies {
     // so the scaffold compiles offline; the adapters document the exact calls and are wired
     // behind core interfaces, so enabling these is additive.
     // modImplementation "com.github.the8472:mldht:master-SNAPSHOT"     // DHT (BEP44)
+    // implementation "net.i2p.crypto:eddsa:0.3.0"                       // Ed25519 for BEP44 (mldht needs it; not bundled)
     // implementation "org.jitsi:ice4j:3.2-15-g6da2b08"                  // STUN/ICE/TURN + UPnP
     // implementation "io.netty:netty-codec-native-quic:4.2.9.Final"    // reliable UDP tunnel
 }

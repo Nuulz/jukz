@@ -24,10 +24,11 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
 
 ## What is real and tested
 
-- **`core` (38 passing tests):**
+- **`core` (42 passing tests):**
   - `WorldId` with a copyable Base32 share code; `NodeId`; `Endpoint`; `ClaimToken` (the fencing
     token: `generation → millis → nodeId`).
   - `WorldRegistry` + `InMemoryWorldRegistry` — CAS-on-token publish, TTL expiry, heartbeat refresh.
+    `WorldRecordCodec` — compact binary wire encoding of a record (round-trip tested, < 1000 bytes).
   - `HostElection` — split-brain tie-break, ghost detection + fenced takeover (`generation+1`),
     stale-token rejection (rules R1–R14 from the spec). `HeartbeatLivenessProbe` for R10/R11.
   - `handshake` — sealed `Message` set, byte-exact binary `MessageCodec`, host/joiner state
@@ -37,10 +38,12 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
   - `join` — `JoinController`: the guest flow (lookup → control-channel handshake → relay →
     game hand-off), with `GameHandoff` kept Minecraft-free. Validated end-to-end over loopback
     against a stand-in host (connected / should-host / host-unavailable).
-  - `host` — `HostController`: the host flow (open → publish under a fencing `ClaimToken` →
-    heartbeat → withdraw), with `LanOpener` and `EndpointResolver` (the NAT frontier) kept
-    Minecraft-free. Unit-tested against `InMemoryWorldRegistry` (hosting / superseded / heartbeat
-    re-announce / loss / withdraw / open-failure / live-status).
+  - `host` — `HostController`: the host flow (open → **serve** → publish under a fencing `ClaimToken`
+    → heartbeat → withdraw), with `LanOpener`, `EndpointResolver` (the NAT frontier) and
+    `ConnectionServer` kept Minecraft-free. `HostConnectionServer` is the real host listener (routes
+    CONTROL→handshake, DATA→pipe to the local game). Unit-tested against `InMemoryWorldRegistry`, plus
+    a full **end-to-end loopback test** where a real `HostController` serves a real `JoinController`
+    (discovery → handshake → byte relay) — the host is no longer a test double.
 - **`fabric` (compiles, builds the mod jar):**
   - `WorldIdState` (verified 1.21.1 `PersistentState` API) + `WorldIdSidecar` (pre-start `jukz.dat`).
   - Lifecycle wiring (`ServerWorldEvents.LOAD`, `SERVER_STOPPING`) and `HostSession` (host withdrawal).
@@ -58,9 +61,13 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     `IntegratedServerLoaderMixin` at the head of `IntegratedServerLoader.start` reads the world's
     `jukz.dat` UUID and, via `WorldOpenInterceptor`, looks it up in the shared `Discovery` registry; a
     live host cancels the local boot and joins as a guest, otherwise the world boots locally (and then
-    auto-hosts). Joining/hosting is intrinsic to opening a world, never a button. With the in-memory
-    registry the lookup is always empty, so worlds open locally and shares are only locally visible.
-  - `StunClient` — a real, dependency-free RFC 5389 STUN client.
+    auto-hosts). Joining/hosting is intrinsic to opening a world, never a button.
+  - **Real LAN cross-machine discovery** (`LanMulticastWorldRegistry`, the default `Discovery`
+    backend): hosts multicast their record to a private group; every node caches what it hears with
+    the same token-CAS + TTL fencing. Two Minecraft instances on the same network actually find and
+    join each other's worlds today — no DHT, no NAT. Falls back to in-memory if multicast is blocked.
+  - `StunClient` — a real, dependency-free RFC 5389 STUN client. `UpnpMapper` — a real, dependency-free
+    UPnP IGD client (SSDP + SOAP port-map / external-IP).
   - `JGitWorldSync.commit` — real JGit snapshotting.
 
 ## What is flagged (`// requires live-network testing`)
@@ -68,11 +75,16 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
 These implement the same interfaces but throw `NotImplementedError`, with the exact live API calls
 documented in KDoc. They need real machines behind real NATs to validate:
 
-- `MldhtWorldRegistry` — live DHT (BEP44 mutable items) via the8472/mldht (JitPack).
-- `IceTransport` / `HolePuncher` / `UpnpMapper` — ICE/STUN hole punch, QUIC tunnel, UPnP, TURN.
-- `StunEndpointResolver` — the host's public, cross-NAT endpoint (STUN reflexive address + UPnP/TURN
-  mapping). Swapping it in for `LocalEndpointResolver` is what turns a LAN share into a cross-country
-  one; everything else in the host flow is already real.
+- `MldhtWorldRegistry` — internet-scale DHT discovery (BEP44 mutable items) via the8472/mldht +
+  `net.i2p.crypto:eddsa`. The exact mldht call sequence (Ed25519 key derived from the `WorldId`, node
+  bootstrap, `GetLookupTask`/`PutTask`, `GenericStorage.buildMutable`, the `WorldRecordCodec` value)
+  is reverse-engineered and documented in the file as a concrete blueprint — left flagged rather than
+  shipped blind because a real DHT round-trip can't be validated without live nodes.
+- `StunEndpointResolver` — the host's public, cross-NAT endpoint. **Implemented** (UPnP IGD port-map
+  + router public IP, STUN fallback) but flagged: it needs a real router/NAT to validate. Pairing it
+  with the DHT registry is what turns a LAN share into a cross-country one.
+- `IceTransport` / `HolePuncher` — symmetric-NAT UDP hole punch, QUIC tunnel, TURN relay (the
+  fallback for when UPnP isn't available).
 - `JGitWorldSync.pullLatest` — cold-start world transfer over the P2P transport.
 
 The world-open interception itself is real (`IntegratedServerLoaderMixin` + `WorldOpenInterceptor`);
