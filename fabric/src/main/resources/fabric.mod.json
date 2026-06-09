@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "jukz",
+  "version": "${version}",
+  "name": "jukz",
+  "description": "Per-world UUID with serverless P2P discovery: each world lives in one place at a time, with rotating host ownership.",
+  "authors": ["jukz"],
+  "contact": {},
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      { "adapter": "kotlin", "value": "dev.jukz.JukzMod" }
+    ],
+    "client": [
+      { "adapter": "kotlin", "value": "dev.jukz.JukzClient" }
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.5",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*",
+    "fabric-language-kotlin": ">=1.12.0"
+  }
+}
