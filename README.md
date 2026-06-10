@@ -25,7 +25,7 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
 
 ## What is real and tested
 
-- **`core` (42 passing tests):**
+- **`core` (63 passing tests):**
   - `WorldId` with a copyable Base32 share code; `NodeId`; `Endpoint`; `ClaimToken` (the fencing
     token: `generation → millis → nodeId`).
   - `WorldRegistry` + `InMemoryWorldRegistry` — CAS-on-token publish, TTL expiry, heartbeat refresh.
@@ -45,6 +45,9 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     CONTROL→handshake, DATA→pipe to the local game). Unit-tested against `InMemoryWorldRegistry`, plus
     a full **end-to-end loopback test** where a real `HostController` serves a real `JoinController`
     (discovery → handshake → byte relay) — the host is no longer a test double.
+    `ForwardingEndpointResolver` + `PortForwarder` encode the NAT-traversal invariant that *opening
+    the router port is best-effort and must never fail the host* — tested with fakes, so the real
+    UPnP adapter stays flagged without risking hosting.
 - **`fabric` (compiles, builds the mod jar):**
   - `WorldIdState` (verified 1.21.1 `PersistentState` API) + `WorldIdSidecar` (pre-start `jukz.dat`).
   - Lifecycle wiring (`ServerWorldEvents.LOAD`, `SERVER_STOPPING`) and `HostSession` (host withdrawal).
@@ -79,6 +82,12 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     host. The per-install `NodeId` is persisted (`config/jukz.nodeid`).
   - `StunClient` — a real, dependency-free RFC 5389 STUN client. `UpnpMapper` — a real, dependency-free
     UPnP IGD client (SSDP + SOAP port-map / external-IP).
+  - **Automatic UPnP port-opening on the host path** (`UpnpPortForwarder`, wired via the core
+    `ForwardingEndpointResolver`): when a world is hosted, jukz best-effort maps its listen port on
+    the router so the rendezvous server's observed-public-IP endpoint is dialable from another
+    network — cross-internet play with no manual port-forward where the router supports UPnP. It is
+    non-fatal: no UPnP just falls back to LAN-only reach (the SSDP/SOAP round-trip itself is still
+    flagged for live-NAT validation).
   - `JGitWorldSync.commit` — real JGit snapshotting.
 
 ## What is flagged (`// requires live-network testing`)
@@ -91,20 +100,24 @@ documented in KDoc. They need real machines behind real NATs to validate:
   bootstrap, `GetLookupTask`/`PutTask`, `GenericStorage.buildMutable`, the `WorldRecordCodec` value)
   is reverse-engineered and documented in the file as a concrete blueprint — left flagged rather than
   shipped blind because a real DHT round-trip can't be validated without live nodes.
-- `StunEndpointResolver` — the host's public, cross-NAT endpoint. **Implemented** (UPnP IGD port-map
-  + router public IP, STUN fallback) but flagged: it needs a real router/NAT to validate. Pairing it
-  with the DHT registry is what turns a LAN share into a cross-country one.
+- `StunEndpointResolver` — resolves the host's public, cross-NAT endpoint *client-side* (UPnP IGD
+  external IP, STUN fallback). Flagged: it needs a real router/NAT to validate. The rendezvous path
+  no longer needs it — the server observes the public IP and `UpnpPortForwarder` opens the port — but
+  it remains the right primitive for the DHT registry, where there is no server to observe the IP.
 - `IceTransport` / `HolePuncher` — symmetric-NAT UDP hole punch, QUIC tunnel, TURN relay (the
   fallback for when UPnP isn't available).
 - `JGitWorldSync.pullLatest` — cold-start world transfer over the P2P transport.
 
-The world-open interception itself is real (`IntegratedServerLoaderMixin` + `WorldOpenInterceptor`);
-only the shared discovery backend it queries is flagged, so today every world still opens locally.
+The world-open interception itself is real (`IntegratedServerLoaderMixin` + `WorldOpenInterceptor`),
+and the discovery backend it queries is now live: LAN multicast finds same-network hosts, the
+rendezvous server finds internet-wide ones, and `UpnpPortForwarder` opens the router port so a
+remote guest can actually connect. Only the `MldhtWorldRegistry` (serverless DHT) path and the
+hole-punch/relay fallback for routers without UPnP remain flagged.
 
 ## Build & test
 
 ```bash
-./gradlew :core:test     # run the deterministic core tests (30 tests)
+./gradlew :core:test     # run the deterministic core tests (63 tests)
 ./gradlew build          # compile everything + assemble fabric/build/libs/jukz-0.1.0.jar
 ```
 

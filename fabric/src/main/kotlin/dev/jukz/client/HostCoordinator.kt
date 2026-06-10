@@ -4,6 +4,7 @@ import dev.jukz.JukzMod
 import dev.jukz.client.gui.SupersededScreen
 import dev.jukz.config.PersistentNodeId
 import dev.jukz.core.discovery.WorldRecord
+import dev.jukz.core.host.ForwardingEndpointResolver
 import dev.jukz.core.host.HostConnectionServer
 import dev.jukz.core.host.HostController
 import dev.jukz.core.host.HostResult
@@ -12,6 +13,7 @@ import dev.jukz.core.util.SystemClock
 import dev.jukz.discovery.Discovery
 import dev.jukz.runtime.HostSession
 import dev.jukz.transport.LocalEndpointResolver
+import dev.jukz.transport.UpnpPortForwarder
 import dev.jukz.world.WorldIdState
 import kotlinx.coroutines.runBlocking
 import net.minecraft.client.MinecraftClient
@@ -62,7 +64,10 @@ object HostCoordinator {
             registry = Discovery.registry,
             lanOpener = MinecraftLanOpener(server),
             connectionServer = HostConnectionServer(),
-            endpointResolver = LocalEndpointResolver(),
+            // Announce the LAN address, but best-effort open the listen port on the router via UPnP
+            // so the rendezvous server's observed-public-IP endpoint is reachable across NATs. The
+            // forwarding never fails the host (ForwardingEndpointResolver swallows UPnP failures).
+            endpointResolver = ForwardingEndpointResolver(UpnpPortForwarder(), LocalEndpointResolver()),
             nodeId = PersistentNodeId.nodeId,
             clock = SystemClock,
         )
