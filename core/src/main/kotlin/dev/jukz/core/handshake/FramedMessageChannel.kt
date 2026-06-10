@@ -45,6 +45,9 @@ class FramedMessageChannel(private val channel: JukzChannel) {
         return MessageCodec.decode(buf)
     }
 
+    /** Close the underlying channel — used to tear a control channel down so the peer notices. */
+    fun close() = channel.close()
+
     private fun intToBytes(v: Int): ByteArray =
         byteArrayOf((v ushr 24).toByte(), (v ushr 16).toByte(), (v ushr 8).toByte(), v.toByte())
 

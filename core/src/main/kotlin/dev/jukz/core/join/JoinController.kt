@@ -1,5 +1,6 @@
 package dev.jukz.core.join
 
+import dev.jukz.core.discovery.SnapshotOffer
 import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.discovery.WorldRegistry
 import dev.jukz.core.handshake.FramedMessageChannel
@@ -41,12 +42,17 @@ class JoinController(
     private val gameHandoff: GameHandoff,
     @Suppress("unused") private val clock: JukzClock,
     private val config: JoinConfig = JoinConfig(),
-    /** Invoked if the liveness monitor stops hearing pongs after a successful connect. */
-    private val onHostLost: (WorldId) -> Unit = {},
+    /**
+     * Invoked once when the host goes away after a successful connect: either it sent a
+     * [Message.HostLeaving] (clean handoff — the [SnapshotOffer] is where to pull its save from) or the
+     * control channel broke (abrupt drop — offer is null). The caller takes over hosting.
+     */
+    private val onHostLost: (WorldId, SnapshotOffer?) -> Unit = { _, _ -> },
 ) : AutoCloseable {
 
     private val nonces = AtomicInteger(0)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    @Volatile private var closing = false
 
     // The raw channel is kept so the watchdog can close it to unblock a stuck read; `control`
     // is the single framed reader/writer over it (one per connection, reused across messages).
@@ -83,7 +89,7 @@ class JoinController(
 
         while (true) {
             val msg = receiveOrTimeout(config.handshakeMs)
-                ?: return ghost(sm, worldId) // no reply in time -> treat host as a ghost
+                ?: return ghost(sm, record) // no reply in time -> treat host as a ghost
             when (val action = sm.onMessage(msg).action) {
                 is JoinerAction.Connect -> return handoff(worldId, record, action.endpoint, sm)
                 is JoinerAction.FollowRedirect -> {
@@ -91,15 +97,15 @@ class JoinController(
                     endpoint = action.endpoint
                     openControl(endpoint).send(hello(worldId, record.token))
                 }
-                JoinerAction.Takeover -> return JoinResult.ShouldHost(worldId)
+                JoinerAction.Takeover -> return JoinResult.ShouldHost(worldId, record)
                 JoinerAction.Wait -> Unit // non-terminal; keep reading
             }
         }
     }
 
-    private fun ghost(sm: JoinerStateMachine, worldId: WorldId): JoinResult {
+    private fun ghost(sm: JoinerStateMachine, record: WorldRecord): JoinResult {
         sm.onTimeout()
-        return JoinResult.ShouldHost(worldId)
+        return JoinResult.ShouldHost(record.worldId, record)
     }
 
     private fun handoff(
@@ -119,21 +125,38 @@ class JoinController(
         return JoinResult.Connected(RELAY_HOST, port)
     }
 
-    /** Best-effort liveness monitor: ping the control channel; on loss, notify and stop. */
+    /**
+     * Watch the control channel after connecting. A [Message.HostLeaving] is the host handing off (take
+     * over with its snapshot offer); a broken channel is the host dropping abruptly (take over with the
+     * local copy). A separate pinger nudges the host so the link stays observed. Fires [onHostLost] once.
+     */
     private fun startLiveness(worldId: WorldId, token: ClaimToken) {
+        // Reader: block on inbound control messages until a handoff notice or a broken channel.
+        scope.launch {
+            while (true) {
+                val framed = control ?: return@launch
+                val msg = try {
+                    framed.receive()
+                } catch (_: Exception) {
+                    if (!closing) onHostLost(worldId, null) // channel broke -> host gone abruptly, no offer
+                    return@launch
+                }
+                if (msg is Message.HostLeaving) {
+                    onHostLost(worldId, msg.snapshot)
+                    return@launch
+                }
+                // Pong / anything else -> host still alive; keep reading.
+            }
+        }
+        // Pinger: keep the host answering; a failed send just means the reader will see the broken link.
         scope.launch {
             try {
                 while (true) {
                     delay(config.livenessIntervalMs)
-                    val channel = control ?: return@launch
-                    channel.send(Message.Ping(worldId, token, nextNonce()))
-                    if (receiveOrTimeout(config.livenessTimeoutMs) == null) {
-                        onHostLost(worldId)
-                        return@launch
-                    }
+                    control?.send(Message.Ping(worldId, token, nextNonce())) ?: return@launch
                 }
             } catch (_: Exception) {
-                // Channel closed or scope cancelled — stop quietly.
+                // send failed -> channel broken; the reader handles onHostLost.
             }
         }
     }
@@ -181,6 +204,7 @@ class JoinController(
     private fun nextNonce(): Int = nonces.incrementAndGet()
 
     override fun close() {
+        closing = true // so the reader doesn't mistake our own teardown for the host dropping
         runCatching { scope.cancel() }
         relay?.let { runCatching { it.close() } }
         relay = null

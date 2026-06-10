@@ -1,6 +1,7 @@
 package dev.jukz.core.host
 
 import dev.jukz.core.discovery.InMemoryWorldRegistry
+import dev.jukz.core.discovery.SnapshotOffer
 import dev.jukz.core.join.GameHandoff
 import dev.jukz.core.join.JoinConfig
 import dev.jukz.core.join.JoinController
@@ -13,10 +14,13 @@ import dev.jukz.core.util.SystemClock
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 /**
  * End-to-end over loopback with the REAL host: a [HostController] (real [HostConnectionServer])
@@ -73,6 +77,59 @@ class HostJoinLoopbackTest {
         client.close()
         joiner.close()
         host.close()
+        game.close()
+    }
+
+    @Test
+    fun `host hands off to a connected guest over the live control channel`() = runBlocking {
+        val game = EchoServer().also { it.start() }
+        val registry = InMemoryWorldRegistry(SystemClock)
+        val host = HostController(
+            registry, LanOpener { game.port }, HostConnectionServer(bindHost = "127.0.0.1"),
+            EndpointResolver { port -> Endpoint("127.0.0.1", port) }, node(7), SystemClock,
+        )
+        host.host(world, generation = 4)
+
+        val lost = CompletableFuture<SnapshotOffer?>()
+        val joiner = JoinController(
+            registry, DirectTcpTransport(), CapturingHandoff(), SystemClock, config,
+            onHostLost = { _, offer -> lost.complete(offer) },
+        )
+        assertInstanceOf(JoinResult.Connected::class.java, joiner.join(world))
+        assertEquals(1, host.connectedGuestCount())
+
+        val offer = SnapshotOffer("127.0.0.1", 55555, "ab".repeat(32))
+        host.notifyGuestsLeaving(offer) // pushes HostLeaving over the guest's live control channel
+
+        assertEquals(offer, lost.get(5, TimeUnit.SECONDS)) // the guest's reader surfaced the exact offer
+
+        joiner.close()
+        host.close()
+        game.close()
+    }
+
+    @Test
+    fun `guest sees an abrupt host drop as lost with no offer`() = runBlocking {
+        val game = EchoServer().also { it.start() }
+        val registry = InMemoryWorldRegistry(SystemClock)
+        val host = HostController(
+            registry, LanOpener { game.port }, HostConnectionServer(bindHost = "127.0.0.1"),
+            EndpointResolver { port -> Endpoint("127.0.0.1", port) }, node(7), SystemClock,
+        )
+        host.host(world, generation = 4)
+
+        val lost = CompletableFuture<SnapshotOffer?>()
+        val joiner = JoinController(
+            registry, DirectTcpTransport(), CapturingHandoff(), SystemClock, config,
+            onHostLost = { _, offer -> lost.complete(offer) },
+        )
+        assertInstanceOf(JoinResult.Connected::class.java, joiner.join(world))
+
+        host.close() // abrupt: tears the control channel down without a HostLeaving
+
+        assertNull(lost.get(5, TimeUnit.SECONDS)) // reported lost, with no snapshot to pull
+
+        joiner.close()
         game.close()
     }
 }

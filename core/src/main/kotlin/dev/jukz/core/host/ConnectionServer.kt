@@ -1,5 +1,6 @@
 package dev.jukz.core.host
 
+import dev.jukz.core.discovery.SnapshotOffer
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.WorldId
@@ -17,4 +18,14 @@ interface ConnectionServer : AutoCloseable {
      * mapping) so guests reach the game through here.
      */
     fun start(worldId: WorldId, token: ClaimToken, gameEndpoint: Endpoint, heartbeatSeq: () -> Long): Int
+
+    /** Number of guests with an open control channel right now (a reliable "is anyone connected"). */
+    fun connectedGuestCount(): Int = 0
+
+    /**
+     * Push a [Message.HostLeaving] to every connected guest over its live control channel, so they can
+     * take over hosting (F4 handoff) without racing discovery. [snapshot], when present, tells them
+     * where to pull the latest save from. Best-effort.
+     */
+    fun notifyGuestsLeaving(snapshot: SnapshotOffer?) {}
 }

@@ -1,7 +1,9 @@
 package dev.jukz.core.host
 
+import dev.jukz.core.discovery.SnapshotOffer
 import dev.jukz.core.handshake.FramedMessageChannel
 import dev.jukz.core.handshake.HostStateMachine
+import dev.jukz.core.handshake.Message
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.WorldId
@@ -37,6 +39,7 @@ class HostConnectionServer(
     @Volatile private var running = false
     @Volatile private var session: Session? = null
     private val pumps = CopyOnWriteArrayList<Thread>()
+    private val controlChannels = CopyOnWriteArrayList<FramedMessageChannel>()
 
     /** What a started server is serving (held in one nullable holder — [WorldId] is an inline class). */
     private class Session(
@@ -82,19 +85,32 @@ class HostConnectionServer(
     private fun serveControl(ch: JukzChannel, sess: Session) {
         val framed = FramedMessageChannel(ch)
         val sm = HostStateMachine(sess.worldId, sess.token, sess.heartbeatSeq)
-        while (running) {
-            val msg = try {
-                framed.receive()
-            } catch (_: Exception) {
-                return
+        controlChannels.add(framed) // tracked so we can push a HostLeaving when we withdraw
+        try {
+            while (running) {
+                val msg = try {
+                    framed.receive()
+                } catch (_: Exception) {
+                    return
+                }
+                val reaction = sm.onMessage(msg)
+                reaction.reply?.let { runCatching { framed.send(it) } }
+                if (reaction.shutdown) {
+                    runCatching { ch.close() }
+                    return
+                }
             }
-            val reaction = sm.onMessage(msg)
-            reaction.reply?.let { runCatching { framed.send(it) } }
-            if (reaction.shutdown) {
-                runCatching { ch.close() }
-                return
-            }
+        } finally {
+            controlChannels.remove(framed)
         }
+    }
+
+    override fun connectedGuestCount(): Int = controlChannels.size
+
+    override fun notifyGuestsLeaving(snapshot: SnapshotOffer?) {
+        val sess = session ?: return
+        val msg = Message.HostLeaving(sess.worldId, sess.token, 0, snapshot)
+        controlChannels.forEach { runCatching { it.send(msg) } } // send is thread-safe (synchronized output)
     }
 
     /** Pipe a DATA channel transparently to the local game server, both directions. */
@@ -133,5 +149,8 @@ class HostConnectionServer(
     override fun close() {
         running = false
         runCatching { server?.close() }
+        // Close active control channels so connected guests see the drop immediately (abrupt-leave path).
+        controlChannels.forEach { runCatching { it.close() } }
+        controlChannels.clear()
     }
 }

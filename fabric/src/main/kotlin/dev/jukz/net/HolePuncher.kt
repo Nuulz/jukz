@@ -7,7 +7,7 @@ import dev.jukz.core.model.Endpoint
  *
  * Real flow:
  *  1. Both peers learn their server-reflexive candidates via [StunClient].
- *  2. They exchange candidates through the DHT (the rendezvous/signaling channel).
+ *  2. They exchange candidates through the rendezvous/signaling channel.
  *  3. Both simultaneously send UDP probes to each other's candidate; once a probe round-trips,
  *     the path is open. Succeeds for cone NATs (~92-96% of pairs), fails on symmetric/CGNAT.
  *  4. On failure, the caller falls back to a TURN relay (see the fallback ladder in the spec).

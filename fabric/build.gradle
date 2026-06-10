@@ -33,15 +33,19 @@ dependencies {
     // NOTE: for a shippable mod the JGit transitive deps must also be JIJ-bundled (flagged).
     implementation "org.eclipse.jgit:org.eclipse.jgit:7.1.0.202411261347-r"
 
-    // ---- FLAGGED network libs (requires live-network testing + shading) ----
+    // ---- FLAGGED network libs (NAT traversal — requires live-network testing + shading) ----
     // MC ships its own Netty; ice4j + netty-codec-native-quic MUST be shaded/relocated to
-    // avoid classpath clashes. mldht is on JitPack and dormant. Left out of the active build
-    // so the scaffold compiles offline; the adapters document the exact calls and are wired
-    // behind core interfaces, so enabling these is additive.
-    // modImplementation "com.github.the8472:mldht:master-SNAPSHOT"     // DHT (BEP44)
-    // implementation "net.i2p.crypto:eddsa:0.3.0"                       // Ed25519 for BEP44 (mldht needs it; not bundled)
+    // avoid classpath clashes. Left out of the active build so the scaffold compiles offline;
+    // the adapters (IceTransport / HolePuncher) document the exact calls and are wired behind
+    // core interfaces, so enabling these is additive — the fallback for routers without UPnP.
     // implementation "org.jitsi:ice4j:3.2-15-g6da2b08"                  // STUN/ICE/TURN + UPnP
     // implementation "io.netty:netty-codec-native-quic:4.2.9.Final"    // reliable UDP tunnel
+
+    // ---- Tests (JUnit5; Loom keeps Minecraft on the test classpath for sidecar/NBT round-trips) ----
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:${coroutines_version}"
 }
 
 loom {
@@ -74,6 +78,11 @@ java {
 
 kotlin {
     jvmToolchain(21)
+}
+
+test {
+    useJUnitPlatform()
+    testLogging { events "passed", "skipped", "failed" }
 }
 
 tasks.withType(JavaCompile).configureEach {

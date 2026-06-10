@@ -13,8 +13,8 @@ sealed interface PublishResult {
 }
 
 /**
- * Abstraction over the discovery layer (the DHT). Implemented for real by a Mainline-DHT
- * adapter (BEP44 mutable items) and by [InMemoryWorldRegistry] for tests.
+ * Abstraction over the discovery layer. Implemented for real by the LAN-multicast and rendezvous
+ * adapters (and composed by `CompositeWorldRegistry`), and by [InMemoryWorldRegistry] for tests.
  *
  * The CAS semantics of [publishIfNewer] are the resource-side fence: a stale (lower) token
  * can never overwrite a fresher record, which is what prevents split-brain.

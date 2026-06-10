@@ -14,6 +14,7 @@ import dev.jukz.discovery.Discovery
 import dev.jukz.runtime.HostSession
 import dev.jukz.transport.LocalEndpointResolver
 import dev.jukz.transport.UpnpPortForwarder
+import dev.jukz.world.WorldAccessFlag
 import dev.jukz.world.WorldIdState
 import kotlinx.coroutines.runBlocking
 import net.minecraft.client.MinecraftClient
@@ -21,6 +22,7 @@ import net.minecraft.client.gui.screen.MessageScreen
 import net.minecraft.client.gui.screen.TitleScreen
 import net.minecraft.server.integrated.IntegratedServer
 import net.minecraft.text.Text
+import net.minecraft.util.WorldSavePath
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -39,6 +41,10 @@ object HostCoordinator {
     /** Open + announce the running integrated world, unless already hosting or mid-start. Idempotent. */
     fun autoHost(server: IntegratedServer) {
         if (HostSession.isHosting) return
+        if (accessDisabled(server)) {
+            JukzMod.logger.info("jukz: access is closed for this world; not announcing")
+            return
+        }
         if (!starting.compareAndSet(false, true)) return
         Thread {
             try {
@@ -58,6 +64,37 @@ object HostCoordinator {
         }.start()
     }
 
+    /**
+     * Close access to this world (F4-D): write the per-world `jukz.access=disabled` flag, withdraw the
+     * discovery record, and kick every connected guest. The flag is written synchronously so the UI
+     * reads the new state back immediately; the withdraw + kick run off the render thread. The local
+     * host player is left in the world — closing access takes the world private, it does not end it.
+     */
+    fun disableAccess(server: IntegratedServer) {
+        WorldAccessFlag.disable(server.getSavePath(WorldSavePath.ROOT))
+        Thread {
+            HostSession.onServerStopping() // withdraw from discovery (no snapshot — the world stays open locally)
+            val message = Text.literal("The host has closed access to this world.")
+            server.execute {
+                val kicked = server.playerManager.playerList.toList()
+                    .filterNot { server.isHost(it.gameProfile) }
+                kicked.forEach { it.networkHandler.disconnect(message) }
+                JukzMod.logger.info("jukz: access closed; {} guest(s) disconnected", kicked.size)
+            }
+        }.apply { isDaemon = true; name = "jukz-access-close" }.start()
+    }
+
+    /** Re-open access to this world (F4-D): drop the flag and run the normal announce flow again. */
+    fun enableAccess(server: IntegratedServer) {
+        WorldAccessFlag.enable(server.getSavePath(WorldSavePath.ROOT))
+        autoHost(server)
+    }
+
+    fun isAccessDisabled(server: IntegratedServer): Boolean = accessDisabled(server)
+
+    private fun accessDisabled(server: IntegratedServer): Boolean =
+        runCatching { WorldAccessFlag.isDisabled(server.getSavePath(WorldSavePath.ROOT)) }.getOrDefault(false)
+
     private fun runHost(server: IntegratedServer): HostResult {
         val (worldId, generation) = bumpGeneration(server)
         val controller = HostController(
@@ -70,6 +107,8 @@ object HostCoordinator {
             endpointResolver = ForwardingEndpointResolver(UpnpPortForwarder(), LocalEndpointResolver()),
             nodeId = PersistentNodeId.nodeId,
             clock = SystemClock,
+            // Connected players (host + any relayed-in guests) for the world-list live badge.
+            playerCount = { runCatching { server.playerManager.playerList.size }.getOrDefault(0) },
         )
         val result = runBlocking { controller.host(worldId, generation) }
         if (result is HostResult.Hosting) HostSession.install(controller) else controller.close()

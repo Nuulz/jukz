@@ -6,8 +6,8 @@ import dev.jukz.net.StunClient
 import dev.jukz.net.UpnpMapper
 
 /**
- * Public, cross-NAT [EndpointResolver] for the internet path (pairs with the DHT registry). It makes
- * the host's TCP listener reachable from another network:
+ * Public, cross-NAT [EndpointResolver] for a serverless internet path (no rendezvous to observe the
+ * public IP). It makes the host's TCP listener reachable from another network:
  *  1. UPnP IGD ([UpnpMapper]) — map the TCP port and read the router's public IP. When the router
  *     supports it (common at home), this yields a directly-reachable `publicIp:port`.
  *  2. STUN fallback ([StunClient]) — learn the public IP; the port must then be forwarded manually.

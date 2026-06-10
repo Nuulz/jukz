@@ -7,12 +7,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * In-memory [WorldRegistry] that faithfully models the two DHT properties the protocol
- * relies on: CAS-on-token publishing and time-based record expiry (BEP44's ~2h TTL).
- * Time is driven by an injected [JukzClock], so tests can expire records deterministically.
+ * In-memory [WorldRegistry] that faithfully models the two properties the protocol relies on:
+ * CAS-on-token publishing and time-based record expiry. Time is driven by an injected [JukzClock],
+ * so tests can expire records deterministically.
  *
- * This is the test/dev backend; production swaps in a Mainline-DHT adapter behind the same
- * interface. It is concurrency-safe so it can also stand in for local multi-peer simulations.
+ * This is the test/dev backend; production uses the LAN-multicast / rendezvous adapters behind the
+ * same interface. It is concurrency-safe so it can also stand in for local multi-peer simulations.
  */
 class InMemoryWorldRegistry(
     private val clock: JukzClock,
@@ -66,6 +66,6 @@ class InMemoryWorldRegistry(
     }
 
     companion object {
-        const val DEFAULT_TTL_MS: Long = 2 * 60 * 60 * 1000L // ~BEP44 2h item expiry
+        const val DEFAULT_TTL_MS: Long = 2 * 60 * 60 * 1000L // ~2h item expiry ceiling
     }
 }

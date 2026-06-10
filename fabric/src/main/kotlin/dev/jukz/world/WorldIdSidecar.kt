@@ -11,7 +11,7 @@ import java.util.UUID
 /**
  * A plain-NBT sidecar (`<save>/jukz.dat`) holding the world UUID + generation. It exists so the
  * mod can read the world identity with plain file IO BEFORE the integrated server starts — needed
- * to query the DHT and decide guest-vs-host without spinning up the world first.
+ * to query discovery and decide guest-vs-host without spinning up the world first.
  */
 object WorldIdSidecar {
     private const val FILE = "jukz.dat"

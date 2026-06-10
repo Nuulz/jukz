@@ -1,6 +1,7 @@
 package dev.jukz.core.host
 
 import dev.jukz.core.discovery.PublishResult
+import dev.jukz.core.discovery.SnapshotOffer
 import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.discovery.WorldRegistry
 import dev.jukz.core.model.ClaimToken
@@ -29,8 +30,8 @@ import java.util.concurrent.atomic.AtomicLong
  * The guest side ([dev.jukz.core.join.JoinController]) connects to the announced endpoint and is
  * answered by the [ConnectionServer] — the host is no longer a test double. Against
  * [dev.jukz.core.discovery.InMemoryWorldRegistry] with a loopback [EndpointResolver] the whole path
- * is exercisable in-process, so it is fully deterministic to unit-test while the live DHT/NAT
- * adapters are still flagged.
+ * is exercisable in-process, so it is fully deterministic to unit-test while the live network
+ * adapters slot in behind the same interfaces.
  *
  * The fencing [generation] is incremented (and persisted) by the caller before [host] is invoked,
  * keeping Minecraft persistence out of `core`.
@@ -45,6 +46,8 @@ class HostController(
     private val config: HostConfig = HostConfig(),
     /** Invoked if the heartbeat stops succeeding (record expired or a newer host took over). */
     private val onHostLost: (WorldId) -> Unit = {},
+    /** Connected player count, sampled on each announce for the world-list live badge (F4-C). */
+    private val playerCount: () -> Int = { 0 },
 ) : AutoCloseable {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -63,7 +66,7 @@ class HostController(
                 record?.heartbeatSeq ?: 0L
             }
             val endpoint = endpointResolver.resolve(listenPort)
-            val candidate = WorldRecord(worldId, token, listOf(endpoint), heartbeatSeq = 0)
+            val candidate = WorldRecord(worldId, token, listOf(endpoint), heartbeatSeq = 0).copy(playerCount = playerCount())
             when (val result = registry.publishIfNewer(candidate)) {
                 is PublishResult.Published -> {
                     record = result.record
@@ -84,11 +87,20 @@ class HostController(
     /** The record we are currently announcing, or null when not hosting. Static info for the host UI. */
     val sharedRecord: WorldRecord? get() = record
 
+    /** Guests currently connected over a control channel — a reliable "is anyone here" at shutdown. */
+    fun connectedGuestCount(): Int = connectionServer.connectedGuestCount()
+
+    /**
+     * Tell connected guests we are leaving and hand them the [snapshot] offer over their live control
+     * channels, so one of them can take over hosting (F4 handoff) without racing discovery.
+     */
+    fun notifyGuestsLeaving(snapshot: SnapshotOffer?) = connectionServer.notifyGuestsLeaving(snapshot)
+
     /**
      * Poll the registry to confirm our record is still the live, announced one. Returns null when not
      * hosting; otherwise [HostStatus.live] is true only when the registry holds our exact token. With
-     * the in-memory registry this is the same process, so it reflects the heartbeat; with the live
-     * DHT it is a real reachability/ownership check.
+     * the in-memory registry this is the same process, so it reflects the heartbeat; with a live
+     * registry (LAN / rendezvous) it is a real reachability/ownership check.
      */
     suspend fun status(): HostStatus? {
         val current = record ?: return null
@@ -104,7 +116,25 @@ class HostController(
      */
     suspend fun beat(): Boolean {
         val current = record ?: return false
-        val next = current.withHeartbeat(heartbeatSeq.incrementAndGet())
+        val next = current.copy(heartbeatSeq = heartbeatSeq.incrementAndGet(), playerCount = playerCount())
+        val refreshed = registry.heartbeat(next)
+        if (refreshed) record = next
+        return refreshed
+    }
+
+    /**
+     * Re-announce the live record with a [SnapshotOffer] attached, so a guest that looks the world up
+     * while we are shutting down can pull the latest save before taking over hosting (F4 handoff).
+     * Uses the heartbeat CAS (same token), refreshing in place; returns false if we are no longer the
+     * live host. The offer rides the LAN record only — the rendezvous heartbeat carries no endpoints.
+     */
+    suspend fun announceSnapshot(offer: SnapshotOffer): Boolean {
+        val current = record ?: return false
+        val next = current.copy(
+            heartbeatSeq = heartbeatSeq.incrementAndGet(),
+            snapshot = offer,
+            playerCount = playerCount(),
+        )
         val refreshed = registry.heartbeat(next)
         if (refreshed) record = next
         return refreshed

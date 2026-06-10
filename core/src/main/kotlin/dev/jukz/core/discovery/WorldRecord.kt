@@ -13,15 +13,23 @@ import dev.jukz.core.model.WorldId
  * The host announces what it can resolve locally (LAN address today); the rendezvous server
  * appends the announcer's observed public address, which is how a record becomes reachable
  * across NATs without the client needing STUN.
+ *
+ * [snapshot] and [playerCount] are optional extras (wire format v3): a host shutting down may offer
+ * its save over HTTP for a guest to take over hosting (F4 handoff), and the announce carries the
+ * connected player count for the world-list live badge. Both ride the LAN-multicast binary record;
+ * the rendezvous server relays neither, so they default to absent/0 over the internet path.
  */
 data class WorldRecord(
     val worldId: WorldId,
     val token: ClaimToken,
     val endpoints: List<Endpoint>,
     val heartbeatSeq: Long,
+    val snapshot: SnapshotOffer? = null,
+    val playerCount: Int = 0,
 ) {
     init {
         require(endpoints.isNotEmpty()) { "a record must announce at least one endpoint" }
+        require(playerCount >= 0) { "playerCount must be non-negative" }
     }
 
     /** Single-endpoint convenience, the common case for locally-resolved announcements. */
@@ -34,4 +42,7 @@ data class WorldRecord(
     val hostGeneration: Long get() = token.hostGeneration
 
     fun withHeartbeat(seq: Long): WorldRecord = copy(heartbeatSeq = seq)
+
+    /** Attach (or clear) the snapshot offer the host serves while shutting down. */
+    fun withSnapshot(offer: SnapshotOffer?): WorldRecord = copy(snapshot = offer)
 }

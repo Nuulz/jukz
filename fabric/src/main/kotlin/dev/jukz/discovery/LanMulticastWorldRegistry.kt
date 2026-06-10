@@ -14,12 +14,12 @@ import java.net.InetSocketAddress
 import java.net.MulticastSocket
 
 /**
- * Real cross-machine discovery over **LAN multicast** — no DHT, no NAT. Every host periodically
+ * Real cross-machine discovery over **LAN multicast** — no server, no NAT. Every host periodically
  * multicasts its [WorldRecord] to a private group; every node listens and caches what it hears with
  * the same token-CAS + TTL semantics as [dev.jukz.core.discovery.InMemoryWorldRegistry], so two
- * Minecraft instances on the same network actually find and join each other's worlds. The DHT
- * ([MldhtWorldRegistry]) is the internet-scale counterpart behind the same [WorldRegistry] interface;
- * this is the same-subnet path that works today.
+ * Minecraft instances on the same network actually find and join each other's worlds. The rendezvous
+ * adapter (`RendezvousWorldRegistry`) is the internet-scale counterpart behind the same
+ * [WorldRegistry] interface; this is the same-subnet path that works with no internet at all.
  *
  * Fencing rides on the announced [ClaimToken]: a strictly-higher token in a received datagram takes
  * over the cache slot; equal tokens refresh the TTL (a host's re-announce); lower tokens are ignored.

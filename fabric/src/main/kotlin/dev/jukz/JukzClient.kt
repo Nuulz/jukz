@@ -48,7 +48,7 @@ object JukzClient : ClientModInitializer {
             client.server?.let { HostCoordinator.autoHost(it) }
         }
 
-        JukzMod.logger.info("jukz client initialized")
+        JukzMod.logger.info("jukz initialized")
     }
 
     /**

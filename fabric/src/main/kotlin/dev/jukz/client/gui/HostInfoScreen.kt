@@ -38,12 +38,32 @@ class HostInfoScreen(private val parent: Screen?) : Screen(Text.literal("World i
             ButtonWidget.builder(Text.literal("Done")) { client?.setScreen(parent) }
                 .dimensions(cx + 54, y, 100, 20).build(),
         )
+        // Access toggle (F4-D): open/close the world to guests. Reads the per-world flag for its label.
+        addDrawableChild(
+            ButtonWidget.builder(accessLabel()) { toggleAccess() }
+                .dimensions(cx - 75, y - 26, 150, 20).build(),
+        )
         // Self-heal: every jukz world is auto-hosted on open, but if that hasn't taken (or failed),
         // kick it off now so opening this panel always ends with the world online.
         if (!HostSession.isHosting) {
             client?.server?.let { HostCoordinator.autoHost(it) }
         }
         refresh()
+    }
+
+    /** "Access: Open" / "Access: Closed", read from the per-world flag at build time. */
+    private fun accessLabel(): Text {
+        val server = client?.server
+        val closed = server != null && HostCoordinator.isAccessDisabled(server)
+        return Text.literal(if (closed) "Access: Closed" else "Access: Open")
+    }
+
+    /** Flip access for the loaded world, then rebuild the screen so the label + status refresh. */
+    private fun toggleAccess() {
+        val server = client?.server ?: return
+        if (HostCoordinator.isAccessDisabled(server)) HostCoordinator.enableAccess(server)
+        else HostCoordinator.disableAccess(server)
+        client?.setScreen(HostInfoScreen(parent))
     }
 
     /** Re-poll the live status without blocking the render thread. */
