@@ -1,11 +1,15 @@
 # jukz
 
 A Minecraft **Fabric 1.21.1** mod (Java 21) that gives every world a permanent UUID and uses a
-**serverless P2P DHT** to discover who is currently hosting it. Opening a world asks the network
-"is anyone hosting this right now?": if yes, you join that live host as a **guest**; if no, the
-world opens locally and is **announced** as the active host. On close, the announcement is
-withdrawn. The world effectively lives in one place at a time, with rotating ownership and no
-manual coordination.
+**rendezvous server + LAN multicast** (DHT is future work) to discover who is currently hosting it.
+Opening a world asks the network "is anyone hosting this right now?": if yes, you join that live
+host as a **guest**; if no, the world opens locally and is **announced** as the active host. On
+close, the announcement is withdrawn. The world effectively lives in one place at a time — on
+whoever's host is "switched on" — with rotating ownership and no manual coordination. There is no
+save synchronization: a guest plays live on the host's world (like Open-to-LAN), not on a copy.
+
+Host ↔ guest is verified working end-to-end (two instances on one machine: auto-host on open,
+discovery via the rendezvous server, relay, and a guest joining the live world).
 
 See [`docs/superpowers/specs/2026-06-08-jukz-design.md`](docs/superpowers/specs/2026-06-08-jukz-design.md)
 for the full design rationale (verified against primary sources) and
@@ -51,16 +55,20 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
 - **`fabric` (compiles, builds the mod jar):**
   - `WorldIdState` (verified 1.21.1 `PersistentState` API) + `WorldIdSidecar` (pre-start `jukz.dat`).
   - Lifecycle wiring (`ServerWorldEvents.LOAD`, `SERVER_STOPPING`) and `HostSession` (host withdrawal).
-  - Client join flow wired end-to-end: "Join via jukz" → `JoinCoordinator` runs `JoinController`
+  - Client join flow wired end-to-end: a **"Play together"** button on the multiplayer screen
+    (`ScreenEvents.AFTER_INIT`) opens a short-code prompt → `JoinCoordinator` runs `JoinController`
     off-thread and maps the result to animated status screens (searching / connecting / nobody-
     hosting / error), with `MinecraftGameHandoff` opening the vanilla `ConnectScreen` on success.
-    Until the live DHT is wired, a code lookup ends cleanly on the "nobody is hosting" screen.
   - Auto-host on open: every jukz world is permanently shareable. When a world boots locally,
-    `HostCoordinator` (on `SERVER_STARTED`) bumps the fence and runs `HostController` with
-    `MinecraftLanOpener` (real `IntegratedServer.openToLan`) + `LocalEndpointResolver`, announcing it
-    so others can join. Silent; `HostSession` withdraws on world close. The pause-menu "Open to LAN"
-    button is replaced (`ScreenEvents.AFTER_INIT`, no mixin) with an informational **"World info
-    (jukz)"** opening `HostInfoScreen` (share code + copy, UUID, generation, endpoint, live self-check).
+    `HostCoordinator` (on `ClientPlayConnectionEvents.JOIN`, so the local player already exists — the
+    moment `openToLan` needs) bumps the fence and runs `HostController` with `MinecraftLanOpener`
+    (real `IntegratedServer.openToLan`, then drops the integrated server to **offline-mode** so guests
+    relayed in aren't kicked by Mojang online-auth — jukz authorizes via the world code) and the
+    UPnP-opening `ForwardingEndpointResolver`, announcing it so others can join. Silent; `HostSession`
+    withdraws on world close. The pause menu gains a **"World info (jukz)"** button
+    (`ScreenEvents.AFTER_INIT`, no mixin) opening `HostInfoScreen` (share code + copy, UUID,
+    generation, endpoints, live self-check); it takes the vanilla "Open to LAN" slot, or pins itself
+    when that button is already gone.
   - Auto-join on open (mixin): the flip side — opening a world first consults discovery. A tiny Java
     `IntegratedServerLoaderMixin` at the head of `IntegratedServerLoader.start` reads the world's
     `jukz.dat` UUID and, via `WorldOpenInterceptor`, looks it up in the shared `Discovery` registry; a
@@ -73,9 +81,10 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
   - **Internet-wide discovery via a rendezvous server** (no DHT): `RendezvousWorldRegistry` speaks
     the JSON `/v1` contract of the self-hostable Rust + Axum server in [`rendezvous/`](rendezvous/)
     (90 s leases, heartbeat at TTL/3 derived from the server's announce response, ClaimToken CAS
-    replicated server-side, observed-public-IP appended to the announced endpoints). Enabled by
-    setting `rendezvous.url` in `config/jukz.properties` (written with a commented template on first
-    run; empty = LAN-only). `CompositeWorldRegistry` layers it over LAN multicast — same-network play
+    replicated server-side, observed-public-IP appended to the announced endpoints). On by default
+    against the public instance (`jukz.nuulm.com`); override `rendezvous.url` in
+    `config/jukz.properties` to self-host, or set it to `none` for LAN-only.
+    `CompositeWorldRegistry` layers it over LAN multicast — same-network play
     keeps working with no internet — and `WorldRecord` now carries an ordered **endpoint candidate
     list** (wire format v2, still decodes v1) that guests dial in order. A rejected announce is no
     longer silent: `SupersededScreen` lets the player keep the local copy or leave and join the live
@@ -88,7 +97,9 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     network — cross-internet play with no manual port-forward where the router supports UPnP. It is
     non-fatal: no UPnP just falls back to LAN-only reach (the SSDP/SOAP round-trip itself is still
     flagged for live-NAT validation).
-  - `JGitWorldSync.commit` — real JGit snapshotting.
+  - `JGitWorldSync.commit` — real JGit snapshotting. **Present but not wired**: the current model is
+    live-host (a guest plays on the host's world, no save sync), so Git-based save replication is
+    intentionally out of the active path.
 
 ## What is flagged (`// requires live-network testing`)
 
@@ -106,7 +117,10 @@ documented in KDoc. They need real machines behind real NATs to validate:
   it remains the right primitive for the DHT registry, where there is no server to observe the IP.
 - `IceTransport` / `HolePuncher` — symmetric-NAT UDP hole punch, QUIC tunnel, TURN relay (the
   fallback for when UPnP isn't available).
-- `JGitWorldSync.pullLatest` — cold-start world transfer over the P2P transport.
+- `JGitWorldSync.pullLatest` — cold-start world transfer. Out of scope for the current live-host
+  model (a guest joins the host's world live, so it never needs a copy). The trade-off: a guest with
+  no local copy of a world can't take over hosting once the host leaves — that would need save
+  transfer, which this model deliberately drops.
 
 The world-open interception itself is real (`IntegratedServerLoaderMixin` + `WorldOpenInterceptor`),
 and the discovery backend it queries is now live: LAN multicast finds same-network hosts, the
@@ -122,6 +136,20 @@ hole-punch/relay fallback for routers without UPnP remain flagged.
 ```
 
 Requires JDK 21. The Gradle wrapper pins Gradle 8.10.1 and Fabric Loom 1.7.
+
+### Testing host ↔ guest on one machine
+
+Two isolated dev clients (separate `runDir`, so separate logs / saves / config / `jukz.nodeid` —
+distinct peers) are wired as Loom run configs:
+
+```bash
+run-client-a.bat   # gradlew runClientA — instance A (username HostA),  run dir fabric/run/clientA
+run-client-b.bat   # gradlew runClientB — instance B (username GuestB), run dir fabric/run/clientB
+```
+
+Open a world in A (it auto-hosts; the share code is under pause menu → **World info (jukz)**), then
+in B either open a copy of the same world (auto-join) or use **Play together** on the multiplayer
+screen with A's code. Both pre-point at the public rendezvous server.
 
 ## License
 
