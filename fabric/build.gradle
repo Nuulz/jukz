@@ -46,6 +46,25 @@ dependencies {
 
 loom {
     // Single source set; client-only classes are guarded with @Environment(CLIENT).
+
+    // Two isolated client run configs for testing jukz host <-> guest on ONE machine.
+    // Each gets its own runDir (separate logs / saves / config / jukz.nodeid -> distinct peers)
+    // and a fixed username so the two windows are easy to tell apart in logs.
+    // Launch:  gradlew runClientA   and   gradlew runClientB   (or run-client-a.bat / run-client-b.bat).
+    runs {
+        clientA {
+            inherit client
+            name "Client A (jukz host)"
+            runDir "run/clientA"
+            programArgs "--username", "HostA"
+        }
+        clientB {
+            inherit client
+            name "Client B (jukz guest)"
+            runDir "run/clientB"
+            programArgs "--username", "GuestB"
+        }
+    }
 }
 
 java {
