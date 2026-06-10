@@ -9,7 +9,7 @@ import net.minecraft.client.gui.widget.TextFieldWidget
 import net.minecraft.text.Text
 
 /** Prompts for a world short code, validates it, and starts the host search. */
-class JoinPromptScreen(private val parent: Screen?) : Screen(Text.literal("Join via jukz")) {
+class JoinPromptScreen(private val parent: Screen?) : Screen(Text.literal("Play together")) {
 
     private lateinit var codeField: TextFieldWidget
     private var error: Text? = null
