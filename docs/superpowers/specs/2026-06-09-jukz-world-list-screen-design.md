@@ -79,10 +79,10 @@ The screen is a vertical list. Each row is exactly:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  My survival base                              ● live (you)   [Open locally] │
+│  My survival base                              ● live         [Join]  │
 │  JUKZ-AB12-CD34-EF56-7890                                            │
 ├─────────────────────────────────────────────────────────────────────┤
-│  Hardcore realm                                 ● live        [Join]  │
+│  Hardcore realm                                 ● live         [Join]  │
 │  JUKZ-9988-7766-5544-3322                                            │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Old creative test                              ○ offline      [Open]  │
@@ -99,9 +99,7 @@ The screen is a vertical list. Each row is exactly:
 - **Status column**: a coloured dot + a one-word label. The dot is the visual
   anchor; the label is the textual confirmation. Colours follow the existing
   palette:
-  - `live (you)` → `COLOR_LIVE = 0xFF6BCB6B` (same green as `HostInfoScreen`).
-  - `live` → `COLOR_LIVE` (same green — the only thing that distinguishes
-    "you" from "other" is the parenthetical in the label).
+  - `live` → `COLOR_LIVE = 0xFF6BCB6B` (same green as `HostInfoScreen`).
   - `offline` → `COLOR_SUBTLE` (grey).
   - `unknown` → `ACCENT_ACTION = 0xFFFFC24A` (amber, same as
     `JukzStatusScreen.ACCENT_ACTION`).
@@ -109,9 +107,9 @@ The screen is a vertical list. Each row is exactly:
     label is `…`.
 - **Action button** (rightmost): one of three labels, mapped from the row's
   status:
-  - `LiveMine` → **"Open locally"** (forces a local boot, bypassing
-    auto-join; see §4.3).
-  - `LiveOther` → **"Join"** (calls `JoinCoordinator.start`).
+  - `LiveMine` or `LiveOther` → **"Join"** (calls `JoinCoordinator.start`).
+    See §3.5 for why `LiveMine` does not get a distinct "Open locally"
+    action in v1.
   - `Offline` → **"Open"** (vanilla singleplayer boot, which then re-enters
     the discovery flow naturally).
   - `Unknown` → **"Open"** (same as Offline — we treat "can't reach discovery"
@@ -136,6 +134,30 @@ simply `unknown`. The footer shows the same Refresh / Back pair.
 A scan that finds at least one valid row but skips ≥1 broken `jukz.dat` renders
 a subtle one-line note at the bottom: `"N world(s) skipped (invalid or missing
 jukz.dat)"` — the count is informative, not actionable. No log spam.
+
+### 3.5 A note on "I am the host"
+
+The spec recognises a `LiveMine` row status (see §4.2) but the **action
+button never reads "Open locally" in v1**. The reason is the open TODO on
+`NodeId` (see [[jukz-project]]): today `NodeId.random()` produces a fresh
+identity per session, so the comparison
+`record.token.nodeId == selfNodeId` is only true in the exact same session
+that published the record. In any later session, the row will land in
+`LiveOther` (or `Offline` if the TTL expired), and the user will click
+**"Join"** or **"Open"** — which are the correct actions anyway.
+
+The `LiveMine` state is still in the data model (it is what a real, persistent
+`NodeId` would produce) and the model still maps to it, but the action mapping
+in §4.3 collapses `LiveMine` into the same behaviour as `LiveOther`: open
+the join coordinator. The "Open locally" label is reserved for when
+`NodeId` is fixed per-installation; this is captured in §6.
+
+**Effect for v1**: every `live` row reads `Join`, regardless of who is
+hosting. Users who want to "reclaim" their own world close the other session
+and click **Open** (after Refresh, the record times out → `offline` →
+**Open**), or they wait for the host to leave. This is honest: the mod
+cannot distinguish "I am the host" from "another session of mine is" with
+today's `NodeId`.
 
 ## 4. Architecture
 
@@ -199,12 +221,20 @@ Extends `net.minecraft.client.gui.screen.Screen`. Title literal: `"My worlds"`.
 Brand line at the top: `"jukz"` in `ACCENT_INFO`, exactly mirroring
 `JukzStatusScreen.BRAND`.
 
+The screen holds a single `NodeId` field, computed once at `init()` via
+`NodeId.random()` and reused across every `refresh()`. Without this, the
+`selfNodeId` would change between refreshes and a row could flip from
+`LiveMine` to `LiveOther` (or vice-versa) without the underlying record
+changing — confusing and incorrect. Caching the identity for the lifetime of
+the screen instance is consistent with how `HostCoordinator` already does
+it within a single auto-host cycle.
+
 `init()`:
-1. `model.addListener { rows -> this@WorldListScreen.rows = rows }`.
-2. Calls `model.refresh(...)` with the current `MinecraftClient.levelStorage.savesDirectory`,
-   `Discovery.registry`, and `NodeId.random()` (the same ephemeral identity
-   `HostCoordinator` uses today — see [[jukz-project]] TODO on `NodeId`).
-3. Builds the per-row click handlers and the footer (Refresh, Back).
+1. `selfNodeId = NodeId.random()`.
+2. `model.addListener { rows -> this@WorldListScreen.rows = rows }`.
+3. Calls `model.refresh(savesDir, registry, selfNodeId)` with the current
+   `MinecraftClient.levelStorage.savesDirectory` and `Discovery.registry`.
+4. Builds the per-row click handlers and the footer (Refresh, Back).
 
 `render()`: paints the brand, the title, every row from the last received
 `List<WorldRow>`, and the footer. Rows are laid out top-down starting at
@@ -215,24 +245,23 @@ Brand line at the top: `"jukz"` in `ACCENT_INFO`, exactly mirroring
 
 **Per-row click handler** — maps `RowStatus` to action:
 
-- `LiveMine` → calls `IntegratedServerLoader.start(levelName, onCancel)` from
-  the client thread, **bypassing** the auto-join flow. The bypass uses the
-  same `@Volatile var bypass: Boolean` flag that `WorldOpenInterceptor` already
-  owns (`WorldOpenInterceptor.bypass = true` followed by the start call). This
-  is correct: "I am the host" is the only case where the user explicitly
-  wants the local boot, so we suppress the consultation that would otherwise
-  route the boot through discovery again.
-- `LiveOther` → calls `JoinCoordinator.start(worldId, shortCode, parent)` with
-  the same shape `JoinCoordinator.start` already accepts.
-- `Offline` / `Unknown` → calls `IntegratedServerLoader.start(levelName, onCancel)`
-  **without** bypassing. The standard auto-join / auto-host flow runs; the
-  picker is just a way to pick a save without going through vanilla's world
-  list.
+- `LiveMine` or `LiveOther` → `JoinCoordinator.start(worldId, shortCode, parent)`.
+- `Offline` or `Unknown` → `IntegratedServerLoader.start(levelName, onCancel)`
+  from the client thread, **without** any bypass. The standard
+  auto-join / auto-host flow runs; the picker is just a way to pick a save
+  without going through vanilla's world list. Reached via
+  `MinecraftClient.getInstance().createIntegratedServerLoader()` — the same
+  call `WorldOpenInterceptor.openLocally` already uses.
 
-`IntegratedServerLoader` is reached via
-`MinecraftClient.getInstance().createIntegratedServerLoader()` — the same
-`createIntegratedServerLoader().start(levelName, onCancel)` call already used
-by `WorldOpenInterceptor.openLocally`.
+The screen never sets `WorldOpenInterceptor.bypass` directly. That flag is an
+internal detail of the open-consult mixin flow, and leaking it here would
+couple two unrelated surfaces. If the user is the host and clicks "Open",
+the auto-join consultation will simply find their own announced record and
+proceed normally (the existing `WorldOpenInterceptor` already handles "live
+host is us" via the `ClaimToken`-fencing path, which is exactly the right
+behaviour).
+
+For why `LiveMine` is not given a distinct "Open locally" action, see §3.5.
 
 ### 4.4 `JukzClient` changes (one hook, one line)
 
@@ -298,12 +327,22 @@ Required cases:
    returns a `WorldRecord` with `token.nodeId != selfNodeId`.
 6. `givenRegistryThrows mapsToUnknown` — `lookup` throws. The model's
    `refresh` does not propagate the throw; the row lands in `Unknown`.
-7. `givenListenerRegistered receivesAtLeastTwoUpdates` — register a listener,
-   call `refresh`, await completion, assert ≥2 invocations: one with
-   `Loading`, one with the resolved status.
+7. `givenListenerRegistered receivesLoadingThenResolved` — register a listener,
+   call `refresh`, await completion, assert exactly 2 invocations: the
+   first carries rows with `status = Loading`, the second carries rows
+   with the resolved status (`Offline` in this test's stub). The model
+   explicitly emits the `Loading` snapshot before starting lookups, so
+   the UI can paint the rows immediately rather than wait for the
+   registry round-trip.
 8. `givenRefreshCalledWhileAnotherIsRunning doesNotInterleave` — call `refresh`
    twice in quick succession; the listener sees only one final result, not
-   a half-merged state from both.
+   a half-merged state from both. **Implementation note**: the model keeps
+   a monotonically-incrementing `seq: AtomicLong`. A new `refresh` increments
+   `seq` and tags the new run. Each `emit` checks `if (mySeq == currentSeq)
+   invokeListeners(rows)` and drops the result otherwise. Old runs finish
+   their work but their emissions are discarded. This is what guarantees the
+   "last call wins" semantics; it is also why the test only asserts a single
+   final invocation (not a sequence of states).
 
 ### 5.3 Manual UI validation (in-game, not automated)
 
@@ -314,19 +353,26 @@ the game, not automated tests"). Manual script:
 1. Start the dev client (`run-client.bat`).
 2. Create or open three singleplayer worlds (so each gets a fresh `jukz.dat`).
 3. Quit back to `TitleScreen`. Click **"jukz worlds"**.
-4. Expect: three rows, all with `● live (you)` (because each world, once
-   opened, is auto-hosted by `HostCoordinator`).
-5. Click **"Open locally"** on one row → the world boots. Return to title.
-6. Open the same picker again → that row's status is now `○ offline` (the host
-   was withdrawn on world close). The action button reads **"Open"**.
-7. Click **"Refresh"** → no change (refresh is idempotent in this case).
-8. Exit the client. Restart, open the picker → the same three rows are still
+4. Expect: three rows, all with `● live` (because each world, once
+   opened, is auto-hosted by `HostCoordinator`). Action buttons read
+   **"Join"** (see §3.5 for why).
+5. Click **"Join"** on one row → `SearchingHostScreen` flashes, then
+   `ConnectScreen` opens (you are joining your own host, so this is a
+   loopback round-trip that succeeds in v1). Return to title.
+6. Open the same picker again → that row's status is now `○ offline` (the
+   host was withdrawn on world close). The action button reads **"Open"**.
+7. Click **"Open"** → the world boots locally.
+8. Click **"Refresh"** on the picker → the freshly-opened world's record
+   is back to `● live`. No change in UI other than the colour flipping.
+9. Exit the client. Restart, open the picker → the same three rows are still
    listed (UUID is persisted).
 
-The `LiveOther` state is **not** reachable in a single-client dev session
+The `LiveOther` and `Unknown` states require either a second Minecraft
+instance pointed at the same DHT or a registry that simulates a foreign
+`NodeId`. They are not reachable in a single-client dev session
 (`InMemoryWorldRegistry` is per-process, and the in-memory store evaporates
-when the host stops heartbeating). It will be reachable in real DHT-backed
-testing and is covered by unit tests against a stub registry.
+when the host stops heartbeating). They are covered by the unit tests
+against a stub `WorldRegistry` (cases 4–6).
 
 ## 6. Open follow-ups (not in v1)
 
@@ -341,6 +387,13 @@ testing and is covered by unit tests against a stub registry.
   ("Survival Season 4", etc.), extend `WorldIdSidecar` and `WorldIdState` with
   an optional `displayName: String?` field. Pure additive, no migration
   required (missing → fall back to folder name).
+- **Persistent `NodeId`** — the open TODO on `core/model/NodeId`. Once
+  `NodeId` is fixed per-installation (e.g. generated on first launch and
+  stored in `~/.jukz/nodeid`), the comparison
+  `record.token.nodeId == selfNodeId` becomes meaningful across sessions.
+  At that point, the action mapping in §4.3 distinguishes `LiveMine` (the
+  "Open locally" label) from `LiveOther` ("Join"), and §3.5 is rescinded.
+  This is the natural follow-up that unlocks the missing affordance.
 - **"Take over"** — a guarded action that bumps the fencing generation
   locally and re-publishes. Out of scope for a screen; requires a new
   `WorldRegistry.forcePublish(record: WorldRecord)` method that violates
