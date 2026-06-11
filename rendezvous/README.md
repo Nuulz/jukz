@@ -37,6 +37,9 @@ resolution is CAS server-side: a strictly higher token displaces, anything else 
 | `RENDEZVOUS_TTL_MS` | `90000` | Lease TTL. Clients derive their heartbeat interval as TTL/3 |
 | `RENDEZVOUS_AUTH_TOKEN` | unset | When set, `/v1/*` requires `Authorization: Bearer <token>` |
 | `RENDEZVOUS_RATE_LIMIT_PER_MIN` | `120` | Per-client-IP request budget per minute |
+| `RELAY_MAX_SESSIONS` | `200` | Max live relay sessions (a non-UPnP host registers one) |
+| `RELAY_MAX_STREAMS_PER_SESSION` | `16` | Max in-flight streams per relay session |
+| `RELAY_WORKCONN_TIMEOUT_MS` | `8000` | How long a guest waits for the host's work conn |
 
 ## Run locally
 
@@ -87,5 +90,9 @@ Notes:
   generation. The fencing protocol makes this visible (the legitimate host gets `superseded`) but
   not preventable; real ownership proofs (per-world keypairs, BEP44-style signatures) are future
   work and would version to `/v2`.
-- Discovery only: no relay/signaling. NAT reachability still depends on the host's UPnP mapping
-  or manual port-forward; the observed-IP endpoint makes the *address* known, not the port open.
+- The relay (WebSocket reverse tunnel at `/v1/relay/{host,connect,work}`) carries play for hosts that
+  cannot open a port (no UPnP / CGNAT). It is outbound-only on both sides, byte-gated to jukz's own
+  `ConnectionType` first byte (never an open proxy), and capped (see the env table). A host registers a
+  relay session only when its UPnP mapping fails; guests still try the direct (observed-IP) endpoint
+  first and fall back to the relay. The relay sees plaintext by design (WSS encrypts each leg, but the
+  server splices the bytes) — true end-to-end against the relay itself is future work.

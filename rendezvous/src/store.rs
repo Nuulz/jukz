@@ -42,6 +42,14 @@ pub struct Endpoint {
     pub port: u16,
 }
 
+/// A host's relay-session offer, round-tripped opaquely: the server stores and returns it but never
+/// interprets it (the WebSocket relay endpoints key off the session id directly).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelayInfo {
+    pub session_id: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorldRecord {
@@ -49,6 +57,8 @@ pub struct WorldRecord {
     pub token: Token,
     pub endpoints: Vec<Endpoint>,
     pub heartbeat_seq: i64,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub relay: Option<RelayInfo>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -157,6 +167,7 @@ mod tests {
             token: t,
             endpoints: vec![Endpoint { host: "192.168.1.7".into(), port: 51820 }],
             heartbeat_seq: 0,
+            relay: None,
         }
     }
 

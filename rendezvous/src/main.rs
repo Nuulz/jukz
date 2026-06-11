@@ -136,6 +136,8 @@ struct AnnounceBody {
     token: Token,
     endpoints: Vec<Endpoint>,
     heartbeat_seq: i64,
+    #[serde(default)]
+    relay: Option<store::RelayInfo>,
 }
 
 #[derive(Deserialize)]
@@ -265,7 +267,7 @@ async fn announce(
 
     let mut endpoints = body.endpoints;
     merge_observed_endpoint(&mut endpoints, ip);
-    let record = WorldRecord { world_id: body.world_id, token, endpoints, heartbeat_seq: body.heartbeat_seq };
+    let record = WorldRecord { world_id: body.world_id, token, endpoints, heartbeat_seq: body.heartbeat_seq, relay: body.relay };
     let ttl_ms = state.store.ttl().as_millis() as u64;
 
     match state.store.announce(record.clone(), Instant::now()) {
@@ -355,6 +357,7 @@ async fn healthz(State(state): State<Arc<AppState>>) -> Response {
     let body = json!({
         "status": "ok",
         "liveWorlds": state.store.live_count(Instant::now()),
+        "relaySessions": state.relay.live_sessions(),
         "counters": {
             "announces": counters.announces.load(AtomicOrdering::Relaxed),
             "rejectedAnnounces": counters.rejected_announces.load(AtomicOrdering::Relaxed),
