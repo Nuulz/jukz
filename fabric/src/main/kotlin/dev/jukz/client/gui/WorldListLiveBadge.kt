@@ -28,6 +28,8 @@ object WorldListLiveBadge {
     const val CACHE_MS = 10_000L
     private const val RADIUS = 6
     private val COLOR_LIVE = 0xFF6BCB6B.toInt() // matches HostInfoScreen's live green
+    private val COLOR_CODE = 0xFFB0B0B0.toInt() // dim gray, like the vanilla detail lines
+    private const val CODE_SCALE = 0.5f         // the full share code is long; shrink it onto its own line
 
     private data class Cached(val record: WorldRecord?, val at: Long)
 
@@ -81,14 +83,18 @@ object WorldListLiveBadge {
     // ---- render + click (Minecraft, in-game validated) -----------------------------------------
 
     /**
-     * Draw the badge on a world row if its world is hosted live. Called from the entry render mixin.
-     * Anchored top-LEFT (a green dot with the live player count centered below it) so it doesn't cover
-     * the vanilla last-played line that sits on the right under the folder name.
+     * Draw jukz's per-row overlay. Called from the entry render mixin. For ANY jukz world it shows the
+     * share code on its own (shrunk) line at the bottom of the row — below the vanilla last-played
+     * line — so it can be read/copied without opening the world. When the world is currently hosted it
+     * also draws a green "live" dot (with the connected player count below it) in the left margin.
      */
-    fun render(context: DrawContext, textRenderer: TextRenderer, levelName: String, entryX: Int, entryY: Int, entryWidth: Int) {
-        val worldId = worldIdFor(levelName) ?: return
+    fun render(context: DrawContext, textRenderer: TextRenderer, levelName: String, entryX: Int, entryY: Int, entryWidth: Int, entryHeight: Int) {
+        val worldId = worldIdFor(levelName) ?: return // not a jukz world: no overlay at all
+
+        drawShareCode(context, textRenderer, worldId.shortCode(), entryX, entryY, entryHeight)
+
         ensureFresh(worldId, Discovery.registry)
-        val record = cachedRecord(worldId) ?: return
+        val record = cachedRecord(worldId) ?: return // not hosted right now: code only, no live badge
 
         val cxp = entryX + -8
         val cyp = entryY + 9
@@ -100,6 +106,21 @@ object WorldListLiveBadge {
         context.drawTextWithShadow(textRenderer, label, labelX, labelY, COLOR_LIVE)
 
         badgeBounds[worldId] = intArrayOf(cxp - RADIUS, cyp - RADIUS, cxp + RADIUS + 1, labelY + textRenderer.fontHeight)
+    }
+
+    /**
+     * Draw the [code] on its own line at the bottom of the row, aligned with the vanilla text column and
+     * shrunk by [CODE_SCALE] so the long `JUKZ-…` string fits below the last-played line without
+     * crowding it. Position/scale are deliberately simple constants — tweak to taste.
+     */
+    private fun drawShareCode(context: DrawContext, textRenderer: TextRenderer, code: String, entryX: Int, entryY: Int, entryHeight: Int) {
+        val x = (entryX + 32 + 3).toDouble()
+        val y = (entryY + entryHeight - (textRenderer.fontHeight * CODE_SCALE).toInt() - 1).toDouble()
+        context.matrices.push()
+        context.matrices.translate(x, y, 0.0)
+        context.matrices.scale(CODE_SCALE, CODE_SCALE, 1f)
+        context.drawTextWithShadow(textRenderer, code, 0, 0, COLOR_CODE)
+        context.matrices.pop()
     }
 
     /** If the click landed on a live world's badge, start a direct join and return true. */

@@ -31,7 +31,7 @@ public abstract class WorldEntryMixin {
     private void jukz$liveBadge(DrawContext context, int index, int y, int x, int entryWidth, int entryHeight,
                                 int mouseX, int mouseY, boolean hovered, float tickDelta, CallbackInfo ci) {
         WorldListLiveBadge.INSTANCE.render(
-            context, MinecraftClient.getInstance().textRenderer, this.level.getName(), x, y, entryWidth);
+            context, MinecraftClient.getInstance().textRenderer, this.level.getName(), x, y, entryWidth, entryHeight);
     }
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true, require = 0)
