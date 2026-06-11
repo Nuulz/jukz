@@ -11,6 +11,7 @@ import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.NodeId
 import dev.jukz.core.model.WorldId
 import dev.jukz.core.transport.ConnectionType
+import dev.jukz.core.transport.DirectChannelDialer
 import dev.jukz.core.transport.DirectTcpTransport
 import dev.jukz.core.transport.JukzChannel
 import dev.jukz.core.transport.SocketChannel
@@ -38,7 +39,7 @@ class JoinControllerLoopbackTest {
         val registry = InMemoryWorldRegistry(SystemClock)
         registry.publishIfNewer(WorldRecord(world, hostToken, host.endpoint, 0))
         val handoff = FakeGameHandoff()
-        val controller = JoinController(registry, DirectTcpTransport(), handoff, SystemClock, config)
+        val controller = JoinController(registry, DirectChannelDialer(DirectTcpTransport()),handoff, SystemClock, config)
 
         val result = controller.join(world)
 
@@ -73,7 +74,7 @@ class JoinControllerLoopbackTest {
         val registry = InMemoryWorldRegistry(SystemClock)
         registry.publishIfNewer(WorldRecord(world, hostToken, listOf(deadEndpoint, host.endpoint), 0))
         val handoff = FakeGameHandoff()
-        val controller = JoinController(registry, DirectTcpTransport(), handoff, SystemClock, config)
+        val controller = JoinController(registry, DirectChannelDialer(DirectTcpTransport()),handoff, SystemClock, config)
 
         val result = controller.join(world)
 
@@ -89,7 +90,7 @@ class JoinControllerLoopbackTest {
         val host = LoopbackTestHost(world, hostToken, LoopbackTestHost.Mode.GHOST_NACK).also { it.start() }
         val registry = InMemoryWorldRegistry(SystemClock)
         registry.publishIfNewer(WorldRecord(world, hostToken, host.endpoint, 0))
-        val controller = JoinController(registry, DirectTcpTransport(), FakeGameHandoff(), SystemClock, config)
+        val controller = JoinController(registry, DirectChannelDialer(DirectTcpTransport()),FakeGameHandoff(), SystemClock, config)
 
         val result = controller.join(world)
 
@@ -103,7 +104,7 @@ class JoinControllerLoopbackTest {
     @Test
     fun `reports HostUnavailable when no live record exists`() = runBlocking {
         val registry = InMemoryWorldRegistry(SystemClock)
-        val controller = JoinController(registry, DirectTcpTransport(), FakeGameHandoff(), SystemClock, config)
+        val controller = JoinController(registry, DirectChannelDialer(DirectTcpTransport()),FakeGameHandoff(), SystemClock, config)
 
         assertEquals(JoinResult.HostUnavailable, controller.join(world))
 

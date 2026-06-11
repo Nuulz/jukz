@@ -9,6 +9,7 @@ import dev.jukz.core.join.JoinResult
 import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.NodeId
 import dev.jukz.core.model.WorldId
+import dev.jukz.core.transport.DirectChannelDialer
 import dev.jukz.core.transport.DirectTcpTransport
 import dev.jukz.core.util.SystemClock
 import kotlinx.coroutines.runBlocking
@@ -55,7 +56,7 @@ class HostJoinLoopbackTest {
         assertEquals(listOf(Endpoint("127.0.0.1", hosting.port)), registry.lookup(world)!!.endpoints)
 
         val handoff = CapturingHandoff()
-        val joiner = JoinController(registry, DirectTcpTransport(), handoff, SystemClock, config)
+        val joiner = JoinController(registry, DirectChannelDialer(DirectTcpTransport()),handoff, SystemClock, config)
 
         val result = joiner.join(world)
 
@@ -92,7 +93,7 @@ class HostJoinLoopbackTest {
 
         val lost = CompletableFuture<SnapshotOffer?>()
         val joiner = JoinController(
-            registry, DirectTcpTransport(), CapturingHandoff(), SystemClock, config,
+            registry, DirectChannelDialer(DirectTcpTransport()), CapturingHandoff(), SystemClock, config,
             onHostLost = { _, offer -> lost.complete(offer) },
         )
         assertInstanceOf(JoinResult.Connected::class.java, joiner.join(world))
@@ -128,7 +129,7 @@ class HostJoinLoopbackTest {
 
         val lost = CompletableFuture<SnapshotOffer?>()
         val joiner = JoinController(
-            registry, DirectTcpTransport(), CapturingHandoff(), SystemClock, config,
+            registry, DirectChannelDialer(DirectTcpTransport()), CapturingHandoff(), SystemClock, config,
             onHostLost = { _, offer -> lost.complete(offer) },
         )
         assertInstanceOf(JoinResult.Connected::class.java, joiner.join(world))

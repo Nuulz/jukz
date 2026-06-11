@@ -3,6 +3,7 @@ package dev.jukz.core.join
 import dev.jukz.core.discovery.SnapshotOffer
 import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.discovery.WorldRegistry
+import dev.jukz.core.discovery.dialTargets
 import dev.jukz.core.handshake.FramedMessageChannel
 import dev.jukz.core.handshake.HandshakeRole
 import dev.jukz.core.handshake.JoinerAction
@@ -11,10 +12,11 @@ import dev.jukz.core.handshake.Message
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.WorldId
+import dev.jukz.core.transport.ChannelDialer
 import dev.jukz.core.transport.ConnectionType
+import dev.jukz.core.transport.DialTarget
 import dev.jukz.core.transport.JukzChannel
 import dev.jukz.core.transport.LocalTcpRelay
-import dev.jukz.core.transport.Transport
 import dev.jukz.core.util.JukzClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,7 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class JoinController(
     private val registry: WorldRegistry,
-    private val transport: Transport,
+    private val dialer: ChannelDialer,
     private val gameHandoff: GameHandoff,
     @Suppress("unused") private val clock: JukzClock,
     private val config: JoinConfig = JoinConfig(),
@@ -68,11 +70,11 @@ class JoinController(
     suspend fun join(worldId: WorldId): JoinResult {
         val record = registry.lookup(worldId) ?: return JoinResult.HostUnavailable
         var lastFailure: Exception? = null
-        for (candidate in record.endpoints) {
+        for (target in record.dialTargets()) {
             try {
-                return runHandshake(worldId, record, candidate)
+                return runHandshake(worldId, record, target)
             } catch (e: Exception) {
-                closeControl() // tear down this attempt only; the next candidate gets a fresh channel
+                closeControl() // tear down this attempt only; the next target gets a fresh channel
                 lastFailure = e
             }
         }
@@ -80,27 +82,39 @@ class JoinController(
         return JoinResult.Failed(lastFailure?.message ?: "no reachable endpoint")
     }
 
-    private suspend fun runHandshake(worldId: WorldId, record: WorldRecord, candidate: Endpoint): JoinResult {
-        var endpoint = candidate
-        val sm = JoinerStateMachine(worldId, record.token, endpoint)
+    private suspend fun runHandshake(worldId: WorldId, record: WorldRecord, target: DialTarget): JoinResult {
+        var current = target
+        val sm = JoinerStateMachine(worldId, record.token, endpointOf(current))
         sm.begin()
 
-        openControl(endpoint).send(hello(worldId, record.token))
+        openControl(current).send(hello(worldId, record.token))
 
         while (true) {
             val msg = receiveOrTimeout(config.handshakeMs)
                 ?: return ghost(sm, record) // no reply in time -> treat host as a ghost
             when (val action = sm.onMessage(msg).action) {
-                is JoinerAction.Connect -> return handoff(worldId, record, action.endpoint, sm)
+                // Keep the data channel on whatever path control connected over: a relay session must
+                // pull DATA through the relay too (the host's Connect endpoint is its own loopback/LAN
+                // address, which an internet guest cannot dial directly).
+                is JoinerAction.Connect -> {
+                    val dataTarget = if (current is DialTarget.ViaRelay) current else DialTarget.Direct(action.endpoint)
+                    return handoff(worldId, record, dataTarget, sm)
+                }
                 is JoinerAction.FollowRedirect -> {
                     closeControl()
-                    endpoint = action.endpoint
-                    openControl(endpoint).send(hello(worldId, record.token))
+                    current = DialTarget.Direct(action.endpoint)
+                    openControl(current).send(hello(worldId, record.token))
                 }
                 JoinerAction.Takeover -> return JoinResult.ShouldHost(worldId, record)
                 JoinerAction.Wait -> Unit // non-terminal; keep reading
             }
         }
+    }
+
+    /** The endpoint a target presents to the state machine; a relay target has no dial address, so a synthetic placeholder stands in for its fencing/redirect bookkeeping. */
+    private fun endpointOf(target: DialTarget): Endpoint = when (target) {
+        is DialTarget.Direct -> target.endpoint
+        is DialTarget.ViaRelay -> SYNTHETIC_RELAY_ENDPOINT
     }
 
     private fun ghost(sm: JoinerStateMachine, record: WorldRecord): JoinResult {
@@ -111,17 +125,17 @@ class JoinController(
     private fun handoff(
         worldId: WorldId,
         record: WorldRecord,
-        endpoint: Endpoint,
+        target: DialTarget,
         sm: JoinerStateMachine,
     ): JoinResult {
         val relay = LocalTcpRelay(openRemote = {
-            runBlocking { transport.connect(endpoint) }.also { ConnectionType.DATA.writeTo(it) }
+            runBlocking { dialer.dial(target) }.also { ConnectionType.DATA.writeTo(it) }
         })
         val port = relay.start()
         this.relay = relay
         gameHandoff.connect(RELAY_HOST, port)
         sm.markConnected()
-        startLiveness(worldId, record.token, endpoint)
+        startLiveness(worldId, record.token, endpointOf(target))
         return JoinResult.Connected(RELAY_HOST, port)
     }
 
@@ -167,8 +181,8 @@ class JoinController(
         }
     }
 
-    private suspend fun openControl(endpoint: Endpoint): FramedMessageChannel {
-        val ch = transport.connect(endpoint)
+    private suspend fun openControl(target: DialTarget): FramedMessageChannel {
+        val ch = dialer.dial(target)
         ConnectionType.CONTROL.writeTo(ch)
         val framed = FramedMessageChannel(ch)
         controlChannel = ch
@@ -219,5 +233,6 @@ class JoinController(
 
     companion object {
         const val RELAY_HOST = "127.0.0.1"
+        private val SYNTHETIC_RELAY_ENDPOINT = Endpoint("relay", 1)
     }
 }
