@@ -80,21 +80,26 @@ object WorldListLiveBadge {
 
     // ---- render + click (Minecraft, in-game validated) -----------------------------------------
 
-    /** Draw the badge on a world row if its world is hosted live. Called from the entry render mixin. */
+    /**
+     * Draw the badge on a world row if its world is hosted live. Called from the entry render mixin.
+     * Anchored top-LEFT (a green dot with the live player count centered below it) so it doesn't cover
+     * the vanilla last-played line that sits on the right under the folder name.
+     */
     fun render(context: DrawContext, textRenderer: TextRenderer, levelName: String, entryX: Int, entryY: Int, entryWidth: Int) {
         val worldId = worldIdFor(levelName) ?: return
         ensureFresh(worldId, Discovery.registry)
         val record = cachedRecord(worldId) ?: return
 
-        val cxp = entryX + entryWidth - 14
-        val cyp = entryY + 11
+        val cxp = entryX + -8
+        val cyp = entryY + 9
         fillCircle(context, cxp, cyp, RADIUS, COLOR_LIVE)
 
-        val label = "Live · ${record.playerCount}"
-        val labelX = cxp - RADIUS - 4 - textRenderer.getWidth(label)
-        context.drawTextWithShadow(textRenderer, label, labelX, cyp - 4, COLOR_LIVE)
+        val label = record.playerCount.toString()
+        val labelX = cxp - textRenderer.getWidth(label) / 2
+        val labelY = cyp + RADIUS + 2
+        context.drawTextWithShadow(textRenderer, label, labelX, labelY, COLOR_LIVE)
 
-        badgeBounds[worldId] = intArrayOf(labelX, entryY + 2, cxp + RADIUS + 1, cyp + RADIUS + 1)
+        badgeBounds[worldId] = intArrayOf(cxp - RADIUS, cyp - RADIUS, cxp + RADIUS + 1, labelY + textRenderer.fontHeight)
     }
 
     /** If the click landed on a live world's badge, start a direct join and return true. */
