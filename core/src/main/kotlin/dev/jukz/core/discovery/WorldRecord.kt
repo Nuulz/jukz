@@ -27,6 +27,7 @@ data class WorldRecord(
     val heartbeatSeq: Long,
     val snapshot: SnapshotOffer? = null,
     val playerCount: Int = 0,
+    val relay: RelayOffer? = null,
 ) {
     init {
         require(endpoints.isNotEmpty()) { "a record must announce at least one endpoint" }
@@ -46,4 +47,7 @@ data class WorldRecord(
 
     /** Attach (or clear) the snapshot offer the host serves while shutting down. */
     fun withSnapshot(offer: SnapshotOffer?): WorldRecord = copy(snapshot = offer)
+
+    /** Attach (or clear) the relay session a non-reachable host offers as a fallback path. */
+    fun withRelay(offer: RelayOffer?): WorldRecord = copy(relay = offer)
 }
