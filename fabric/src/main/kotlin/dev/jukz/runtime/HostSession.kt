@@ -27,6 +27,9 @@ object HostSession {
 
     val isHosting: Boolean get() = controller != null
 
+    /** Guests connected over a live control channel right now (0 when not hosting). */
+    fun connectedGuestCount(): Int = controller?.connectedGuestCount() ?: 0
+
     /** The record we are currently announcing (static info for the host UI), or null. */
     val record: WorldRecord? get() = controller?.sharedRecord
 
