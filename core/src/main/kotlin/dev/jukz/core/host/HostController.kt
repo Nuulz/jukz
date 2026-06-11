@@ -1,6 +1,7 @@
 package dev.jukz.core.host
 
 import dev.jukz.core.discovery.PublishResult
+import dev.jukz.core.discovery.RelayOffer
 import dev.jukz.core.discovery.SnapshotOffer
 import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.discovery.WorldRegistry
@@ -50,6 +51,8 @@ class HostController(
     private val onHostLost: (WorldId) -> Unit = {},
     /** Connected player count, sampled on each announce for the world-list live badge (F4-C). */
     private val playerCount: () -> Int = { 0 },
+    /** Optionally register a relay fallback session; its offer is attached to the announced record. */
+    private val relayRegistrar: RelayRegistrar = RelayRegistrar { null },
 ) : AutoCloseable {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -68,7 +71,9 @@ class HostController(
                 record?.heartbeatSeq ?: 0L
             }
             val endpoint = endpointResolver.resolve(listenPort)
-            val candidate = WorldRecord(worldId, token, listOf(endpoint), heartbeatSeq = 0).copy(playerCount = playerCount())
+            val relayOffer = runCatching { relayRegistrar.register(listenPort) }.getOrNull()
+            val candidate = WorldRecord(worldId, token, listOf(endpoint), heartbeatSeq = 0)
+                .copy(playerCount = playerCount(), relay = relayOffer)
             when (val result = registry.publishIfNewer(candidate)) {
                 is PublishResult.Published -> {
                     record = result.record
