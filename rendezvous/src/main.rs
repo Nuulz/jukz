@@ -15,6 +15,7 @@
 //! `RENDEZVOUS_AUTH_TOKEN` (optional bearer auth for /v1), `RENDEZVOUS_RATE_LIMIT_PER_MIN`
 //! (default 120, per client IP).
 
+mod relay;
 mod store;
 
 use std::collections::HashMap;
