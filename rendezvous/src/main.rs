@@ -24,11 +24,13 @@ use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use axum::extract::{ConnectInfo, Path, State};
+use axum::extract::ws::{Message as WsMessage, WebSocket, WebSocketUpgrade};
+use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
@@ -54,6 +56,9 @@ struct AppState {
     auth_token: Option<String>,
     rate_limit_per_min: u64,
     rate_windows: Mutex<HashMap<IpAddr, (Instant, u64)>>,
+    relay: relay::RelayState,
+    relay_pending_tx: Mutex<HashMap<u64, tokio::sync::oneshot::Sender<WebSocket>>>,
+    relay_signal_tx: Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<u64>>>,
 }
 
 #[tokio::main]
@@ -80,6 +85,12 @@ async fn main() {
         auth_token: std::env::var("RENDEZVOUS_AUTH_TOKEN").ok().filter(|t| !t.is_empty()),
         rate_limit_per_min: env_or("RENDEZVOUS_RATE_LIMIT_PER_MIN", 120),
         rate_windows: Mutex::new(HashMap::new()),
+        relay: relay::RelayState::new(relay::RelayLimits {
+            max_sessions: env_or("RELAY_MAX_SESSIONS", 200),
+            max_streams_per_session: env_or("RELAY_MAX_STREAMS_PER_SESSION", 16),
+        }),
+        relay_pending_tx: Mutex::new(HashMap::new()),
+        relay_signal_tx: Mutex::new(HashMap::new()),
     });
 
     // Periodic sweep so abandoned worlds don't accumulate (lookups already ignore expired ones).
@@ -97,6 +108,9 @@ async fn main() {
         .route("/v1/heartbeat", post(heartbeat))
         .route("/v1/worlds/{world_id}", get(lookup))
         .route("/v1/withdraw", post(withdraw))
+        .route("/v1/relay/host", get(relay_host))
+        .route("/v1/relay/connect", get(relay_connect))
+        .route("/v1/relay/work", get(relay_work))
         .route("/healthz", get(healthz))
         .layer(axum::extract::DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(state);
@@ -351,6 +365,174 @@ async fn healthz(State(state): State<Arc<AppState>>) -> Response {
         },
     });
     (StatusCode::OK, Json(body)).into_response()
+}
+
+// ---- relay (WebSocket reverse tunnel) -------------------------------------------------------
+
+#[derive(Deserialize)]
+struct RelayHostQuery {
+    session: String,
+}
+#[derive(Deserialize)]
+struct RelaySessionQuery {
+    session: String,
+}
+#[derive(Deserialize)]
+struct RelayWorkQuery {
+    nonce: u64,
+}
+
+/// jukz ConnectionType discriminators (CONTROL / DATA / SNAPSHOT): the only first bytes the relay
+/// will carry, so it can never be used to tunnel arbitrary TCP (not an open proxy).
+const VALID_FIRST_BYTES: [u8; 3] = [0x01, 0x02, 0x03];
+
+/// Host control link: register the session, then forward "open a work conn for nonce N" signals to
+/// the host until the socket drops, at which point the session is torn down.
+async fn relay_host(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<RelayHostQuery>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    match state.relay.register(&q.session) {
+        relay::RegisterOutcome::Registered => {}
+        _ => return error_response(StatusCode::CONFLICT, "relay session unavailable"),
+    }
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<u64>();
+    state.relay_signal_tx.lock().unwrap().insert(q.session.clone(), tx);
+    tracing::info!(session = %q.session, "relay host link open");
+    ws.on_upgrade(move |mut socket| async move {
+        loop {
+            tokio::select! {
+                signal = rx.recv() => match signal {
+                    Some(nonce) => {
+                        if socket.send(WsMessage::Text(nonce.to_string().into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    None => break,
+                },
+                // Drain client frames (pongs / close) so a dropped host is noticed promptly.
+                inbound = socket.recv() => match inbound {
+                    Some(Ok(_)) => {}
+                    _ => break,
+                },
+            }
+        }
+        state.relay.unregister(&q.session);
+        state.relay_signal_tx.lock().unwrap().remove(&q.session);
+        tracing::info!(session = %q.session, "relay host link closed");
+    })
+}
+
+/// Guest stream: allocate a nonce, signal the host, then wait for its work conn and splice.
+async fn relay_connect(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<RelaySessionQuery>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let nonce = match state.relay.begin_connect(&q.session) {
+        relay::ConnectOutcome::Pending(n) => n,
+        relay::ConnectOutcome::UnknownSession => {
+            return error_response(StatusCode::NOT_FOUND, "no such relay session")
+        }
+        relay::ConnectOutcome::StreamsExhausted => {
+            return error_response(StatusCode::TOO_MANY_REQUESTS, "session stream cap reached")
+        }
+    };
+    let signal = state.relay_signal_tx.lock().unwrap().get(&q.session).cloned();
+    let signal = match signal {
+        Some(tx) => tx,
+        None => {
+            state.relay.close_stream(&q.session, nonce);
+            return error_response(StatusCode::NOT_FOUND, "host gone");
+        }
+    };
+    let (work_tx, work_rx) = tokio::sync::oneshot::channel::<WebSocket>();
+    state.relay_pending_tx.lock().unwrap().insert(nonce, work_tx);
+    if signal.send(nonce).is_err() {
+        state.relay_pending_tx.lock().unwrap().remove(&nonce);
+        state.relay.close_stream(&q.session, nonce);
+        return error_response(StatusCode::NOT_FOUND, "host gone");
+    }
+    let session = q.session.clone();
+    let timeout_ms: u64 = env_or("RELAY_WORKCONN_TIMEOUT_MS", 8000);
+    ws.on_upgrade(move |guest| async move {
+        let host_work = tokio::time::timeout(
+            Duration::from_millis(timeout_ms),
+            work_rx,
+        )
+        .await;
+        match host_work {
+            Ok(Ok(host)) => splice(guest, host).await,
+            _ => {
+                state.relay_pending_tx.lock().unwrap().remove(&nonce);
+                tracing::info!(%nonce, "relay work conn never arrived");
+            }
+        }
+        state.relay.close_stream(&session, nonce);
+    })
+}
+
+/// Host work conn: hand this live socket to the waiting guest for `nonce`.
+async fn relay_work(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<RelayWorkQuery>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    if state.relay.take_work(q.nonce).is_none() {
+        return error_response(StatusCode::NOT_FOUND, "no pending stream for that nonce");
+    }
+    let tx = state.relay_pending_tx.lock().unwrap().remove(&q.nonce);
+    ws.on_upgrade(move |host| async move {
+        if let Some(tx) = tx {
+            let _ = tx.send(host); // the guest task owns the splice
+        }
+    })
+}
+
+/// Copy binary frames both ways until either side closes. Validates the first byte of the guest
+/// stream is a known jukz ConnectionType, so the relay can only carry jukz traffic. Backpressure is
+/// the WebSocket library's own.
+async fn splice(guest: WebSocket, host: WebSocket) {
+    let (mut guest_tx, mut guest_rx) = guest.split();
+    let (mut host_tx, mut host_rx) = host.split();
+
+    let g2h = async {
+        let mut first = true;
+        while let Some(Ok(msg)) = guest_rx.next().await {
+            match msg {
+                WsMessage::Binary(bytes) => {
+                    if first {
+                        first = false;
+                        if bytes.first().map_or(true, |b| !VALID_FIRST_BYTES.contains(b)) {
+                            break; // not a jukz channel — refuse to relay
+                        }
+                    }
+                    if host_tx.send(WsMessage::Binary(bytes)).await.is_err() {
+                        break;
+                    }
+                }
+                WsMessage::Close(_) => break,
+                _ => {}
+            }
+        }
+        let _ = host_tx.close().await;
+    };
+    let h2g = async {
+        while let Some(Ok(msg)) = host_rx.next().await {
+            match msg {
+                WsMessage::Binary(bytes) => {
+                    if guest_tx.send(WsMessage::Binary(bytes)).await.is_err() {
+                        break;
+                    }
+                }
+                WsMessage::Close(_) => break,
+                _ => {}
+            }
+        }
+        let _ = guest_tx.close().await;
+    };
+    tokio::join!(g2h, h2g);
 }
 
 #[cfg(test)]
