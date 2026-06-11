@@ -32,6 +32,7 @@ class WsRelayTransport(rendezvousBaseUrl: String) {
 
     /** Connect a channel to [sessionId]; blocks until the WS handshake completes. */
     fun connect(sessionId: String): JukzChannel {
+        JukzMod.logger.info("jukz: dialing host via relay (session {})", sessionId)
         val toApp = PipedOutputStream()
         val appIn = PipedInputStream(toApp, 64 * 1024)
 

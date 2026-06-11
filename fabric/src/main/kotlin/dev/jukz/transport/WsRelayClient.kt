@@ -71,6 +71,7 @@ class WsRelayClient(
         }
 
         private fun openWorkConn(nonce: Long) {
+            JukzMod.logger.info("jukz: relay signalled work conn {} — bridging a guest to the local game", nonce)
             val local = try {
                 Socket().apply { connect(InetSocketAddress("127.0.0.1", listenPort), 4000) }
             } catch (e: Exception) {
