@@ -179,9 +179,9 @@ confirm each step.
   adapters (`WsRelayTransport`/`WsRelayClient`) need a **rendezvous redeploy + two-instance E2E** with
   the direct path forced to fail. Design/plan: `docs/superpowers/{specs,plans}/2026-06-10-*relay*`.
   Once this lands, the flagged `StunEndpointResolver`/`IceTransport`/`HolePuncher` are superseded for
-  the non-UPnP case. Remaining gap: the F4 snapshot *handoff* still pulls over a direct socket, so a
-  relay-only guest taking over falls back to its local copy (route `JGitWorldSync.downloadSnapshot`
-  through the dialer to close it).
+  the non-UPnP case. The F4 snapshot *handoff* now also rides the relay (`JGitWorldSync` pulls over the
+  same `DialTarget` play connected on), so a relay-only guest takes over with the host's current world —
+  fixing the world desync the first force-relay test hit.
 - **In-game validation still pending:** the world-list **live badge** (`WorldEntryMixin` +
   `WorldListLiveBadge`) and the **access-control kick** (`HostCoordinator.disableAccess`) — both are
   mixin/Minecraft surfaces not yet exercised in a live session.
