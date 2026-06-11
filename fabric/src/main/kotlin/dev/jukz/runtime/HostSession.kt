@@ -22,14 +22,22 @@ object HostSession {
     @Volatile
     private var controller: HostController? = null
 
+    @Volatile
+    private var onWithdraw: () -> Unit = {}
+
     val isHosting: Boolean get() = controller != null
 
     /** The record we are currently announcing (static info for the host UI), or null. */
     val record: WorldRecord? get() = controller?.sharedRecord
 
-    /** Record a freshly-started host controller. */
-    fun install(controller: HostController) {
+    /**
+     * Record a freshly-started host controller. [onWithdraw] is an optional teardown hook run when the
+     * session stops (e.g. closing the relay control link), kept as a plain lambda so this holder stays
+     * free of fabric/transport types.
+     */
+    fun install(controller: HostController, onWithdraw: () -> Unit = {}) {
         this.controller = controller
+        this.onWithdraw = onWithdraw
     }
 
     /** Live ownership/heartbeat snapshot; blocks briefly on the registry, so call off the render thread. */
@@ -49,9 +57,11 @@ object HostSession {
                 runCatching { offerSnapshotForHandoff(c, saveDir) }
             }
             runCatching { c.close() } // withdraw + stop heartbeating
+            runCatching { onWithdraw() } // tear down any relay control link
             JukzMod.logger.info("jukz: host withdrawn on world close")
         }
         controller = null
+        onWithdraw = {}
     }
 
     /**

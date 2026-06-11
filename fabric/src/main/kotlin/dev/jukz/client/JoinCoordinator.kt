@@ -12,8 +12,11 @@ import dev.jukz.core.join.GameHandoff
 import dev.jukz.core.join.JoinController
 import dev.jukz.core.join.JoinResult
 import dev.jukz.core.model.WorldId
-import dev.jukz.core.transport.DirectTcpTransport
-import dev.jukz.core.transport.Transport
+import dev.jukz.config.JukzConfig
+import dev.jukz.core.transport.ChannelDialer
+import dev.jukz.core.transport.DirectChannelDialer
+import dev.jukz.transport.CompositeChannelDialer
+import dev.jukz.transport.WsRelayTransport
 import dev.jukz.core.util.SystemClock
 import dev.jukz.sync.JGitWorldSync
 import dev.jukz.world.WorldSaveLocator
@@ -41,12 +44,12 @@ object JoinCoordinator {
         shortCode: String,
         parent: Screen?,
         registry: WorldRegistry = Discovery.registry,
-        transport: Transport = DirectTcpTransport(),
+        dialer: ChannelDialer = defaultDialer(),
     ) {
         val client = MinecraftClient.getInstance()
         val handoff: GameHandoff = MinecraftGameHandoff { parent }
         val controller = JoinController(
-            registry, transport, handoff, SystemClock,
+            registry, dialer, handoff, SystemClock,
             onHostLost = { wid, offer -> onHostLeaving(client, wid, shortCode, offer) },
         )
         val cancelled = AtomicBoolean(false)
@@ -71,6 +74,12 @@ object JoinCoordinator {
             isDaemon = true
             name = "jukz-join"
         }.start()
+    }
+
+    /** Direct TCP, plus the relay WS when an internet rendezvous is configured (else direct-only). */
+    private fun defaultDialer(): ChannelDialer {
+        val url = JukzConfig.rendezvousUrl ?: return DirectChannelDialer()
+        return CompositeChannelDialer(relay = WsRelayTransport(url))
     }
 
     private fun applyResult(

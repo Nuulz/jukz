@@ -5,6 +5,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import dev.jukz.JukzMod
 import dev.jukz.core.discovery.PublishResult
+import dev.jukz.core.discovery.RelayOffer
 import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.discovery.WorldRegistry
 import dev.jukz.core.model.ClaimToken
@@ -188,6 +189,7 @@ class RendezvousWorldRegistry(
         add("token", tokenToJson(record.token))
         add("endpoints", endpointsToJson(record.endpoints))
         addProperty("heartbeatSeq", record.heartbeatSeq)
+        record.relay?.let { add("relay", JsonObject().apply { addProperty("sessionId", it.sessionId) }) }
     }
 
     private fun tokenToJson(token: ClaimToken): JsonObject = JsonObject().apply {
@@ -219,6 +221,7 @@ class RendezvousWorldRegistry(
                 Endpoint(o.get("host").asString, o.get("port").asInt)
             },
             heartbeatSeq = json.get("heartbeatSeq").asLong,
+            relay = json.getAsJsonObject("relay")?.let { RelayOffer(it.get("sessionId").asString) },
         )
     }
 }

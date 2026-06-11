@@ -2,6 +2,7 @@ package dev.jukz.client
 
 import dev.jukz.JukzMod
 import dev.jukz.client.gui.SupersededScreen
+import dev.jukz.config.JukzConfig
 import dev.jukz.config.PersistentNodeId
 import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.host.ForwardingEndpointResolver
@@ -13,7 +14,9 @@ import dev.jukz.core.util.SystemClock
 import dev.jukz.discovery.Discovery
 import dev.jukz.runtime.HostSession
 import dev.jukz.transport.LocalEndpointResolver
+import dev.jukz.transport.RecordingPortForwarder
 import dev.jukz.transport.UpnpPortForwarder
+import dev.jukz.transport.WsRelayClient
 import dev.jukz.world.WorldAccessFlag
 import dev.jukz.world.WorldIdState
 import kotlinx.coroutines.runBlocking
@@ -97,6 +100,10 @@ object HostCoordinator {
 
     private fun runHost(server: IntegratedServer): HostResult {
         val (worldId, generation) = bumpGeneration(server)
+        // Share one forwarder between the resolver (which attempts the UPnP map) and the relay
+        // registrar (which only registers a relay session when that map failed — CGNAT / no IGD).
+        val forwarder = RecordingPortForwarder(UpnpPortForwarder())
+        val relayClient = WsRelayClient(JukzConfig.rendezvousUrl, shouldRegister = { forwarder.upnpFailed() })
         val controller = HostController(
             registry = Discovery.registry,
             lanOpener = MinecraftLanOpener(server),
@@ -104,14 +111,17 @@ object HostCoordinator {
             // Announce the LAN address, but best-effort open the listen port on the router via UPnP
             // so the rendezvous server's observed-public-IP endpoint is reachable across NATs. The
             // forwarding never fails the host (ForwardingEndpointResolver swallows UPnP failures).
-            endpointResolver = ForwardingEndpointResolver(UpnpPortForwarder(), LocalEndpointResolver()),
+            endpointResolver = ForwardingEndpointResolver(forwarder, LocalEndpointResolver()),
             nodeId = PersistentNodeId.nodeId,
             clock = SystemClock,
             // Connected players (host + any relayed-in guests) for the world-list live badge.
             playerCount = { runCatching { server.playerManager.playerList.size }.getOrDefault(0) },
+            // When UPnP could not open the port, register a relay session so non-reachable guests
+            // (CGNAT, no UPnP) can still connect; the offer rides the announced record.
+            relayRegistrar = relayClient,
         )
         val result = runBlocking { controller.host(worldId, generation) }
-        if (result is HostResult.Hosting) HostSession.install(controller) else controller.close()
+        if (result is HostResult.Hosting) HostSession.install(controller) { relayClient.close() } else { relayClient.close(); controller.close() }
         return result
     }
 
