@@ -1,5 +1,6 @@
 package dev.jukz
 
+import dev.jukz.client.GuestSession
 import dev.jukz.client.HostCoordinator
 import dev.jukz.client.gui.HostInfoScreen
 import dev.jukz.client.gui.JoinPromptScreen
@@ -46,6 +47,14 @@ object JukzClient : ClientModInitializer {
         // only for locally-opened worlds.
         ClientPlayConnectionEvents.JOIN.register { _, _, client ->
             client.server?.let { HostCoordinator.autoHost(it) }
+        }
+
+        // Leaving a host's world tears down the guest join session, so its handoff watcher does not
+        // outlive the visit — otherwise a later host-leave pops a stale "Host now" at someone who is
+        // back at the menu. A disconnect that is part of an in-progress handoff is left alone (that
+        // flow leaves the world on purpose and owns its own teardown).
+        ClientPlayConnectionEvents.DISCONNECT.register { _, _ ->
+            if (GuestSession.isActive && !GuestSession.handoffOffered) GuestSession.leave()
         }
 
         JukzMod.logger.info("jukz initialized")

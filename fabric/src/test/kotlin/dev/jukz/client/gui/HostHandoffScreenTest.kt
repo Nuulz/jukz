@@ -8,9 +8,10 @@ import org.junit.jupiter.api.Test
 class HostHandoffScreenTest {
 
     @Test
-    fun `applied-snapshot variant offers to host with the latest copy`() {
+    fun `applied-snapshot variant offers to host the latest world for everyone`() {
         val msg = HostHandoffScreen.message(snapshotApplied = true)
-        assertTrue(msg.contains("last known copy"), msg)
+        assertTrue(msg.contains("latest world"), msg)
+        assertTrue(msg.contains("everyone"), msg) // general: there may be more than two players
         assertTrue(msg.contains("host now", ignoreCase = true), msg)
     }
 

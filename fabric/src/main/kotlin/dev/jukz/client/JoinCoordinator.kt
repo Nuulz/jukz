@@ -70,6 +70,9 @@ object JoinCoordinator {
                 JoinResult.Failed(e.message ?: e.toString())
             }
             if (cancelled.get()) return@Thread
+            // Track the live session so leaving the world (a normal disconnect) tears the controller
+            // down — otherwise its handoff watcher outlives the visit and pops a stale "Host now".
+            if (result is JoinResult.Connected) GuestSession.install(controller)
             client.execute { applyResult(client, result, worldId, shortCode, parent) }
         }.apply {
             isDaemon = true
@@ -128,6 +131,7 @@ object JoinCoordinator {
         dialer: ChannelDialer,
     ) {
         JukzMod.logger.info("jukz: host of {} is leaving (snapshot {}) — offering handoff", shortCode, if (offer != null) "offered" else "none")
+        GuestSession.markHandoffOffered() // the disconnect we are about to do is the handoff, not a quit
         showHandoff(client, worldId, shortCode, TitleScreen(), offer, target, dialer)
     }
 
@@ -145,13 +149,15 @@ object JoinCoordinator {
         // now" (which can come much later) to begin the pull. The apply happens on takeover, locally.
         val prefetch = prefetchSnapshot(offer, target, dialer)
         client.execute {
-            client.setScreen(
-                HostHandoffScreen(
-                    snapshotApplied = offer != null,
-                    onHostNow = { beginTakeover(client, worldId, shortCode, parent, prefetch) },
-                    onBack = { discardPrefetch(prefetch); client.setScreen(parent) },
-                ),
+            val screen = HostHandoffScreen(
+                snapshotApplied = offer != null,
+                onHostNow = { beginTakeover(client, worldId, shortCode, parent, prefetch) },
+                onBack = { GuestSession.leave(); discardPrefetch(prefetch); client.setScreen(parent) },
             )
+            // If we are still in the host's world (a live handoff), leave it cleanly WITH this prompt
+            // as the screen, so the vanilla "Connection lost" never flashes. For a ghost takeover (we
+            // were never connected to a world), just show it.
+            if (client.world != null) client.disconnect(screen) else client.setScreen(screen)
         }
     }
 
@@ -205,6 +211,7 @@ object JoinCoordinator {
         parent: Screen?,
         prefetch: CompletableFuture<JGitWorldSync.Downloaded?>,
     ) {
+        GuestSession.leave() // the old guest session is done; we are about to become the host
         client.setScreen(SearchingHostScreen(shortCode) {}) // "preparing" spinner; no cancel mid-takeover
         Thread {
             val savesDir = client.levelStorage.savesDirectory

@@ -35,14 +35,18 @@ class HostHandoffScreen(
     override fun shouldCloseOnEsc(): Boolean = true
 
     companion object {
-        const val TITLE = "The host disconnected"
+        const val TITLE = "The host left"
 
-        /** The status line, split out so it is unit-testable without standing up a Screen. */
+        /**
+         * The status line, split out so it is unit-testable without standing up a Screen. Phrased
+         * generally — any of the connected players sees this, not just a single guest — so it reads
+         * naturally with more than two players (whoever takes over first keeps the world online).
+         */
         fun message(snapshotApplied: Boolean): String =
             if (snapshotApplied) {
-                "The host disconnected. You have the last known copy — host now?"
+                "The host left. You have the latest world — host now to keep it online for everyone."
             } else {
-                "Host disconnected unexpectedly. Continuing from your local copy."
+                "The host left unexpectedly. Host from your local copy to keep the world online."
             }
     }
 }
