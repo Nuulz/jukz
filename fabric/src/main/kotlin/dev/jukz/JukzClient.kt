@@ -62,6 +62,10 @@ object JukzClient : ClientModInitializer {
         // handoff. A *server-side* drop (the host left) shows the vanilla "Connection lost"
         // DisconnectedScreen; swap it for a jukz wait so the takeover prompt can take over. A voluntary
         // leave goes to the title screen (not a DisconnectedScreen), so it is left untouched.
+        //
+        // MinecraftClientDisconnectMixin already performs this swap at the source (so "Connection lost"
+        // never flashes); this reactive handler is a fallback for the case where that injection does not
+        // apply (require = 0). It is a no-op when the mixin already replaced the screen.
         ClientPlayConnectionEvents.DISCONNECT.register { _, client ->
             if (GuestSession.isActive) {
                 GuestSession.markDisconnected()

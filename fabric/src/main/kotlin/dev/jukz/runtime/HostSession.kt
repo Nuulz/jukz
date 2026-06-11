@@ -8,6 +8,7 @@ import dev.jukz.sync.JGitWorldSync
 import dev.jukz.sync.SnapshotPack
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
@@ -79,9 +80,27 @@ object HostSession {
         val (offer, latch) = controller.offerSnapshot(pack.bytes, pack.head) ?: return
         JukzMod.logger.info("jukz: handing off — notifying {} guest(s) over the live connection", controller.connectedGuestCount())
         controller.notifyGuestsLeaving(offer) // push the snapshot endpoint over the live control channels
-        val pulled = latch.await(SNAPSHOT_WAIT_MS, TimeUnit.MILLISECONDS)
-        JukzMod.logger.info("jukz: snapshot handoff {}", if (pulled) "downloaded by a guest" else "timed out")
+        val outcome = awaitSnapshotPull(controller, latch)
+        JukzMod.logger.info("jukz: snapshot handoff {}", outcome)
+    }
+
+    /**
+     * Wait for a guest to pull the handoff snapshot, but stop the instant every guest has disconnected.
+     * If the receiver leaves or closes the game there is nobody left to take over, so blocking the full
+     * [SNAPSHOT_WAIT_MS] would just freeze the leaving host on its non-interactive "handing off" screen
+     * for no reason. We poll the latch in short slices and bail out the moment the connected-guest count
+     * hits zero (the receiver dropped its control channel). Returns a log-ready outcome string.
+     */
+    private fun awaitSnapshotPull(controller: HostController, latch: CountDownLatch): String {
+        var waited = 0L
+        while (waited < SNAPSHOT_WAIT_MS) {
+            if (latch.await(HANDOFF_POLL_MS, TimeUnit.MILLISECONDS)) return "downloaded by a guest"
+            if (controller.connectedGuestCount() == 0) return "no guest left to take over — not waiting"
+            waited += HANDOFF_POLL_MS
+        }
+        return "timed out"
     }
 
     private const val SNAPSHOT_WAIT_MS = 30_000L
+    private const val HANDOFF_POLL_MS = 250L
 }
