@@ -18,7 +18,8 @@ import java.util.UUID
 object WorldRecordCodec {
 
     private const val MAGIC = 0x6A_6B_7A_31 // "jkz1"
-    private const val VERSION = 3            // current: + optional snapshot offer + player count
+    private const val VERSION = 4            // current: + optional relay offer
+    private const val V3_SNAPSHOT = 3        // optional snapshot offer + player count
     private const val V2_MULTI_ENDPOINT = 2  // multi-endpoint candidate list, no snapshot
     private const val LEGACY_VERSION = 1     // single endpoint, no count prefix
 
@@ -53,6 +54,12 @@ object WorldRecordCodec {
                 o.writeUTF(snapshot.token)
             }
             o.writeInt(record.playerCount)
+            // v4 tail: an optional relay session offer.
+            val relay = record.relay
+            o.writeBoolean(relay != null)
+            if (relay != null) {
+                o.writeUTF(relay.sessionId)
+            }
         }
         return bos.toByteArray()
     }
@@ -81,11 +88,18 @@ object WorldRecordCodec {
             // v3 tail (absent in v1/v2: snapshot=null, playerCount=0).
             var snapshot: SnapshotOffer? = null
             var playerCount = 0
+            var relay: RelayOffer? = null
             if (version > V2_MULTI_ENDPOINT) {
                 if (i.readBoolean()) {
                     snapshot = SnapshotOffer(i.readUTF(), i.readInt(), i.readUTF())
                 }
                 playerCount = i.readInt()
+            }
+            // v4 tail (absent in v1/v2/v3: relay=null).
+            if (version > V3_SNAPSHOT) {
+                if (i.readBoolean()) {
+                    relay = RelayOffer(i.readUTF())
+                }
             }
             return WorldRecord(
                 worldId = WorldId(UUID(msb, lsb)),
@@ -94,6 +108,7 @@ object WorldRecordCodec {
                 heartbeatSeq = heartbeatSeq,
                 snapshot = snapshot,
                 playerCount = playerCount,
+                relay = relay,
             )
         }
     }
