@@ -79,7 +79,7 @@ object JoinCoordinator {
     /** Direct TCP, plus the relay WS when an internet rendezvous is configured (else direct-only). */
     private fun defaultDialer(): ChannelDialer {
         val url = JukzConfig.rendezvousUrl ?: return DirectChannelDialer()
-        return CompositeChannelDialer(relay = WsRelayTransport(url))
+        return CompositeChannelDialer(relay = WsRelayTransport(url), forceRelay = JukzConfig.forceRelay)
     }
 
     private fun applyResult(

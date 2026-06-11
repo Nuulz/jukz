@@ -103,7 +103,9 @@ object HostCoordinator {
         // Share one forwarder between the resolver (which attempts the UPnP map) and the relay
         // registrar (which only registers a relay session when that map failed — CGNAT / no IGD).
         val forwarder = RecordingPortForwarder(UpnpPortForwarder())
-        val relayClient = WsRelayClient(JukzConfig.rendezvousUrl, shouldRegister = { forwarder.upnpFailed() })
+        // Register a relay session when UPnP could not open the port, or always under the force-relay
+        // dev toggle (so the relay path can be exercised even on a reachable host).
+        val relayClient = WsRelayClient(JukzConfig.rendezvousUrl, shouldRegister = { JukzConfig.forceRelay || forwarder.upnpFailed() })
         val controller = HostController(
             registry = Discovery.registry,
             lanOpener = MinecraftLanOpener(server),
