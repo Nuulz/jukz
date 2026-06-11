@@ -36,6 +36,17 @@ object WorldListLiveBadge {
     private val worldIds = ConcurrentHashMap<String, Optional<WorldId>>()
     private val badgeBounds = ConcurrentHashMap<WorldId, IntArray>() // worldId -> [x1, y1, x2, y2]
 
+    /** The save folder of the last world row the player clicked — what the "Copy jukz code" button acts on. */
+    @Volatile private var lastClickedLevel: String? = null
+
+    /** Record a clicked world row (called from the entry click mixin). */
+    fun noteSelected(levelName: String) {
+        lastClickedLevel = levelName
+    }
+
+    /** The last-clicked world row's save folder, or null if none clicked this screen. */
+    fun selectedLevelName(): String? = lastClickedLevel
+
     private val DEFAULT_RUNNER: (Runnable) -> Unit = { r ->
         Thread(r, "jukz-badge-lookup").apply { isDaemon = true }.start()
     }

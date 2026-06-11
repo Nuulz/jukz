@@ -36,6 +36,8 @@ public abstract class WorldEntryMixin {
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true, require = 0)
     private void jukz$badgeClick(double mouseX, double mouseY, int button, CallbackInfoReturnable<Boolean> cir) {
+        // Clicking a row selects it; remember it so the world-list "Copy jukz code" button can act on it.
+        WorldListLiveBadge.INSTANCE.noteSelected(this.level.getName());
         Screen current = MinecraftClient.getInstance().currentScreen;
         if (WorldListLiveBadge.INSTANCE.handleClick(this.level.getName(), mouseX, mouseY, current)) {
             cir.setReturnValue(true);
