@@ -3,12 +3,14 @@ package dev.jukz
 import dev.jukz.client.GuestSession
 import dev.jukz.client.HostCoordinator
 import dev.jukz.client.gui.HostInfoScreen
+import dev.jukz.client.gui.HostLeavingScreen
 import dev.jukz.client.gui.JoinPromptScreen
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.fabric.api.client.screen.v1.Screens
 import net.minecraft.client.MinecraftClient
+import net.minecraft.client.gui.screen.DisconnectedScreen
 import net.minecraft.client.gui.screen.GameMenuScreen
 import net.minecraft.client.gui.screen.multiplayer.MultiplayerScreen
 import net.minecraft.client.gui.widget.ButtonWidget
@@ -49,12 +51,20 @@ object JukzClient : ClientModInitializer {
             client.server?.let { HostCoordinator.autoHost(it) }
         }
 
-        // Leaving a host's world tears down the guest join session, so its handoff watcher does not
-        // outlive the visit — otherwise a later host-leave pops a stale "Host now" at someone who is
-        // back at the menu. A disconnect that is part of an in-progress handoff is left alone (that
-        // flow leaves the world on purpose and owns its own teardown).
-        ClientPlayConnectionEvents.DISCONNECT.register { _, _ ->
-            if (GuestSession.isActive && !GuestSession.handoffOffered) GuestSession.leave()
+        // When a guest's game connection drops, just timestamp it — do NOT close the controller, or its
+        // control channel would close too and the host (which counts live guests) would skip the
+        // handoff. A *server-side* drop (the host left) shows the vanilla "Connection lost"
+        // DisconnectedScreen; swap it for a jukz wait so the takeover prompt can take over. A voluntary
+        // leave goes to the title screen (not a DisconnectedScreen), so it is left untouched.
+        ClientPlayConnectionEvents.DISCONNECT.register { _, client ->
+            if (GuestSession.isActive) {
+                GuestSession.markDisconnected()
+                client.execute {
+                    if (GuestSession.recentlyEngaged() && client.currentScreen is DisconnectedScreen) {
+                        client.setScreen(HostLeavingScreen())
+                    }
+                }
+            }
         }
 
         JukzMod.logger.info("jukz initialized")

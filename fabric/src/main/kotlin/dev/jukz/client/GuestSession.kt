@@ -2,20 +2,23 @@ package dev.jukz.client
 
 /**
  * Holds the live guest join session — the core `JoinController` whose reader watches the control
- * channel for a host handoff/drop — so it can be torn down when the guest leaves the host's world.
- * Without this the controller outlives the visit: a later host-leave would fire `onHostLost` and pop
- * a stale "Host now" prompt at someone who already went back to the menu.
+ * channel for a host handoff/drop — and tracks whether the player is still meaningfully engaged with
+ * it.
  *
- * [handoffOffered] distinguishes the disconnect that is *part of* a handoff (the host left; we leave
- * the world on purpose to show the takeover prompt) from a normal leave, so the disconnect hook only
- * tears the session down in the latter case.
+ * Crucially it does NOT close the controller when the game connection drops: when a host leaves, the
+ * guest's DATA connection breaks at roughly the same time the host pushes its `HostLeaving` over the
+ * (separate) control channel, and tearing the controller down on that drop would also close the
+ * control channel — which the host counts to decide whether to hand off, so the handoff would never
+ * fire. Instead the drop is just timestamped; [recentlyEngaged] then lets the handoff logic tell a
+ * genuine in-visit host-leave from a stale watcher left over from a world the player left a while ago.
  */
 object GuestSession {
 
-    @Volatile private var controller: AutoCloseable? = null
+    /** A host-leave within this long of the game connection dropping is treated as part of the visit. */
+    private const val ENGAGED_WINDOW_MS = 60_000L
 
-    @Volatile var handoffOffered: Boolean = false
-        private set
+    @Volatile private var controller: AutoCloseable? = null
+    @Volatile private var disconnectedAt: Long = 0L // 0 = still connected
 
     val isActive: Boolean get() = controller != null
 
@@ -23,18 +26,25 @@ object GuestSession {
     fun install(controller: AutoCloseable) {
         leave()
         this.controller = controller
-        handoffOffered = false
+        disconnectedAt = 0L
     }
 
-    /** The host announced it is leaving: the disconnect that follows is the handoff, not a quit. */
-    fun markHandoffOffered() {
-        handoffOffered = true
+    /** The game connection dropped. Timestamp it; do NOT close the controller (see the class doc). */
+    fun markDisconnected() {
+        if (disconnectedAt == 0L) disconnectedAt = System.currentTimeMillis()
     }
 
-    /** Close and forget the session (the guest left, or the handoff resolved). Idempotent. */
+    /**
+     * True while the guest is still connected, or dropped only recently — i.e. a host-leave right now
+     * belongs to THIS visit, not a stale watcher from a world the player left long ago.
+     */
+    fun recentlyEngaged(): Boolean =
+        isActive && (disconnectedAt == 0L || System.currentTimeMillis() - disconnectedAt <= ENGAGED_WINDOW_MS)
+
+    /** Close and forget the session (the guest moved on, or the handoff resolved). Idempotent. */
     fun leave() {
         runCatching { controller?.close() }
         controller = null
-        handoffOffered = false
+        disconnectedAt = 0L
     }
 }

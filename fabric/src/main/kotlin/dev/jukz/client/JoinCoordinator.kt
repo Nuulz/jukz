@@ -130,8 +130,14 @@ object JoinCoordinator {
         target: DialTarget?,
         dialer: ChannelDialer,
     ) {
+        if (!GuestSession.recentlyEngaged()) {
+            // The controller's watcher outlived the visit (we left this world a while ago). Don't pop a
+            // stale "Host now" at someone who has moved on — just tear the session down.
+            JukzMod.logger.info("jukz: host of {} left, but we already moved on — not offering handoff", shortCode)
+            GuestSession.leave()
+            return
+        }
         JukzMod.logger.info("jukz: host of {} is leaving (snapshot {}) — offering handoff", shortCode, if (offer != null) "offered" else "none")
-        GuestSession.markHandoffOffered() // the disconnect we are about to do is the handoff, not a quit
         showHandoff(client, worldId, shortCode, TitleScreen(), offer, target, dialer)
     }
 
