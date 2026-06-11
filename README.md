@@ -171,6 +171,17 @@ confirm each step.
 
 ## Follow-ups (next session)
 
+- **Relay path for non-UPnP / CGNAT hosts — implemented, pending live validation.** A host that cannot
+  open a port (no UPnP / CGNAT) registers a WebSocket relay session on the rendezvous and advertises it
+  in the record (wire v4 `RelayOffer`); a guest tries the direct endpoints first and falls back to the
+  relay (`/v1/relay/{host,connect,work}`), which splices the two outbound streams — so play crosses any
+  NAT. core (`ChannelDialer` ladder, codec) + the Rust relay registry are unit/cargo-tested; the WS
+  adapters (`WsRelayTransport`/`WsRelayClient`) need a **rendezvous redeploy + two-instance E2E** with
+  the direct path forced to fail. Design/plan: `docs/superpowers/{specs,plans}/2026-06-10-*relay*`.
+  Once this lands, the flagged `StunEndpointResolver`/`IceTransport`/`HolePuncher` are superseded for
+  the non-UPnP case. Remaining gap: the F4 snapshot *handoff* still pulls over a direct socket, so a
+  relay-only guest taking over falls back to its local copy (route `JGitWorldSync.downloadSnapshot`
+  through the dialer to close it).
 - **In-game validation still pending:** the world-list **live badge** (`WorldEntryMixin` +
   `WorldListLiveBadge`) and the **access-control kick** (`HostCoordinator.disableAccess`) — both are
   mixin/Minecraft surfaces not yet exercised in a live session.
