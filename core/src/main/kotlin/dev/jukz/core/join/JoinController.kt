@@ -46,10 +46,12 @@ class JoinController(
     private val config: JoinConfig = JoinConfig(),
     /**
      * Invoked once when the host goes away after a successful connect: either it sent a
-     * [Message.HostLeaving] (clean handoff — the [SnapshotOffer] is where to pull its save from) or the
-     * control channel broke (abrupt drop — offer is null). The caller takes over hosting.
+     * [Message.HostLeaving] (clean handoff — the [SnapshotOffer] carries the gate token) or the control
+     * channel broke (abrupt drop — offer is null). The [DialTarget] is how this guest reached the host
+     * (direct endpoint or relay session); the caller pulls the snapshot over that same path. The caller
+     * takes over hosting.
      */
-    private val onHostLost: (WorldId, SnapshotOffer?) -> Unit = { _, _ -> },
+    private val onHostLost: (WorldId, SnapshotOffer?, DialTarget?) -> Unit = { _, _, _ -> },
 ) : AutoCloseable {
 
     private val nonces = AtomicInteger(0)
@@ -135,7 +137,7 @@ class JoinController(
         this.relay = relay
         gameHandoff.connect(RELAY_HOST, port)
         sm.markConnected()
-        startLiveness(worldId, record.token, endpointOf(target))
+        startLiveness(worldId, record.token, target)
         return JoinResult.Connected(RELAY_HOST, port)
     }
 
@@ -144,12 +146,13 @@ class JoinController(
      * over with its snapshot offer); a broken channel is the host dropping abruptly (take over with the
      * local copy). A separate pinger nudges the host so the link stays observed. Fires [onHostLost] once.
      *
-     * [hostEndpoint] is the endpoint this guest actually reached. The handoff snapshot is served on that
-     * same connection-server port, so we pull from there rather than from the host's advertised snapshot
-     * host/port — which may be a LAN address an internet guest can't dial. The host's gate token is the
-     * only part of its offer we keep; the location is "where I'm already connected".
+     * [target] is how this guest reached the host (a direct endpoint or a relay session). The handoff
+     * snapshot is served on the same connection-server port the game uses, so the caller pulls it over
+     * this exact path — not the host's advertised snapshot host/port, which may be a LAN address (or a
+     * relay-only host) an internet guest can't dial directly. The gate token from the offer is what the
+     * caller keeps; "where" is "the way I'm already connected".
      */
-    private fun startLiveness(worldId: WorldId, token: ClaimToken, hostEndpoint: Endpoint) {
+    private fun startLiveness(worldId: WorldId, token: ClaimToken, target: DialTarget) {
         // Reader: block on inbound control messages until a handoff notice or a broken channel.
         scope.launch {
             while (true) {
@@ -157,12 +160,11 @@ class JoinController(
                 val msg = try {
                     framed.receive()
                 } catch (_: Exception) {
-                    if (!closing) onHostLost(worldId, null) // channel broke -> host gone abruptly, no offer
+                    if (!closing) onHostLost(worldId, null, target) // channel broke -> host gone abruptly, no offer
                     return@launch
                 }
                 if (msg is Message.HostLeaving) {
-                    val reachable = msg.snapshot?.copy(host = hostEndpoint.host, port = hostEndpoint.port)
-                    onHostLost(worldId, reachable)
+                    onHostLost(worldId, msg.snapshot, target) // pull over the same path we reached the host on
                     return@launch
                 }
                 // Pong / anything else -> host still alive; keep reading.

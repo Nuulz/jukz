@@ -9,6 +9,7 @@ import dev.jukz.core.join.JoinResult
 import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.NodeId
 import dev.jukz.core.model.WorldId
+import dev.jukz.core.transport.DialTarget
 import dev.jukz.core.transport.DirectChannelDialer
 import dev.jukz.core.transport.DirectTcpTransport
 import dev.jukz.core.util.SystemClock
@@ -92,9 +93,10 @@ class HostJoinLoopbackTest {
         val hosting = assertInstanceOf(HostResult.Hosting::class.java, host.host(world, generation = 4))
 
         val lost = CompletableFuture<SnapshotOffer?>()
+        val reachedVia = CompletableFuture<DialTarget?>()
         val joiner = JoinController(
             registry, DirectChannelDialer(DirectTcpTransport()), CapturingHandoff(), SystemClock, config,
-            onHostLost = { _, offer -> lost.complete(offer) },
+            onHostLost = { _, offer, target -> lost.complete(offer); reachedVia.complete(target) },
         )
         assertInstanceOf(JoinResult.Connected::class.java, joiner.join(world))
         assertEquals(1, host.connectedGuestCount())
@@ -104,13 +106,13 @@ class HostJoinLoopbackTest {
         val offer = SnapshotOffer("203.0.113.7", 55555, "ab".repeat(32))
         host.notifyGuestsLeaving(offer) // pushes HostLeaving over the guest's live control channel
 
-        // The guest pulls from the endpoint IT actually reached — keeping only the gate token — because
-        // the snapshot is served on this same connection-server port it is already talking to. This is
-        // what makes the handoff work over the internet (the host's advertised host/port may be LAN).
+        // The notice carries the host's offer (its gate token is what matters), and the guest is told HOW
+        // it reached the host — the DialTarget — so it pulls the snapshot over that same path (here the
+        // loopback endpoint it connected to), not the host's advertised host/port which may be an
+        // un-dialable LAN or relay-only address. This is what makes the handoff work over the internet.
         val received = lost.get(5, TimeUnit.SECONDS)
         assertEquals("ab".repeat(32), received?.token)
-        assertEquals("127.0.0.1", received?.host)
-        assertEquals(hosting.port, received?.port)
+        assertEquals(DialTarget.Direct(Endpoint("127.0.0.1", hosting.port)), reachedVia.get(5, TimeUnit.SECONDS))
 
         joiner.close()
         host.close()
@@ -130,7 +132,7 @@ class HostJoinLoopbackTest {
         val lost = CompletableFuture<SnapshotOffer?>()
         val joiner = JoinController(
             registry, DirectChannelDialer(DirectTcpTransport()), CapturingHandoff(), SystemClock, config,
-            onHostLost = { _, offer -> lost.complete(offer) },
+            onHostLost = { _, offer, _ -> lost.complete(offer) },
         )
         assertInstanceOf(JoinResult.Connected::class.java, joiner.join(world))
 

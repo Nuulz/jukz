@@ -7,9 +7,10 @@ import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.WorldId
 import dev.jukz.core.sync.CommitId
 import dev.jukz.core.sync.WorldSync
+import dev.jukz.core.transport.ChannelDialer
 import dev.jukz.core.transport.ConnectionType
-import dev.jukz.core.transport.DirectTcpTransport
-import dev.jukz.core.transport.Transport
+import dev.jukz.core.transport.DialTarget
+import dev.jukz.core.transport.DirectChannelDialer
 import dev.jukz.world.WorldIdSidecar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,12 +30,13 @@ import java.nio.file.Path
  * JGit-backed world snapshotting (spec §4.5). [commit] flushes the live save into a per-world git
  * repo; [pullLatest] fetches the host's offered snapshot (F4-A) over the live connection and resets
  * the working tree to it so a guest can take over hosting. The monotonic generation (read from the
- * sidecar / commit message) is the anti-stale guard. The [transport] dials the host's snapshot
- * endpoint — the same connection-server port the game uses, so the pull rides the one NAT traversal
- * that already works (no second port to forward).
+ * sidecar / commit message) is the anti-stale guard. The [dialer] opens the SNAPSHOT channel the
+ * same way play connects — a [DialTarget.Direct] for a directly-reachable host, or a
+ * [DialTarget.ViaRelay] when the guest reached the host through the relay — so the pull rides the
+ * exact NAT traversal that already carries the game (no second port, and it works over the relay).
  */
 class JGitWorldSync(
-    private val transport: Transport = DirectTcpTransport(),
+    private val dialer: ChannelDialer = DirectChannelDialer(),
 ) : WorldSync {
 
     override fun currentGeneration(saveDir: Path): Long =
@@ -89,11 +91,20 @@ class JGitWorldSync(
      * kicked off the moment the `HostLeaving` notice arrives — not deferred to the user's "take over"
      * click, which may come much later. The caller deletes [Downloaded.packPath] once applied.
      */
-    suspend fun downloadSnapshot(offer: SnapshotOffer): Downloaded? = withContext(Dispatchers.IO) {
+    suspend fun downloadSnapshot(offer: SnapshotOffer): Downloaded? =
+        downloadSnapshot(DialTarget.Direct(Endpoint(offer.host, offer.port)), offer.token)
+
+    /**
+     * Pull the host's armed pack over the connection identified by [target] — the SAME path play
+     * connected over, so a guest that reached the host through the relay ([DialTarget.ViaRelay]) pulls
+     * the snapshot through that relay session too (the host serves SNAPSHOT on the one listener the
+     * relay already bridges). [token] gates the download. Null on any failure (non-fatal).
+     */
+    suspend fun downloadSnapshot(target: DialTarget, token: String): Downloaded? = withContext(Dispatchers.IO) {
         runCatching {
             val pack = Files.createTempFile("jukz-snapshot", ".pack")
             try {
-                Downloaded(pack, pull(offer, pack))
+                Downloaded(pack, pull(target, token, pack))
             } catch (e: Throwable) {
                 Files.deleteIfExists(pack)
                 throw e
@@ -129,10 +140,10 @@ class JGitWorldSync(
      * Wire: write the gate token (UTF), read a status byte (1 = accepted), then the head commit id
      * (UTF), the pack length (long), and the pack bytes. Returns the head the guest resets to.
      */
-    private suspend fun pull(offer: SnapshotOffer, dest: Path): ObjectId =
-        transport.connect(Endpoint(offer.host, offer.port)).use { channel ->
+    private suspend fun pull(target: DialTarget, token: String, dest: Path): ObjectId =
+        dialer.dial(target).use { channel ->
             ConnectionType.SNAPSHOT.writeTo(channel)
-            DataOutputStream(channel.outputStream()).apply { writeUTF(offer.token); flush() }
+            DataOutputStream(channel.outputStream()).apply { writeUTF(token); flush() }
             val input = DataInputStream(channel.inputStream())
             require(input.readByte().toInt() == 1) { "snapshot rejected by host" }
             val head = input.readUTF()

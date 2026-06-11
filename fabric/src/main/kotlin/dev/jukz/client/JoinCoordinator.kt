@@ -14,6 +14,7 @@ import dev.jukz.core.join.JoinResult
 import dev.jukz.core.model.WorldId
 import dev.jukz.config.JukzConfig
 import dev.jukz.core.transport.ChannelDialer
+import dev.jukz.core.transport.DialTarget
 import dev.jukz.core.transport.DirectChannelDialer
 import dev.jukz.transport.CompositeChannelDialer
 import dev.jukz.transport.WsRelayTransport
@@ -50,7 +51,7 @@ object JoinCoordinator {
         val handoff: GameHandoff = MinecraftGameHandoff { parent }
         val controller = JoinController(
             registry, dialer, handoff, SystemClock,
-            onHostLost = { wid, offer -> onHostLeaving(client, wid, shortCode, offer) },
+            onHostLost = { wid, offer, target -> onHostLeaving(client, wid, shortCode, offer, target, dialer) },
         )
         val cancelled = AtomicBoolean(false)
 
@@ -100,8 +101,9 @@ object JoinCoordinator {
                     ),
                 )
             // The host we tried to join was already a ghost: offer the takeover with whatever it left.
+            // No live connection to ride, so the offer (from the record) is pulled directly, best-effort.
             is JoinResult.ShouldHost ->
-                showHandoff(client, worldId, shortCode, parent, result.record?.snapshot)
+                showHandoff(client, worldId, shortCode, parent, result.record?.snapshot, target = null, dialer = DirectChannelDialer())
             is JoinResult.Failed ->
                 client.setScreen(
                     NatErrorScreen(
@@ -117,9 +119,16 @@ object JoinCoordinator {
      * The host of a world we were connected to is leaving (control channel `HostLeaving` or break).
      * Invoked from the controller's reader thread, so it hops to the client thread to show the prompt.
      */
-    private fun onHostLeaving(client: MinecraftClient, worldId: WorldId, shortCode: String, offer: SnapshotOffer?) {
+    private fun onHostLeaving(
+        client: MinecraftClient,
+        worldId: WorldId,
+        shortCode: String,
+        offer: SnapshotOffer?,
+        target: DialTarget?,
+        dialer: ChannelDialer,
+    ) {
         JukzMod.logger.info("jukz: host of {} is leaving (snapshot {}) — offering handoff", shortCode, if (offer != null) "offered" else "none")
-        showHandoff(client, worldId, shortCode, TitleScreen(), offer)
+        showHandoff(client, worldId, shortCode, TitleScreen(), offer, target, dialer)
     }
 
     private fun showHandoff(
@@ -128,11 +137,13 @@ object JoinCoordinator {
         shortCode: String,
         parent: Screen?,
         offer: SnapshotOffer?,
+        target: DialTarget?,
+        dialer: ChannelDialer,
     ) {
         // Start the snapshot download NOW, while the host is still connected — its connection server is
         // torn down within ~30 s of announcing it is leaving, so we must not wait for the user's "Host
         // now" (which can come much later) to begin the pull. The apply happens on takeover, locally.
-        val prefetch = prefetchSnapshot(offer)
+        val prefetch = prefetchSnapshot(offer, target, dialer)
         client.execute {
             client.setScreen(
                 HostHandoffScreen(
@@ -144,15 +155,29 @@ object JoinCoordinator {
         }
     }
 
-    /** Download the offered snapshot to a temp pack off-thread, the moment the handoff is offered. */
-    private fun prefetchSnapshot(offer: SnapshotOffer?): CompletableFuture<JGitWorldSync.Downloaded?> {
+    /**
+     * Download the offered snapshot to a temp pack off-thread, the moment the handoff is offered. When a
+     * live [target] is known (the host is still connected), the pull rides that same path — crucially the
+     * relay session for a relay-connected guest, so a non-reachable host's world still transfers. Without
+     * a target (ghost takeover), it falls back to dialing the offer's advertised endpoint directly.
+     */
+    private fun prefetchSnapshot(
+        offer: SnapshotOffer?,
+        target: DialTarget?,
+        dialer: ChannelDialer,
+    ): CompletableFuture<JGitWorldSync.Downloaded?> {
         val future = CompletableFuture<JGitWorldSync.Downloaded?>()
         if (offer == null) {
             future.complete(null)
             return future
         }
         Thread {
-            val downloaded = runCatching { runBlocking { JGitWorldSync().downloadSnapshot(offer) } }.getOrNull()
+            val sync = JGitWorldSync(dialer)
+            val downloaded = runCatching {
+                runBlocking {
+                    if (target != null) sync.downloadSnapshot(target, offer.token) else sync.downloadSnapshot(offer)
+                }
+            }.getOrNull()
             JukzMod.logger.info("jukz: prefetched handoff snapshot: {}", if (downloaded != null) "ready" else "unavailable")
             future.complete(downloaded)
         }.apply { isDaemon = true; name = "jukz-snapshot-prefetch" }.start()

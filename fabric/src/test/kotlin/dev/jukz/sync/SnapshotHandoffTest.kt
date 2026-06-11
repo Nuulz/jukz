@@ -7,12 +7,16 @@ import dev.jukz.core.model.ClaimToken
 import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.NodeId
 import dev.jukz.core.model.WorldId
+import dev.jukz.core.transport.ChannelDialer
+import dev.jukz.core.transport.DialTarget
+import dev.jukz.core.transport.SocketChannel
 import dev.jukz.world.WorldIdSidecar
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.net.Socket
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -81,6 +85,40 @@ class SnapshotHandoffTest {
         assertEquals("host-world-gen-7", Files.readString(guestDir.resolve("level.dat")))
         assertEquals(7L, WorldIdSidecar.read(guestDir)?.generation)
         Files.deleteIfExists(downloaded.packPath)
+    }
+
+    @Test
+    fun `guest pulls the snapshot over a relay dial target (handoff across the relay)`() {
+        // Reproduces the desync bug: a guest connected via the relay must pull the host's world over
+        // that SAME relay session, not a direct socket to a synthetic endpoint. The fake dialer maps
+        // ViaRelay -> a loopback socket to the armed host (what the real relay does end to end) and
+        // refuses Direct, so a green test proves the pull rode the relay.
+        val hostDir = Files.createTempDirectory("jukz-relay-host")
+        Files.writeString(hostDir.resolve("level.dat"), "host-world-via-relay")
+        WorldIdSidecar.write(hostDir, WorldIdSidecar.Info(worldId.uuid, 8))
+
+        val (server, port) = armedHost(hostDir, "gate")
+        try {
+            val dialer = ChannelDialer { target ->
+                when (target) {
+                    is DialTarget.ViaRelay -> SocketChannel(Socket("127.0.0.1", port))
+                    is DialTarget.Direct -> error("snapshot must pull over the relay, not direct")
+                }
+            }
+            val guestDir = Files.createTempDirectory("jukz-relay-guest")
+            Files.writeString(guestDir.resolve("level.dat"), "stale-local-copy")
+
+            val sync = JGitWorldSync(dialer)
+            val downloaded = runBlocking { sync.downloadSnapshot(DialTarget.ViaRelay("session-id"), "gate") }!!
+            val applied = runBlocking { sync.applySnapshot(guestDir, downloaded, worldId, 0L) }
+
+            assertTrue(applied)
+            assertEquals("host-world-via-relay", Files.readString(guestDir.resolve("level.dat")))
+            assertEquals(8L, WorldIdSidecar.read(guestDir)?.generation)
+            Files.deleteIfExists(downloaded.packPath)
+        } finally {
+            server.close()
+        }
     }
 
     @Test
