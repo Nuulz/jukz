@@ -5,9 +5,10 @@ import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.host.HostController
 import dev.jukz.core.host.HostStatus
 import dev.jukz.sync.JGitWorldSync
-import dev.jukz.sync.SnapshotServer
+import dev.jukz.sync.SnapshotPack
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
+import java.util.concurrent.TimeUnit
 
 /**
  * Holds the live host session — the `core` [HostController] driving publish + heartbeat — so the
@@ -37,9 +38,9 @@ object HostSession {
     /**
      * Withdraw the discovery record and stop heartbeating. Safe to call when not hosting. When a guest
      * is connected over a live control channel and [saveDir] is known, first hand the world off (F4): we
-     * serve a snapshot and push a `HostLeaving` notice (with the snapshot URL) to each connected guest
-     * over the connection that is still open, then wait briefly for a download before withdrawing. This
-     * uses the open connection rather than discovery, so it never races the registry/cache.
+     * arm the snapshot and push a `HostLeaving` notice (with the snapshot endpoint) to each connected
+     * guest over the connection that is still open, then wait briefly for a download before withdrawing.
+     * This uses the open connection rather than discovery, so it never races the registry/cache.
      */
     fun onServerStopping(saveDir: Path? = null, flushSave: () -> Unit = {}) {
         controller?.let { c ->
@@ -54,25 +55,19 @@ object HostSession {
     }
 
     /**
-     * Serve the save over HTTP, push the offer to connected guests over their live control channels,
-     * then block up to [SNAPSHOT_WAIT_MS] for a guest to download. Best-effort: any failure just falls
-     * through to the withdraw.
+     * Build the save pack and arm the connection server, push the offer to connected guests over their
+     * live control channels, then block up to [SNAPSHOT_WAIT_MS] for a guest to pull. The pull rides
+     * the same connection-server port the game uses, so it crosses NAT exactly like play does — no
+     * second port to forward. The armed server stays open until the caller's [HostController.close]
+     * withdraws. Best-effort: any failure just falls through to the withdraw.
      */
     private fun offerSnapshotForHandoff(controller: HostController, saveDir: Path) {
-        val current = controller.sharedRecord ?: return
-        val host = current.primaryEndpoint.host
-        val server = SnapshotServer.serve(saveDir, JGitWorldSync(), host) ?: return
-        JukzMod.logger.info(
-            "jukz: handing off — notifying {} guest(s), snapshot at {}",
-            controller.connectedGuestCount(), server.offer.url(),
-        )
-        try {
-            controller.notifyGuestsLeaving(server.offer) // push over the live control channels
-            val pulled = server.awaitDownload(SNAPSHOT_WAIT_MS)
-            JukzMod.logger.info("jukz: snapshot handoff {}", if (pulled) "downloaded by a guest" else "timed out")
-        } finally {
-            server.close()
-        }
+        val pack = SnapshotPack.build(saveDir, JGitWorldSync()) ?: return
+        val (offer, latch) = controller.offerSnapshot(pack.bytes, pack.head) ?: return
+        JukzMod.logger.info("jukz: handing off — notifying {} guest(s) over the live connection", controller.connectedGuestCount())
+        controller.notifyGuestsLeaving(offer) // push the snapshot endpoint over the live control channels
+        val pulled = latch.await(SNAPSHOT_WAIT_MS, TimeUnit.MILLISECONDS)
+        JukzMod.logger.info("jukz: snapshot handoff {}", if (pulled) "downloaded by a guest" else "timed out")
     }
 
     private const val SNAPSHOT_WAIT_MS = 30_000L

@@ -15,9 +15,10 @@ import dev.jukz.core.model.WorldId
  * across NATs without the client needing STUN.
  *
  * [snapshot] and [playerCount] are optional extras (wire format v3): a host shutting down may offer
- * its save over HTTP for a guest to take over hosting (F4 handoff), and the announce carries the
- * connected player count for the world-list live badge. Both ride the LAN-multicast binary record;
- * the rendezvous server relays neither, so they default to absent/0 over the internet path.
+ * its save (served over a SNAPSHOT channel on its own game endpoint) for a guest to take over hosting
+ * (F4 handoff), and the announce carries the connected player count for the world-list live badge.
+ * Both ride the LAN-multicast binary record; the rendezvous server relays neither, so over the
+ * internet the offer is instead handed to connected guests in the live `HostLeaving` notice.
  */
 data class WorldRecord(
     val worldId: WorldId,

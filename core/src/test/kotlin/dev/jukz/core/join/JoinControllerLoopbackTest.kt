@@ -155,6 +155,7 @@ private class LoopbackTestHost(
             when (ConnectionType.readFrom(ch)) {
                 ConnectionType.CONTROL -> handleControl(ch)
                 ConnectionType.DATA -> echo(sock)
+                ConnectionType.SNAPSHOT -> Unit // this double never offers a snapshot
             }
         }
     }

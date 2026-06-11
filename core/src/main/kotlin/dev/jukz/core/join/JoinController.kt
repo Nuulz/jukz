@@ -121,7 +121,7 @@ class JoinController(
         this.relay = relay
         gameHandoff.connect(RELAY_HOST, port)
         sm.markConnected()
-        startLiveness(worldId, record.token)
+        startLiveness(worldId, record.token, endpoint)
         return JoinResult.Connected(RELAY_HOST, port)
     }
 
@@ -129,8 +129,13 @@ class JoinController(
      * Watch the control channel after connecting. A [Message.HostLeaving] is the host handing off (take
      * over with its snapshot offer); a broken channel is the host dropping abruptly (take over with the
      * local copy). A separate pinger nudges the host so the link stays observed. Fires [onHostLost] once.
+     *
+     * [hostEndpoint] is the endpoint this guest actually reached. The handoff snapshot is served on that
+     * same connection-server port, so we pull from there rather than from the host's advertised snapshot
+     * host/port — which may be a LAN address an internet guest can't dial. The host's gate token is the
+     * only part of its offer we keep; the location is "where I'm already connected".
      */
-    private fun startLiveness(worldId: WorldId, token: ClaimToken) {
+    private fun startLiveness(worldId: WorldId, token: ClaimToken, hostEndpoint: Endpoint) {
         // Reader: block on inbound control messages until a handoff notice or a broken channel.
         scope.launch {
             while (true) {
@@ -142,7 +147,8 @@ class JoinController(
                     return@launch
                 }
                 if (msg is Message.HostLeaving) {
-                    onHostLost(worldId, msg.snapshot)
+                    val reachable = msg.snapshot?.copy(host = hostEndpoint.host, port = hostEndpoint.port)
+                    onHostLost(worldId, reachable)
                     return@launch
                 }
                 // Pong / anything else -> host still alive; keep reading.

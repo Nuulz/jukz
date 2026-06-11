@@ -9,6 +9,7 @@ import dev.jukz.core.model.NodeId
 import dev.jukz.core.model.WorldId
 import dev.jukz.core.util.FakeClock
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.util.concurrent.CountDownLatch
 
 /**
  * Deterministic host-flow tests, mirroring the loopback/InMemory style of the join tests. The
@@ -192,6 +194,34 @@ class HostControllerTest {
     }
 
     @Test
+    fun `offerSnapshot is null before hosting`() = runBlocking {
+        val clock = FakeClock(1_000)
+        val host = controller(InMemoryWorldRegistry(clock), clock)
+        assertNull(host.offerSnapshot(byteArrayOf(1, 2, 3), "head"))
+        host.close()
+    }
+
+    @Test
+    fun `offerSnapshot points the offer at the announced endpoint and arms the server`() = runBlocking {
+        val clock = FakeClock(1_000)
+        val registry = InMemoryWorldRegistry(clock)
+        val server = CapturingServer()
+        val host = HostController(registry, opener(45678), server, resolver, nodeId, clock)
+        host.host(world, generation = 1)
+
+        val (offer, latch) = host.offerSnapshot(byteArrayOf(7, 8, 9), "deadbeef")!!
+
+        // The offer dials the announced (connection-server) endpoint — the one already NAT-traversed.
+        assertEquals("127.0.0.1", offer.host)
+        assertEquals(listenPort, offer.port)
+        assertArrayEquals(byteArrayOf(7, 8, 9), server.armedPack)
+        assertEquals("deadbeef", server.armedHead)
+        assertEquals(offer.token, server.armedToken) // the same gate token is armed and advertised
+        assertNotNull(latch)
+        host.close()
+    }
+
+    @Test
     fun `reports Failed when the world cannot be opened`() = runBlocking {
         val clock = FakeClock(1_000)
         val registry = InMemoryWorldRegistry(clock)
@@ -201,5 +231,18 @@ class HostControllerTest {
 
         assertInstanceOf(HostResult.Failed::class.java, result)
         assertNull(registry.lookup(world))
+    }
+
+    /** A [ConnectionServer] that records what was armed for take-over, returning a real latch. */
+    private inner class CapturingServer : ConnectionServer {
+        var armedPack: ByteArray? = null
+        var armedHead: String? = null
+        var armedToken: String? = null
+        override fun start(worldId: WorldId, token: ClaimToken, gameEndpoint: Endpoint, heartbeatSeq: () -> Long) = listenPort
+        override fun armSnapshot(pack: ByteArray, head: String, token: String): CountDownLatch {
+            armedPack = pack; armedHead = head; armedToken = token
+            return CountDownLatch(1)
+        }
+        override fun close() {}
     }
 }

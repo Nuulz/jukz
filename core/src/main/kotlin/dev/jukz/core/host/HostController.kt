@@ -17,6 +17,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.security.SecureRandom
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -97,6 +99,21 @@ class HostController(
     fun notifyGuestsLeaving(snapshot: SnapshotOffer?) = connectionServer.notifyGuestsLeaving(snapshot)
 
     /**
+     * Arm the connection server to serve the world [pack] (head commit [head]) for take-over, and build
+     * the matching [SnapshotOffer]. The offer dials our **announced endpoint** — the connection-server
+     * port the guests already reach for play — so the snapshot rides the one NAT traversal that works,
+     * with no second port to forward. Returns the offer plus a latch that counts down on each completed
+     * download, or null when we are not hosting (no endpoint to advertise). The token gates the
+     * download; only a guest handed this exact token (over the live control channel) can pull.
+     */
+    fun offerSnapshot(pack: ByteArray, head: String): Pair<SnapshotOffer, CountDownLatch>? {
+        val endpoint = record?.primaryEndpoint ?: return null
+        val token = randomToken()
+        val latch = connectionServer.armSnapshot(pack, head, token) ?: return null
+        return SnapshotOffer(endpoint.host, endpoint.port, token) to latch
+    }
+
+    /**
      * Poll the registry to confirm our record is still the live, announced one. Returns null when not
      * hosting; otherwise [HostStatus.live] is true only when the registry holds our exact token. With
      * the in-memory registry this is the same process, so it reflects the heartbeat; with a live
@@ -175,5 +192,12 @@ class HostController(
     override fun close() {
         runCatching { runBlocking { stop() } }
         runCatching { scope.cancel() }
+    }
+
+    private fun randomToken(): String =
+        ByteArray(24).also { RNG.nextBytes(it) }.joinToString("") { "%02x".format(it) }
+
+    private companion object {
+        private val RNG = SecureRandom()
     }
 }

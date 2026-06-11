@@ -88,7 +88,7 @@ class HostJoinLoopbackTest {
             registry, LanOpener { game.port }, HostConnectionServer(bindHost = "127.0.0.1"),
             EndpointResolver { port -> Endpoint("127.0.0.1", port) }, node(7), SystemClock,
         )
-        host.host(world, generation = 4)
+        val hosting = assertInstanceOf(HostResult.Hosting::class.java, host.host(world, generation = 4))
 
         val lost = CompletableFuture<SnapshotOffer?>()
         val joiner = JoinController(
@@ -98,10 +98,18 @@ class HostJoinLoopbackTest {
         assertInstanceOf(JoinResult.Connected::class.java, joiner.join(world))
         assertEquals(1, host.connectedGuestCount())
 
-        val offer = SnapshotOffer("127.0.0.1", 55555, "ab".repeat(32))
+        // The host advertises an endpoint a cross-internet guest might not reach (here a TEST-NET-3
+        // address standing in for an un-dialable LAN/guess address).
+        val offer = SnapshotOffer("203.0.113.7", 55555, "ab".repeat(32))
         host.notifyGuestsLeaving(offer) // pushes HostLeaving over the guest's live control channel
 
-        assertEquals(offer, lost.get(5, TimeUnit.SECONDS)) // the guest's reader surfaced the exact offer
+        // The guest pulls from the endpoint IT actually reached — keeping only the gate token — because
+        // the snapshot is served on this same connection-server port it is already talking to. This is
+        // what makes the handoff work over the internet (the host's advertised host/port may be LAN).
+        val received = lost.get(5, TimeUnit.SECONDS)
+        assertEquals("ab".repeat(32), received?.token)
+        assertEquals("127.0.0.1", received?.host)
+        assertEquals(hosting.port, received?.port)
 
         joiner.close()
         host.close()

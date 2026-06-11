@@ -99,19 +99,21 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     flagged for live-NAT validation).
   - **World handoff over the live connection (F4)** — when a host with a connected guest closes its
     world, it forces a save, snapshots it with JGit (`commit` — excluding Minecraft's locked
-    `session.lock`), serves the pack over an ephemeral token-gated HTTP endpoint (`SnapshotServer`), and
-    pushes a `HostLeaving` message — carrying that snapshot URL — to each guest over the **control
+    `session.lock`), arms the pack on its connection server under a one-shot gate token, and pushes a
+    `HostLeaving` message — carrying that token-gated snapshot offer — to each guest over the **control
     channel that is already open**. This never goes through discovery, so it can't race the
     registry/cache (the earlier discovery-based attempt did, and failed). The guest's `JoinController`
     runs a continuous reader on that channel: a `HostLeaving` (clean handoff) or a broken channel (abrupt
-    drop) fires `onHostLost`. It then pulls the snapshot into its local copy of the world (`pullLatest` →
-    download → JGit `PackParser` → `git reset --hard` → mirror the generation into `jukz.dat`), and
-    `HostHandoffScreen`'s "Host now" opens it locally bypassing the discovery consult — auto-hosting with
-    a bumped generation that **fences past the old host**. Proven end-to-end over loopback (host pushes
-    `HostLeaving`, guest surfaces the exact offer) and **in-game, including a round-trip A→B→A handoff**.
-    Non-fatal throughout. Reliable same-network; across the internet the notice still arrives but the
-    ephemeral snapshot port isn't UPnP-mapped, so a remote guest falls back to its local copy (see the
-    follow-ups note below).
+    drop) fires `onHostLost`. The pack streams back over a third connection type (`ConnectionType.SNAPSHOT`)
+    on the **same listen port the game uses** — so it crosses NAT exactly like play does, with no second
+    port to forward — and the guest pulls from the endpoint it actually reached (the host's advertised
+    snapshot host/port may be a LAN address an internet guest can't dial), keeping only the gate token.
+    `pullLatest` → channel download → JGit `PackParser` → `git reset --hard` → mirror the generation into
+    `jukz.dat`; then `HostHandoffScreen`'s "Host now" opens it locally bypassing the discovery consult —
+    auto-hosting with a bumped generation that **fences past the old host**. Proven end-to-end over
+    loopback (host serves the pack, guest pulls it and resets) and **in-game, including a round-trip
+    A→B→A handoff**. Non-fatal throughout, on the LAN and across the internet (it rides the one NAT
+    traversal that already carries play).
   - **Live badge + access control (F4)** — a `WorldEntry` mixin draws a green "Live · N" badge on each
     save currently hosted (player count from the record), behind a per-world 10 s lookup cache; clicking
     the badge joins directly. `HostInfoScreen`'s "Access: Open/Closed" toggle withdraws + kicks guests
@@ -172,11 +174,11 @@ confirm each step.
 - **In-game validation still pending:** the world-list **live badge** (`WorldEntryMixin` +
   `WorldListLiveBadge`) and the **access-control kick** (`HostCoordinator.disableAccess`) — both are
   mixin/Minecraft surfaces not yet exercised in a live session.
-- **Handoff across the internet:** the `HostLeaving` notice travels over the open control channel and
-  works cross-NAT, but the snapshot's ephemeral HTTP port is not UPnP-mapped, so a remote guest can't
-  download it. Options: serve the snapshot on the already-forwarded host port, or stream the pack over
-  the control channel itself (no second port). Until then, a remote takeover falls back to the guest's
-  local copy.
+- **Cold-start handoff over the internet:** the live-connection handoff now crosses NAT (the pack rides
+  the host's already-forwarded game port via `ConnectionType.SNAPSHOT`). Still open is the *ghost*
+  takeover — a guest looking up a world whose host is already gone — because the rendezvous server does
+  not relay the snapshot offer in the record. A blob relay through the rendezvous (host uploads, guest
+  downloads, both outbound) would close that gap and need no reachability at all.
 - **Cleanup:** `JoinCoordinator.recordFor` builds a dummy `WorldRecord` just to reach `pullLatest` —
   give `WorldSync` an offer-based overload instead. Taking over a never-seen world leaves a
   `jukz-<code>` save folder; consider naming/cleanup. The flagged NAT-traversal adapters

@@ -4,6 +4,7 @@ import dev.jukz.core.discovery.SnapshotOffer
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.WorldId
+import java.util.concurrent.CountDownLatch
 
 /**
  * Serves inbound jukz connections for a hosted world: CONTROL channels run the handshake + fencing +
@@ -28,4 +29,13 @@ interface ConnectionServer : AutoCloseable {
      * where to pull the latest save from. Best-effort.
      */
     fun notifyGuestsLeaving(snapshot: SnapshotOffer?) {}
+
+    /**
+     * Arm this server to answer [ConnectionType.SNAPSHOT] channels with [pack] (the JGit pack of the
+     * world save), gated by [token]; [head] is the commit id the guest resets to. Serving the snapshot
+     * over the same listen port the game uses means it rides the one NAT traversal that already works
+     * (no second port to forward). Returns a latch that counts down each time a guest finishes a
+     * download, or null for test doubles that cannot serve. The arming lasts until [close].
+     */
+    fun armSnapshot(pack: ByteArray, head: String, token: String): CountDownLatch? = null
 }

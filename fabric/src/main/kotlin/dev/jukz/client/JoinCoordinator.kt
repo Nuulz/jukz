@@ -5,16 +5,12 @@ import dev.jukz.client.gui.HostHandoffScreen
 import dev.jukz.client.gui.NatErrorScreen
 import dev.jukz.client.gui.SearchingHostScreen
 import dev.jukz.client.gui.ShouldHostScreen
-import dev.jukz.config.PersistentNodeId
 import dev.jukz.core.discovery.SnapshotOffer
-import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.discovery.WorldRegistry
 import dev.jukz.discovery.Discovery
 import dev.jukz.core.join.GameHandoff
 import dev.jukz.core.join.JoinController
 import dev.jukz.core.join.JoinResult
-import dev.jukz.core.model.ClaimToken
-import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.WorldId
 import dev.jukz.core.transport.DirectTcpTransport
 import dev.jukz.core.transport.Transport
@@ -25,6 +21,9 @@ import kotlinx.coroutines.runBlocking
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.gui.screen.Screen
 import net.minecraft.client.gui.screen.TitleScreen
+import java.nio.file.Files
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -121,28 +120,56 @@ object JoinCoordinator {
         parent: Screen?,
         offer: SnapshotOffer?,
     ) {
+        // Start the snapshot download NOW, while the host is still connected — its connection server is
+        // torn down within ~30 s of announcing it is leaving, so we must not wait for the user's "Host
+        // now" (which can come much later) to begin the pull. The apply happens on takeover, locally.
+        val prefetch = prefetchSnapshot(offer)
         client.execute {
             client.setScreen(
                 HostHandoffScreen(
                     snapshotApplied = offer != null,
-                    onHostNow = { beginTakeover(client, worldId, shortCode, parent, offer) },
-                    onBack = { client.setScreen(parent) },
+                    onHostNow = { beginTakeover(client, worldId, shortCode, parent, prefetch) },
+                    onBack = { discardPrefetch(prefetch); client.setScreen(parent) },
                 ),
             )
         }
     }
 
+    /** Download the offered snapshot to a temp pack off-thread, the moment the handoff is offered. */
+    private fun prefetchSnapshot(offer: SnapshotOffer?): CompletableFuture<JGitWorldSync.Downloaded?> {
+        val future = CompletableFuture<JGitWorldSync.Downloaded?>()
+        if (offer == null) {
+            future.complete(null)
+            return future
+        }
+        Thread {
+            val downloaded = runCatching { runBlocking { JGitWorldSync().downloadSnapshot(offer) } }.getOrNull()
+            JukzMod.logger.info("jukz: prefetched handoff snapshot: {}", if (downloaded != null) "ready" else "unavailable")
+            future.complete(downloaded)
+        }.apply { isDaemon = true; name = "jukz-snapshot-prefetch" }.start()
+        return future
+    }
+
+    /** Drop a prefetched pack the user declined to take over with, off the render thread. */
+    private fun discardPrefetch(prefetch: CompletableFuture<JGitWorldSync.Downloaded?>) {
+        Thread {
+            runCatching { prefetch.get(SNAPSHOT_WAIT_MS, TimeUnit.MILLISECONDS)?.let { Files.deleteIfExists(it.packPath) } }
+        }.apply { isDaemon = true; name = "jukz-snapshot-discard" }.start()
+    }
+
     /**
-     * Take over hosting: locate our local copy of the world (or a folder to materialise it into), pull
-     * the host's snapshot into it (best-effort — and required to fence past the old host's generation),
-     * then open it locally bypassing discovery so it auto-hosts. Off the render thread until the open.
+     * Take over hosting: locate our local copy of the world (or a folder to materialise it into), apply
+     * the already-prefetched snapshot into it (best-effort — and required to fence past the old host's
+     * generation), then open it locally bypassing discovery so it auto-hosts. Off the render thread
+     * until the open. The download already ran eagerly in [showHandoff]; here we only await + apply it,
+     * so a slow "Host now" click never misses the host's brief snapshot window.
      */
     private fun beginTakeover(
         client: MinecraftClient,
         worldId: WorldId,
         shortCode: String,
         parent: Screen?,
-        offer: SnapshotOffer?,
+        prefetch: CompletableFuture<JGitWorldSync.Downloaded?>,
     ) {
         client.setScreen(SearchingHostScreen(shortCode) {}) // "preparing" spinner; no cancel mid-takeover
         Thread {
@@ -151,8 +178,10 @@ object JoinCoordinator {
             val levelName = existing ?: "jukz-$shortCode"
             val saveDir = savesDir.resolve(levelName)
 
-            val applied = offer != null &&
-                runCatching { runBlocking { JGitWorldSync().pullLatest(saveDir, recordFor(worldId, offer)) } }.getOrDefault(false)
+            val downloaded = runCatching { prefetch.get(SNAPSHOT_WAIT_MS, TimeUnit.MILLISECONDS) }.getOrNull()
+            val applied = downloaded != null &&
+                runCatching { runBlocking { JGitWorldSync().applySnapshot(saveDir, downloaded, worldId, 0L) } }.getOrDefault(false)
+            runCatching { downloaded?.let { Files.deleteIfExists(it.packPath) } }
 
             if (existing == null && !applied) {
                 JukzMod.logger.warn("jukz: no local copy of {} and no snapshot to pull; cannot take over", shortCode)
@@ -172,7 +201,5 @@ object JoinCoordinator {
         }.apply { isDaemon = true; name = "jukz-takeover" }.start()
     }
 
-    /** A minimal record carrying just what [JGitWorldSync.pullLatest] needs: the world id + the offer. */
-    private fun recordFor(worldId: WorldId, offer: SnapshotOffer): WorldRecord =
-        WorldRecord(worldId, ClaimToken(0, 0, PersistentNodeId.nodeId), listOf(Endpoint("127.0.0.1", 1)), 0, snapshot = offer)
+    private const val SNAPSHOT_WAIT_MS = 30_000L
 }
