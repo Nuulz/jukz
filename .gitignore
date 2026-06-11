@@ -35,6 +35,8 @@ rendezvous/target/
 # jukz local
 /local-secret
 *.log
+*.log.gz
+logs/
 
 # Superpowers brainstorming scaffolding (local only)
 .superpowers/
