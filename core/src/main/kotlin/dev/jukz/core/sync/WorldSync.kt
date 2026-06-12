@@ -19,6 +19,10 @@ interface WorldSync {
     /** Snapshot the save at the given generation; returns the snapshot id. */
     suspend fun commit(saveDir: Path, generation: Long): CommitId
 
-    /** Fetch the latest snapshot for [target] into [saveDir] before becoming host. */
-    suspend fun pullLatest(saveDir: Path, target: WorldRecord)
+    /**
+     * Fetch the latest snapshot for [target] into [saveDir] before becoming host. Returns true if a
+     * snapshot was actually applied, false if it fell back to the existing local copy (no offer in the
+     * record, or the transfer failed). Never throws — the handoff must not be blocked.
+     */
+    suspend fun pullLatest(saveDir: Path, target: WorldRecord): Boolean
 }

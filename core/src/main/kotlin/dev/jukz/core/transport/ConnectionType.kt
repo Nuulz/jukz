@@ -6,11 +6,14 @@ import java.io.EOFException
  * One-byte discriminator written as the very first byte of every jukz connection, so the host can
  * route an inbound channel without protocol sniffing: a [CONTROL] channel carries the jukz
  * handshake plus liveness, a [DATA] channel is a transparent byte pipe to the LAN-opened Minecraft
- * server. The guest writes the byte right after the transport connects; the host reads it first.
+ * server, and a [SNAPSHOT] channel streams the host's world save for a take-over (F4 handoff) over
+ * the SAME already-NAT-traversed listen port the game uses. The guest writes the byte right after
+ * the transport connects; the host reads it first.
  */
 enum class ConnectionType(val wireByte: Int) {
     CONTROL(0x01),
-    DATA(0x02);
+    DATA(0x02),
+    SNAPSHOT(0x03);
 
     /** Write this discriminator to [channel] and flush. */
     fun writeTo(channel: JukzChannel) {

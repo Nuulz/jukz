@@ -1,19 +1,24 @@
 package dev.jukz.core.host
 
+import dev.jukz.core.discovery.SnapshotOffer
 import dev.jukz.core.handshake.FramedMessageChannel
 import dev.jukz.core.handshake.HostStateMachine
+import dev.jukz.core.handshake.Message
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.WorldId
 import dev.jukz.core.transport.ConnectionType
 import dev.jukz.core.transport.JukzChannel
 import dev.jukz.core.transport.SocketChannel
+import java.io.DataInputStream
+import java.io.DataOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 
 /**
  * The real host-side listener — the production counterpart of the join flow's test double. Binds a
@@ -36,7 +41,12 @@ class HostConnectionServer(
     private var server: ServerSocket? = null
     @Volatile private var running = false
     @Volatile private var session: Session? = null
+    @Volatile private var armedSnapshot: ArmedSnapshot? = null
     private val pumps = CopyOnWriteArrayList<Thread>()
+    private val controlChannels = CopyOnWriteArrayList<FramedMessageChannel>()
+
+    /** A world pack armed for take-over, served to any guest presenting the matching [token]. */
+    private class ArmedSnapshot(val pack: ByteArray, val head: String, val token: String, val latch: CountDownLatch)
 
     /** What a started server is serving (held in one nullable holder — [WorldId] is an inline class). */
     private class Session(
@@ -74,6 +84,7 @@ class HostConnectionServer(
             when (ConnectionType.readFrom(ch)) {
                 ConnectionType.CONTROL -> serveControl(ch, sess)
                 ConnectionType.DATA -> pipeToGame(sock, sess)
+                ConnectionType.SNAPSHOT -> serveSnapshot(ch)
             }
         }.onFailure { runCatching { sock.close() } }
     }
@@ -82,18 +93,62 @@ class HostConnectionServer(
     private fun serveControl(ch: JukzChannel, sess: Session) {
         val framed = FramedMessageChannel(ch)
         val sm = HostStateMachine(sess.worldId, sess.token, sess.heartbeatSeq)
-        while (running) {
-            val msg = try {
-                framed.receive()
-            } catch (_: Exception) {
-                return
+        controlChannels.add(framed) // tracked so we can push a HostLeaving when we withdraw
+        try {
+            while (running) {
+                val msg = try {
+                    framed.receive()
+                } catch (_: Exception) {
+                    return
+                }
+                val reaction = sm.onMessage(msg)
+                reaction.reply?.let { runCatching { framed.send(it) } }
+                if (reaction.shutdown) {
+                    runCatching { ch.close() }
+                    return
+                }
             }
-            val reaction = sm.onMessage(msg)
-            reaction.reply?.let { runCatching { framed.send(it) } }
-            if (reaction.shutdown) {
-                runCatching { ch.close() }
-                return
-            }
+        } finally {
+            controlChannels.remove(framed)
+        }
+    }
+
+    override fun connectedGuestCount(): Int = controlChannels.size
+
+    override fun notifyGuestsLeaving(snapshot: SnapshotOffer?) {
+        val sess = session ?: return
+        val msg = Message.HostLeaving(sess.worldId, sess.token, 0, snapshot)
+        controlChannels.forEach { runCatching { it.send(msg) } } // send is thread-safe (synchronized output)
+    }
+
+    override fun armSnapshot(pack: ByteArray, head: String, token: String): CountDownLatch {
+        val latch = CountDownLatch(1)
+        armedSnapshot = ArmedSnapshot(pack, head, token, latch)
+        return latch
+    }
+
+    /**
+     * Serve the armed world pack over a SNAPSHOT channel. Wire: the guest writes its token (UTF), the
+     * host replies with a status byte (1 = accepted, 0 = wrong/none), then — if accepted — the head
+     * commit id (UTF), the pack length (long), and the pack bytes. Best-effort; any I/O error just
+     * drops the channel and the guest falls back to its local copy.
+     */
+    private fun serveSnapshot(ch: JukzChannel) {
+        val din = DataInputStream(ch.inputStream())
+        val dout = DataOutputStream(ch.outputStream())
+        val token = try { din.readUTF() } catch (_: Exception) { return }
+        val armed = armedSnapshot
+        if (armed == null || token != armed.token) {
+            runCatching { dout.writeByte(0); dout.flush() } // rejected: no head/pack follows
+            return
+        }
+        runCatching {
+            dout.writeByte(1)
+            dout.writeUTF(armed.head)
+            dout.writeLong(armed.pack.size.toLong())
+            dout.write(armed.pack)
+            dout.flush()
+            armed.latch.countDown()
         }
     }
 
@@ -133,5 +188,8 @@ class HostConnectionServer(
     override fun close() {
         running = false
         runCatching { server?.close() }
+        // Close active control channels so connected guests see the drop immediately (abrupt-leave path).
+        controlChannels.forEach { runCatching { it.close() } }
+        controlChannels.clear()
     }
 }

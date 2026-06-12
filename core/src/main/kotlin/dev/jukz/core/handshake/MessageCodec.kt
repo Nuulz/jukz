@@ -1,5 +1,6 @@
 package dev.jukz.core.handshake
 
+import dev.jukz.core.discovery.SnapshotOffer
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.NodeId
@@ -26,6 +27,7 @@ object MessageCodec {
     private const val T_YIELD = 6
     private const val T_ACK = 7
     private const val T_NACK = 8
+    private const val T_HOST_LEAVING = 9
 
     fun encode(message: Message): ByteArray {
         val w = ByteWriter()
@@ -42,6 +44,15 @@ object MessageCodec {
             is Message.Redirect -> w.putString(message.endpoint.format())
             is Message.Yield -> encodeToken(w, message.winnerToken)
             is Message.Nack -> w.putByte(message.reason.ordinal)
+            is Message.HostLeaving -> {
+                val s = message.snapshot
+                w.putByte(if (s != null) 1 else 0)
+                if (s != null) {
+                    w.putString(s.host)
+                    w.putInt(s.port)
+                    w.putString(s.token)
+                }
+            }
             is Message.Claim, is Message.Ping, is Message.Ack -> {} // header only
         }
         return w.toByteArray()
@@ -63,6 +74,10 @@ object MessageCodec {
                 T_YIELD -> Message.Yield(worldId, token, nonce, decodeToken(r))
                 T_ACK -> Message.Ack(worldId, token, nonce)
                 T_NACK -> Message.Nack(worldId, token, nonce, decodeReason(r.getByte()))
+                T_HOST_LEAVING -> {
+                    val snapshot = if (r.getByte() == 1) SnapshotOffer(r.getString(), r.getInt(), r.getString()) else null
+                    Message.HostLeaving(worldId, token, nonce, snapshot)
+                }
                 else -> throw MalformedMessageException("unknown message type byte: $type")
             }
             r.expectEnd()
@@ -83,6 +98,7 @@ object MessageCodec {
         is Message.Yield -> T_YIELD
         is Message.Ack -> T_ACK
         is Message.Nack -> T_NACK
+        is Message.HostLeaving -> T_HOST_LEAVING
     }
 
     private fun encodeToken(w: ByteWriter, t: ClaimToken) {

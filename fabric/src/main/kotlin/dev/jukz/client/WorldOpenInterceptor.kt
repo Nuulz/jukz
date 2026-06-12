@@ -16,10 +16,10 @@ import net.minecraft.client.MinecraftClient
  * to that host as a guest; otherwise the world opens locally as usual. No button — joining is an
  * intrinsic property of opening the world.
  *
- * Discovery comes from the shared [Discovery] registry — loopback-safe today, so the lookup always
- * comes back empty and every world opens locally (then auto-hosts via [HostCoordinator]). The live
- * DHT registry drops in behind it and turns this into real cross-machine detection with no change
- * here.
+ * Discovery comes from the shared [Discovery] registry: LAN multicast finds same-network hosts and
+ * the rendezvous adapter finds internet-wide ones, so the lookup is real cross-machine detection —
+ * a live host elsewhere cancels the local boot and joins as a guest, otherwise the world opens
+ * locally (then auto-hosts via [HostCoordinator]).
  */
 object WorldOpenInterceptor {
 
@@ -79,5 +79,16 @@ object WorldOpenInterceptor {
     private fun openLocally(levelName: String, onCancel: Runnable) {
         bypass = true
         MinecraftClient.getInstance().createIntegratedServerLoader().start(levelName, onCancel)
+    }
+
+    /**
+     * Open a world locally, *bypassing* the discovery consult, so it boots and auto-hosts even if the
+     * old host is still inside its snapshot-offer window. Used by the handoff takeover (F4-B): the guest
+     * has already pulled the latest save, so the auto-host generation bump fences past the old host.
+     */
+    fun openLocallyBypassingDiscovery(levelName: String) {
+        openLocally(levelName) {
+            JukzMod.logger.warn("jukz: takeover boot of {} was cancelled", levelName)
+        }
     }
 }

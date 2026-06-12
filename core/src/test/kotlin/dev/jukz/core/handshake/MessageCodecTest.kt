@@ -1,5 +1,6 @@
 package dev.jukz.core.handshake
 
+import dev.jukz.core.discovery.SnapshotOffer
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.NodeId
@@ -25,6 +26,8 @@ class MessageCodecTest {
         Message.Yield(world, token, 6, winnerToken = other),
         Message.Ack(world, token, 7),
         Message.Nack(world, token, 8, NackReason.STALE_TOKEN),
+        Message.HostLeaving(world, token, 9, snapshot = SnapshotOffer("192.168.1.7", 50777, "ab".repeat(32))),
+        Message.HostLeaving(world, token, 10, snapshot = null),
     )
 
     @Test
