@@ -137,6 +137,8 @@ struct AnnounceBody {
     endpoints: Vec<Endpoint>,
     heartbeat_seq: i64,
     #[serde(default)]
+    player_count: i32,
+    #[serde(default)]
     relay: Option<store::RelayInfo>,
 }
 
@@ -146,6 +148,8 @@ struct HeartbeatBody {
     world_id: Uuid,
     token: Token,
     heartbeat_seq: i64,
+    #[serde(default)]
+    player_count: i32,
 }
 
 #[derive(Deserialize)]
@@ -267,7 +271,7 @@ async fn announce(
 
     let mut endpoints = body.endpoints;
     merge_observed_endpoint(&mut endpoints, ip);
-    let record = WorldRecord { world_id: body.world_id, token, endpoints, heartbeat_seq: body.heartbeat_seq, relay: body.relay };
+    let record = WorldRecord { world_id: body.world_id, token, endpoints, heartbeat_seq: body.heartbeat_seq, player_count: body.player_count, relay: body.relay };
     let ttl_ms = state.store.ttl().as_millis() as u64;
 
     match state.store.announce(record.clone(), Instant::now()) {
@@ -302,7 +306,7 @@ async fn heartbeat(
     state.counters.heartbeats.fetch_add(1, AtomicOrdering::Relaxed);
     let ttl_ms = state.store.ttl().as_millis() as u64;
 
-    match state.store.heartbeat(body.world_id, &token, body.heartbeat_seq, Instant::now()) {
+    match state.store.heartbeat(body.world_id, &token, body.heartbeat_seq, body.player_count, Instant::now()) {
         HeartbeatOutcome::Refreshed => {
             (StatusCode::OK, Json(json!({ "status": "refreshed", "ttlMs": ttl_ms }))).into_response()
         }
