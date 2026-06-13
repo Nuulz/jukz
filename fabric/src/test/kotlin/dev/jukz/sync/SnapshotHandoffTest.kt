@@ -187,4 +187,42 @@ class SnapshotHandoffTest {
         assertFalse(pulled)
         assertEquals("local-only", Files.readString(guestDir.resolve("level.dat")))
     }
+
+    @Test
+    fun `snapshot pack carries only the current world, not the accumulated git history`() {
+        val dir = Files.createTempDirectory("jukz-nogrowth")
+        WorldIdSidecar.write(dir, WorldIdSidecar.Info(worldId.uuid, 1))
+        val sync = JGitWorldSync()
+
+        // Stand-in for a region file; rewrite it with fresh, incompressible bytes on each "save" so
+        // every commit creates a distinct large blob — exactly how Minecraft churns region data.
+        fun saveRegion(seed: Int) =
+            Files.write(dir.resolve("r.0.0.mca"), kotlin.random.Random(seed).nextBytes(512 * 1024))
+
+        saveRegion(1)
+        val first = SnapshotPack.build(dir, sync) ?: error("first build")
+
+        var last = first
+        repeat(8) { i ->
+            saveRegion(i + 2)
+            WorldIdSidecar.write(dir, WorldIdSidecar.Info(worldId.uuid, (i + 2).toLong()))
+            last = SnapshotPack.build(dir, sync) ?: error("build $i")
+        }
+
+        // Old behaviour (pack everything reachable from HEAD) carried all 9 distinct ~512KB blobs
+        // (~9x). Re-rooted at the current tree, the pack holds only the latest one, so it stays near
+        // the first build's size no matter how many saves happened.
+        assertTrue(
+            last.bytes.size < first.bytes.size * 2,
+            "snapshot pack accumulated history: first=${first.bytes.size}B last=${last.bytes.size}B",
+        )
+
+        // The served head must be a re-rooted, parentless commit.
+        org.eclipse.jgit.api.Git.open(dir.toFile()).use { git ->
+            org.eclipse.jgit.revwalk.RevWalk(git.repository).use { rw ->
+                val commit = rw.parseCommit(org.eclipse.jgit.lib.ObjectId.fromString(last.head))
+                assertEquals(0, commit.parentCount, "snapshot head must be parentless")
+            }
+        }
+    }
 }
