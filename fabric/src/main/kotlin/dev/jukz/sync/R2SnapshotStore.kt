@@ -84,29 +84,34 @@ object R2SnapshotStore {
     /** GET the pack object into a temp file, reporting (bytesRead, totalBytes). Null on 404/error. */
     fun downloadToTemp(url: String, onProgress: (Long, Long) -> Unit): Path? = runCatching {
         val dest = Files.createTempFile("jukz-ghost", ".pack")
-        val response = http.send(
-            HttpRequest.newBuilder(URI.create(url)).GET().timeout(uploadTimeout).build(),
-            HttpResponse.BodyHandlers.ofInputStream(),
-        )
-        if (response.statusCode() != 200) {
-            Files.deleteIfExists(dest)
-            return@runCatching null
-        }
-        val total = response.headers().firstValueAsLong("content-length").orElse(-1L)
-        response.body().use { input ->
-            Files.newOutputStream(dest).use { out ->
-                val buf = ByteArray(64 * 1024)
-                var read = 0L
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    out.write(buf, 0, n)
-                    read += n
-                    onProgress(read, total)
+        try {
+            val response = http.send(
+                HttpRequest.newBuilder(URI.create(url)).GET().timeout(uploadTimeout).build(),
+                HttpResponse.BodyHandlers.ofInputStream(),
+            )
+            if (response.statusCode() != 200) {
+                Files.deleteIfExists(dest)
+                return@runCatching null
+            }
+            val total = response.headers().firstValueAsLong("content-length").orElse(-1L)
+            response.body().use { input ->
+                Files.newOutputStream(dest).use { out ->
+                    val buf = ByteArray(64 * 1024)
+                    var read = 0L
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                        read += n
+                        onProgress(read, total)
+                    }
                 }
             }
+            dest
+        } catch (t: Throwable) {
+            Files.deleteIfExists(dest) // never leave a half-written temp behind on a mid-download failure
+            throw t // re-thrown so the outer runCatching maps it to null
         }
-        dest
     }.getOrNull()
 
     // ---- helpers -------------------------------------------------------------------------
@@ -156,9 +161,10 @@ private class CountingBodyPublisher(
         subscriber.onSubscribe(object : java.util.concurrent.Flow.Subscription {
             private var offset = 0
             private var cancelled = false
+            private var completed = false
 
             override fun request(n: Long) {
-                if (cancelled) return
+                if (cancelled || completed) return
                 var remaining = n
                 while (remaining > 0 && offset < data.size) {
                     val chunk = minOf(64 * 1024, data.size - offset)
@@ -167,7 +173,10 @@ private class CountingBodyPublisher(
                     onProgress(offset.toLong(), data.size.toLong())
                     remaining--
                 }
-                if (offset >= data.size) subscriber.onComplete()
+                if (offset >= data.size) {
+                    completed = true // Reactive-Streams 1.7: onComplete must be signalled exactly once
+                    subscriber.onComplete()
+                }
             }
 
             override fun cancel() {
