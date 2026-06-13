@@ -35,9 +35,14 @@ object GhostUpload {
     /** True once a guest-less close has decided to upload; read by the disconnect mixin. */
     fun isArmed(): Boolean = armed
 
-    /** Publish the built pack for the screen to upload. */
+    /**
+     * Publish the built pack for the screen to upload. Also sets [armed] so the holder's invariant
+     * ("a pending pack is always armed") holds even if a caller publishes a pack without a prior
+     * [markArmed] — the disconnect mixin keys the upload screen off [isArmed].
+     */
     fun arm(pending: Pending) {
         this.pending = pending
+        armed = true
     }
 
     /** The built pack, or null until the hook has produced it. */
