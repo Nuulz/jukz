@@ -27,6 +27,11 @@ object HostSession {
     @Volatile
     private var onWithdraw: () -> Unit = {}
 
+    // Set true by SERVER_STOPPING so that a late-finishing announce thread does not install a
+    // controller whose game server is already gone. Reset by SERVER_STARTING for the next world.
+    @Volatile
+    private var serverStopped = false
+
     val isHosting: Boolean get() = controller != null
 
     /** Guests connected over a live control channel right now (0 when not hosting). */
@@ -35,12 +40,35 @@ object HostSession {
     /** The record we are currently announcing (static info for the host UI), or null. */
     val record: WorldRecord? get() = controller?.sharedRecord
 
+    /** Reset the stopped flag at the start of each new world so the next announce can install. */
+    fun onServerStarting() {
+        serverStopped = false
+    }
+
+    /**
+     * Signal that the integrated server is actually stopping. Called from [JukzMod] before
+     * [onServerStopping] so that a background announce thread racing SERVER_STOPPING does not
+     * install a controller whose game server port is already dead.
+     */
+    fun markServerStopped() {
+        serverStopped = true
+    }
+
     /**
      * Record a freshly-started host controller. [onWithdraw] is an optional teardown hook run when the
      * session stops (e.g. closing the relay control link), kept as a plain lambda so this holder stays
      * free of fabric/transport types.
+     *
+     * If the integrated server already stopped while the announce was in flight, close the controller
+     * immediately instead of installing it — the game port is dead and guests would get "Disconnected".
      */
     fun install(controller: HostController, onWithdraw: () -> Unit = {}) {
+        if (serverStopped) {
+            JukzMod.logger.info("jukz: server stopped during announce — withdrawing controller immediately")
+            runCatching { controller.close() }
+            runCatching { onWithdraw() }
+            return
+        }
         this.controller = controller
         this.onWithdraw = onWithdraw
     }

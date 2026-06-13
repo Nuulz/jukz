@@ -26,6 +26,10 @@ object JukzMod : ModInitializer {
     val logger = LoggerFactory.getLogger(MOD_ID)
 
     override fun onInitialize() {
+        ServerLifecycleEvents.SERVER_STARTING.register { _ ->
+            HostSession.onServerStarting()
+        }
+
         ServerWorldEvents.LOAD.register { server, world ->
             if (world.registryKey == World.OVERWORLD) {
                 val state = WorldIdState.get(world)
@@ -35,6 +39,7 @@ object JukzMod : ModInitializer {
         }
 
         ServerLifecycleEvents.SERVER_STOPPING.register { server ->
+            HostSession.markServerStopped()
             // Hand the save dir to the session so it can hand off to any connected guest (over the live
             // control channel) before withdrawing. Whether a guest is connected is read from the
             // connection server, not the player list (which is already being torn down here).
