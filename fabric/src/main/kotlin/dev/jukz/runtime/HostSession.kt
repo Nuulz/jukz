@@ -59,6 +59,9 @@ object HostSession {
             if (saveDir != null && c.connectedGuestCount() > 0) {
                 runCatching { flushSave() } // force the world to disk first so the snapshot is current
                 runCatching { offerSnapshotForHandoff(c, saveDir) }
+            } else if (saveDir != null && GhostUpload.isArmed()) {
+                runCatching { flushSave() }
+                runCatching { armGhostUpload(c, saveDir) }
             }
             runCatching { c.close() } // withdraw + stop heartbeating
             runCatching { onWithdraw() } // tear down any relay control link
@@ -82,6 +85,20 @@ object HostSession {
         controller.notifyGuestsLeaving(offer) // push the snapshot endpoint over the live control channels
         val outcome = awaitSnapshotPull(controller, latch)
         JukzMod.logger.info("jukz: snapshot handoff {}", outcome)
+    }
+
+    /**
+     * Build the world pack on a guest-less close and publish it to [GhostUpload] for the client
+     * upload screen to push to R2. Local + fast (no network here); a failure clears the holder so no
+     * upload screen is shown. The record gives us the worldId + fencing generation.
+     */
+    private fun armGhostUpload(controller: HostController, saveDir: Path) {
+        val record = controller.sharedRecord ?: run { GhostUpload.clear(); return }
+        val pack = SnapshotPack.build(saveDir, JGitWorldSync()) ?: run { GhostUpload.clear(); return }
+        GhostUpload.arm(
+            GhostUpload.Pending(record.worldId, record.hostGeneration, pack.bytes, pack.head),
+        )
+        JukzMod.logger.info("jukz: armed ghost snapshot ({} bytes) for upload", pack.bytes.size)
     }
 
     /**
