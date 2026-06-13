@@ -108,6 +108,7 @@ mod tests {
         }
     }
 
+    /// First upload for any world must be accepted regardless of generation value.
     #[test]
     fn first_upload_for_a_world_is_accepted() {
         let store = fence_only();
