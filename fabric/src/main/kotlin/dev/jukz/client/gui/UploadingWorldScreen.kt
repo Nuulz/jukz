@@ -35,7 +35,10 @@ class UploadingWorldScreen : Screen(Text.literal("Saving your world to the cloud
     fun isUploading(): Boolean = !done.get()
 
     override fun init() {
-        // No back button while uploading; the escape valve is added on persistent failure.
+        // No back button while uploading; the escape valve is added on persistent failure. A window
+        // resize re-runs init() and clears the screen's children, so re-attach an already-surfaced
+        // escape button — otherwise it would vanish (and the X is vetoed), trapping the player.
+        exitButton?.let { addDrawableChild(it) }
     }
 
     override fun shouldCloseOnEsc(): Boolean = false
