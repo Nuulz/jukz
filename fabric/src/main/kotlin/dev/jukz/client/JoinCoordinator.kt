@@ -81,9 +81,9 @@ object JoinCoordinator {
                 // present. A 404 (no upload for this code) falls through to the normal "No live host"
                 // screen, instead of dangling a misleading "you have the latest world" takeover prompt.
                 val ghost = R2SnapshotStore.ghostSnapshot(worldId)
-                val head = ghost?.let { R2SnapshotStore.downloadText(it.headUrl) }
+                val head = ghost?.let { R2SnapshotStore.ghostHead(it.headUrl) }
                 if (ghost != null && head != null) {
-                    client.execute { showGhostTakeover(client, worldId, shortCode, parent, ghost, head) }
+                    client.execute { showGhostTakeover(client, worldId, shortCode, parent, ghost, head.commit) }
                     return@Thread
                 }
             }
@@ -179,6 +179,23 @@ object JoinCoordinator {
             // were never connected to a world), just show it.
             if (client.world != null) client.disconnect(screen) else client.setScreen(screen)
         }
+    }
+
+    /**
+     * Auto-takeover of a ghost with NO prompt: the direct-open path ([WorldOpenInterceptor]) uses this
+     * when the cloud copy is strictly newer than the local one. Prefetches the pack and immediately
+     * begins the takeover (download + apply + open locally), reusing the same machinery as "Host now".
+     */
+    fun takeOverGhost(
+        worldId: WorldId,
+        shortCode: String,
+        parent: Screen?,
+        ghost: R2SnapshotStore.GhostUrls,
+        headCommit: String,
+    ) {
+        val client = MinecraftClient.getInstance()
+        val prefetch = prefetchGhostSnapshot(ghost, headCommit)
+        beginTakeover(client, worldId, shortCode, parent, prefetch)
     }
 
     /**

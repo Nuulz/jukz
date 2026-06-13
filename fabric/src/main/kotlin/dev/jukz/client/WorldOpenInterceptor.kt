@@ -4,6 +4,7 @@ import dev.jukz.JukzMod
 import dev.jukz.client.gui.SearchingHostScreen
 import dev.jukz.core.model.WorldId
 import dev.jukz.discovery.Discovery
+import dev.jukz.sync.R2SnapshotStore
 import dev.jukz.world.WorldIdSidecar
 import kotlinx.coroutines.runBlocking
 import net.minecraft.client.MinecraftClient
@@ -61,10 +62,27 @@ object WorldOpenInterceptor {
             } catch (e: Throwable) {
                 null
             }
-            client.execute {
-                if (live != null) {
+            if (live != null) {
+                client.execute {
                     JukzMod.logger.info("jukz: {} is hosted live — joining instead of opening locally", shortCode)
                     JoinCoordinator.start(worldId, shortCode, parent)
+                }
+                return@Thread
+            }
+            // No live host. Before booting the local (possibly stale) copy, check R2 for a ghost that is
+            // strictly newer than what we hold on disk — if so, pull it and take over, so opening the
+            // world from the singleplayer list gets "the world lives in one place" too, not only the
+            // join-by-code flow. Probe off the render thread; the generation lives in the head object.
+            val localGen = readSidecar(levelName)?.generation ?: -1L
+            val ghost = runCatching { R2SnapshotStore.ghostSnapshot(worldId) }.getOrNull()
+            val head = ghost?.let { runCatching { R2SnapshotStore.ghostHead(it.headUrl) }.getOrNull() }
+            client.execute {
+                if (ghost != null && head != null && head.generation > localGen) {
+                    JukzMod.logger.info(
+                        "jukz: {} has a newer cloud copy (gen {} > local {}) — loading it",
+                        shortCode, head.generation, localGen,
+                    )
+                    JoinCoordinator.takeOverGhost(worldId, shortCode, parent, ghost, head.commit)
                 } else {
                     openLocally(levelName, onCancel)
                 }

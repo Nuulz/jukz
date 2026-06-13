@@ -23,6 +23,9 @@ object R2SnapshotStore {
 
     data class GhostUrls(val packUrl: String, val headUrl: String)
 
+    /** The ghost's head metadata: the fencing [generation] and the [commit] id its pack resets to. */
+    data class GhostHead(val generation: Long, val commit: String)
+
     private val http: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(8))
         .build()
@@ -48,7 +51,9 @@ object R2SnapshotStore {
         val urls = signUpload(base, worldId, generation) ?: return false
         return runCatching {
             putBytes(urls.packUrl, pack, onProgress)
-            putBytes(urls.headUrl, head.toByteArray(Charsets.UTF_8)) { _, _ -> }
+            // The head object carries the fencing generation alongside the commit id ("<gen> <commit>"),
+            // so a direct-open can compare it to the local copy without downloading the whole pack.
+            putBytes(urls.headUrl, "$generation $head".toByteArray(Charsets.UTF_8)) { _, _ -> }
             true
         }.getOrElse {
             JukzMod.logger.warn("jukz: ghost snapshot upload failed ({})", it.message)
@@ -70,6 +75,18 @@ object R2SnapshotStore {
             JukzMod.logger.warn("jukz: ghost snapshot lookup failed ({})", it.message)
             null
         }
+    }
+
+    /**
+     * Probe + parse the ghost head object (small text "<generation> <commit>"). Returns null when no
+     * ghost is present (R2 404) or it is unreadable. A legacy head holding only the commit id parses
+     * with generation 0, so a direct-open comparison treats it as not-newer than any real local copy.
+     */
+    fun ghostHead(headUrl: String): GhostHead? {
+        val text = downloadText(headUrl)?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val parts = text.split(Regex("\\s+"))
+        val gen = if (parts.size >= 2) parts[0].toLongOrNull() else null
+        return if (gen != null) GhostHead(gen, parts[1]) else GhostHead(0L, parts.last())
     }
 
     /** GET a small text object (the head commit id). Returns its trimmed content, or null on 404/error. */
@@ -160,22 +177,38 @@ private class CountingBodyPublisher(
     override fun subscribe(subscriber: java.util.concurrent.Flow.Subscriber<in java.nio.ByteBuffer>) {
         subscriber.onSubscribe(object : java.util.concurrent.Flow.Subscription {
             private var offset = 0
+            private var demand = 0L
+            private var emitting = false
             private var cancelled = false
             private var completed = false
 
             override fun request(n: Long) {
-                if (cancelled || completed) return
-                var remaining = n
-                while (remaining > 0 && offset < data.size) {
-                    val chunk = minOf(64 * 1024, data.size - offset)
-                    subscriber.onNext(java.nio.ByteBuffer.wrap(data, offset, chunk))
-                    offset += chunk
-                    onProgress(offset.toLong(), data.size.toLong())
-                    remaining--
-                }
-                if (offset >= data.size) {
-                    completed = true // Reactive-Streams 1.7: onComplete must be signalled exactly once
-                    subscriber.onComplete()
+                if (cancelled || completed || n <= 0) return
+                demand += n
+                // `java.net.http` re-enters request() from *inside* onNext() (notably over TLS, via the
+                // SSLTube). Guard against that: if a drain loop is already running in an outer frame,
+                // just leave the added demand for it. Recursing here re-reads state mid-emit and resends
+                // the in-flight chunk — a single-chunk PUT (e.g. the 40-byte head) went out as 80 bytes
+                // ("Too many bytes in request body. Expected: 40, got: 80"), and a large body could
+                // overflow the stack. We also advance `offset` *before* onNext so any re-entrant
+                // request() that does slip through observes the post-emit cursor, never the old one.
+                if (emitting) return
+                emitting = true
+                try {
+                    while (demand > 0 && offset < data.size && !cancelled) {
+                        val start = offset
+                        val chunk = minOf(64 * 1024, data.size - start)
+                        offset = start + chunk
+                        demand--
+                        subscriber.onNext(java.nio.ByteBuffer.wrap(data, start, chunk))
+                        onProgress(offset.toLong(), data.size.toLong())
+                    }
+                    if (offset >= data.size && !completed && !cancelled) {
+                        completed = true // Reactive-Streams 1.7: onComplete signalled exactly once
+                        subscriber.onComplete()
+                    }
+                } finally {
+                    emitting = false
                 }
             }
 
