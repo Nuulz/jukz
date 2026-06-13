@@ -4,6 +4,7 @@ import dev.jukz.JukzMod
 import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.host.HostController
 import dev.jukz.core.host.HostStatus
+import dev.jukz.core.model.WorldId
 import dev.jukz.sync.JGitWorldSync
 import dev.jukz.sync.SnapshotPack
 import kotlinx.coroutines.runBlocking
@@ -54,15 +55,23 @@ object HostSession {
      * guest over the connection that is still open, then wait briefly for a download before withdrawing.
      * This uses the open connection rather than discovery, so it never races the registry/cache.
      */
-    fun onServerStopping(saveDir: Path? = null, flushSave: () -> Unit = {}) {
-        controller?.let { c ->
-            if (saveDir != null && c.connectedGuestCount() > 0) {
+    fun onServerStopping(
+        saveDir: Path? = null,
+        worldId: WorldId? = null,
+        generation: Long = 0L,
+        flushSave: () -> Unit = {},
+    ) {
+        val c = controller
+        if (saveDir != null) {
+            if (c != null && c.connectedGuestCount() > 0) {
                 runCatching { flushSave() } // force the world to disk first so the snapshot is current
                 runCatching { offerSnapshotForHandoff(c, saveDir) }
-            } else if (saveDir != null && GhostUpload.isArmed()) {
+            } else if (worldId != null && GhostUpload.isArmed()) {
                 runCatching { flushSave() }
-                runCatching { armGhostUpload(c, saveDir) }
+                runCatching { armGhostUpload(saveDir, worldId, generation) }
             }
+        }
+        if (c != null) {
             runCatching { c.close() } // withdraw + stop heartbeating
             runCatching { onWithdraw() } // tear down any relay control link
             JukzMod.logger.info("jukz: host withdrawn on world close")
@@ -89,16 +98,14 @@ object HostSession {
     }
 
     /**
-     * Build the world pack on a guest-less close and publish it to [GhostUpload] for the client
-     * upload screen to push to R2. Local + fast (no network here); a failure clears the holder so no
-     * upload screen is shown. The record gives us the worldId + fencing generation.
+     * Build the world pack on a guest-less close and publish it to [GhostUpload] for the client upload
+     * screen to push to R2. Local + fast (no network here); a failure clears the holder so no upload
+     * screen is shown. [worldId] + [generation] come from the live `WorldIdState`, so this works even
+     * when auto-hosting never finished installing a controller (a quick open->close racing the announce).
      */
-    private fun armGhostUpload(controller: HostController, saveDir: Path) {
-        val record = controller.sharedRecord ?: run { GhostUpload.clear(); return }
+    private fun armGhostUpload(saveDir: Path, worldId: WorldId, generation: Long) {
         val pack = SnapshotPack.build(saveDir, JGitWorldSync()) ?: run { GhostUpload.clear(); return }
-        GhostUpload.arm(
-            GhostUpload.Pending(record.worldId, record.hostGeneration, pack.bytes, pack.head),
-        )
+        GhostUpload.arm(GhostUpload.Pending(worldId, generation, pack.bytes, pack.head))
         JukzMod.logger.info("jukz: armed ghost snapshot ({} bytes) for upload", pack.bytes.size)
         scheduleCompaction(saveDir)
     }

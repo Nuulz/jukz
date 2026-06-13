@@ -26,6 +26,7 @@ import net.minecraft.client.gui.screen.TitleScreen
 import net.minecraft.server.integrated.IntegratedServer
 import net.minecraft.text.Text
 import net.minecraft.util.WorldSavePath
+import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -178,12 +179,18 @@ object HostCoordinator {
     }
 
     /**
-     * Should a guest-less world close upload a ghost snapshot? True when we are hosting, no guest is
-     * connected over a control channel, and a rendezvous (hence an R2 signer) is configured. Read by
-     * [JukzMod] at SERVER_STOPPING to arm [dev.jukz.runtime.GhostUpload] before the teardown hook.
+     * Should a guest-less world close upload a ghost snapshot? True when no guest is connected over a
+     * control channel, a rendezvous (hence an R2 signer) is configured, and access is not closed.
+     * Read by [JukzMod] at SERVER_STOPPING (which only fires for a locally-opened integrated world, so
+     * this is never a remote guest) to arm [dev.jukz.runtime.GhostUpload] before the teardown hook.
+     *
+     * NB: deliberately does NOT require [HostSession.isHosting]. Auto-hosting can still be establishing
+     * (the announce/relay round-trip takes a moment) when a player opens a world and closes it again
+     * right away; gating on the live controller would skip the backup for that quick close. The world
+     * is ours regardless — its id and generation come from the live [WorldIdState], not the controller.
      */
-    fun shouldUploadGhost(): Boolean =
-        HostSession.isHosting &&
-            HostSession.connectedGuestCount() == 0 &&
-            dev.jukz.sync.R2SnapshotStore.isConfigured()
+    fun shouldUploadGhost(saveDir: Path): Boolean =
+        HostSession.connectedGuestCount() == 0 &&
+            dev.jukz.sync.R2SnapshotStore.isConfigured() &&
+            !runCatching { WorldAccessFlag.isDisabled(saveDir) }.getOrDefault(false)
 }

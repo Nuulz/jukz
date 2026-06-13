@@ -10,6 +10,8 @@ import dev.jukz.core.model.WorldId
 import dev.jukz.core.transport.ChannelDialer
 import dev.jukz.core.transport.DialTarget
 import dev.jukz.core.transport.SocketChannel
+import dev.jukz.runtime.GhostUpload
+import dev.jukz.runtime.HostSession
 import dev.jukz.world.WorldIdSidecar
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -266,6 +268,28 @@ class SnapshotHandoffTest {
             assertEquals(11L, WorldIdSidecar.read(guestDir)?.generation)
         } finally {
             server.close()
+        }
+    }
+
+    @Test
+    fun `a guest-less close arms the ghost upload even when host announce never completed`() {
+        // The race the live logs showed: a player opens a world and closes it within a second or two,
+        // before auto-hosting finished installing a HostController. The world is still ours and must be
+        // backed up — its id + generation come from the live WorldIdState, handed in by JukzMod.
+        val dir = Files.createTempDirectory("jukz-race")
+        Files.writeString(dir.resolve("level.dat"), "world-state")
+        WorldIdSidecar.write(dir, WorldIdSidecar.Info(worldId.uuid, 41)) // a deliberately stale sidecar
+        GhostUpload.clear()
+        try {
+            GhostUpload.markArmed() // JukzMod armed it; no controller was ever installed
+            HostSession.onServerStopping(dir, worldId, 42L) {}
+
+            val pending = GhostUpload.pending()
+            assertTrue(pending != null, "a guest-less close must arm the ghost without a host controller")
+            assertEquals(worldId, pending!!.worldId)
+            assertEquals(42L, pending.generation) // the live generation handed in, not the stale sidecar's 41
+        } finally {
+            GhostUpload.clear()
         }
     }
 }

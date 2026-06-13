@@ -1,5 +1,6 @@
 package dev.jukz
 
+import dev.jukz.core.model.WorldId
 import dev.jukz.runtime.HostSession
 import dev.jukz.world.WorldIdSidecar
 import dev.jukz.world.WorldIdState
@@ -38,8 +39,17 @@ object JukzMod : ModInitializer {
             // control channel) before withdrawing. Whether a guest is connected is read from the
             // connection server, not the player list (which is already being torn down here).
             val saveDir = runCatching { server.getSavePath(WorldSavePath.ROOT) }.getOrNull()
-            if (dev.jukz.client.HostCoordinator.shouldUploadGhost()) dev.jukz.runtime.GhostUpload.markArmed()
-            HostSession.onServerStopping(saveDir) { runCatching { server.saveAll(true, true, true) } }
+            // The world's id + generation come from the live WorldIdState — authoritative even when
+            // auto-hosting never finished announcing, so a quick open->close still backs the world up.
+            val state = runCatching { WorldIdState.get(server.overworld) }.getOrNull()
+            if (saveDir != null && dev.jukz.client.HostCoordinator.shouldUploadGhost(saveDir)) {
+                dev.jukz.runtime.GhostUpload.markArmed()
+            }
+            HostSession.onServerStopping(
+                saveDir,
+                state?.let { WorldId.of(it.worldId) },
+                state?.generation ?: 0L,
+            ) { runCatching { server.saveAll(true, true, true) } }
         }
 
         logger.info("jukz initialized")
