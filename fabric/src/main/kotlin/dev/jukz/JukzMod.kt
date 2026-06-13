@@ -38,6 +38,7 @@ object JukzMod : ModInitializer {
             // control channel) before withdrawing. Whether a guest is connected is read from the
             // connection server, not the player list (which is already being torn down here).
             val saveDir = runCatching { server.getSavePath(WorldSavePath.ROOT) }.getOrNull()
+            if (dev.jukz.client.HostCoordinator.shouldUploadGhost()) dev.jukz.runtime.GhostUpload.markArmed()
             HostSession.onServerStopping(saveDir) { runCatching { server.saveAll(true, true, true) } }
         }
 

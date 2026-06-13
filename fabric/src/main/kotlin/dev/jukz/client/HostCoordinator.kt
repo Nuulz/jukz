@@ -176,4 +176,14 @@ object HostCoordinator {
         client.disconnect(MessageScreen(Text.translatable("menu.savingLevel")))
         JoinCoordinator.start(worldId, shortCode, TitleScreen())
     }
+
+    /**
+     * Should a guest-less world close upload a ghost snapshot? True when we are hosting, no guest is
+     * connected over a control channel, and a rendezvous (hence an R2 signer) is configured. Read by
+     * [JukzMod] at SERVER_STOPPING to arm [dev.jukz.runtime.GhostUpload] before the teardown hook.
+     */
+    fun shouldUploadGhost(): Boolean =
+        HostSession.isHosting &&
+            HostSession.connectedGuestCount() == 0 &&
+            dev.jukz.sync.R2SnapshotStore.isConfigured()
 }
