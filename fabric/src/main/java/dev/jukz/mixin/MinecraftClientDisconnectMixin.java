@@ -2,6 +2,8 @@ package dev.jukz.mixin;
 
 import dev.jukz.client.GuestSession;
 import dev.jukz.client.gui.HostLeavingScreen;
+import dev.jukz.client.gui.UploadingWorldScreen;
+import dev.jukz.runtime.GhostUpload;
 import dev.jukz.runtime.HostSession;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.DisconnectedScreen;
@@ -43,6 +45,9 @@ public abstract class MinecraftClientDisconnectMixin {
         require = 0
     )
     private Screen jukz$handoffScreen(Screen original) {
+        if (GhostUpload.INSTANCE.isArmed()) {
+            return new UploadingWorldScreen();
+        }
         if (HostSession.INSTANCE.isHosting() && HostSession.INSTANCE.connectedGuestCount() > 0) {
             return new MessageScreen(Text.literal("Handing the world to the next host…"));
         }
