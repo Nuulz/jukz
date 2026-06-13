@@ -315,6 +315,17 @@ object JoinCoordinator {
                 return@Thread
             }
 
+            // The ghost apply took a few seconds — check once more whether another client announced
+            // in the meantime. If so, join that host instead of opening a duplicate local server.
+            // Without this check, two clients that both see "no live host" can race to take over
+            // the same ghost and end up on separate servers for up to a heartbeat interval (~30s).
+            val raceWinner = runCatching { runBlocking { Discovery.registry.lookup(worldId) } }.getOrNull()
+            if (raceWinner != null) {
+                JukzMod.logger.info("jukz: {} was claimed by another host while taking over — joining instead", shortCode)
+                client.execute { start(worldId, shortCode, parent) }
+                return@Thread
+            }
+
             JukzMod.logger.info("jukz: taking over {} (snapshot {})", shortCode, if (applied) "applied" else "unavailable")
             client.execute { WorldOpenInterceptor.openLocallyBypassingDiscovery(levelName) }
         }.apply { isDaemon = true; name = "jukz-takeover" }.start()
