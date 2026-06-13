@@ -75,9 +75,15 @@ object JoinCoordinator {
             // down — otherwise its handoff watcher outlives the visit and pops a stale "Host now".
             if (result is JoinResult.Connected) GuestSession.install(controller)
             if (result is JoinResult.HostUnavailable) {
+                // The rendezvous signs download URLs without checking R2 for the object (it stays
+                // stateless), so a non-null sign response does NOT mean a snapshot exists. Probe the
+                // tiny head object here, off the render thread: only a real 200 means a ghost is
+                // present. A 404 (no upload for this code) falls through to the normal "No live host"
+                // screen, instead of dangling a misleading "you have the latest world" takeover prompt.
                 val ghost = R2SnapshotStore.ghostSnapshot(worldId)
-                if (ghost != null) {
-                    client.execute { showGhostTakeover(client, worldId, shortCode, parent, ghost) }
+                val head = ghost?.let { R2SnapshotStore.downloadText(it.headUrl) }
+                if (ghost != null && head != null) {
+                    client.execute { showGhostTakeover(client, worldId, shortCode, parent, ghost, head) }
                     return@Thread
                 }
             }
@@ -185,8 +191,9 @@ object JoinCoordinator {
         shortCode: String,
         parent: Screen?,
         ghost: R2SnapshotStore.GhostUrls,
+        head: String,
     ) {
-        val prefetch = prefetchGhostSnapshot(ghost)
+        val prefetch = prefetchGhostSnapshot(ghost, head)
         val screen = HostHandoffScreen(
             snapshotApplied = true,
             onHostNow = { beginTakeover(client, worldId, shortCode, parent, prefetch) },
@@ -195,14 +202,17 @@ object JoinCoordinator {
         client.setScreen(screen)
     }
 
-    /** Download the ghost pack + head from R2 into a temp [JGitWorldSync.Downloaded], off-thread. */
+    /**
+     * Download the ghost pack from R2 into a temp [JGitWorldSync.Downloaded], off-thread. The [head]
+     * commit id was already fetched (to confirm the ghost exists), so only the pack is pulled here.
+     */
     private fun prefetchGhostSnapshot(
         ghost: R2SnapshotStore.GhostUrls,
+        head: String,
     ): CompletableFuture<JGitWorldSync.Downloaded?> {
         val future = CompletableFuture<JGitWorldSync.Downloaded?>()
         Thread {
             val downloaded = runCatching {
-                val head = R2SnapshotStore.downloadText(ghost.headUrl) ?: return@runCatching null
                 val pack = R2SnapshotStore.downloadToTemp(ghost.packUrl) { _, _ -> } ?: return@runCatching null
                 JGitWorldSync.Downloaded(pack, org.eclipse.jgit.lib.ObjectId.fromString(head))
             }.getOrNull()
