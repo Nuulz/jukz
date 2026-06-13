@@ -41,12 +41,14 @@ impl SnapshotStore {
         Some(SnapshotStore { bucket, credentials, fence: Mutex::new(HashMap::new()) })
     }
 
+    // One "folder" per world (a key prefix — R2/S3 has a flat namespace, but a `/` renders as a folder
+    // in the dashboard), holding the pack and its head, so a world's objects group together.
     fn pack_key(world_id: Uuid) -> String {
-        format!("{world_id}.pack")
+        format!("{world_id}/pack")
     }
 
     fn head_key(world_id: Uuid) -> String {
-        format!("{world_id}.head")
+        format!("{world_id}/head")
     }
 
     /// Gate + sign an upload. Returns the (pack, head) presigned PUT URLs, or None when the
@@ -55,7 +57,12 @@ impl SnapshotStore {
         {
             let mut fence = self.fence.lock().unwrap();
             let current = fence.get(&world_id).copied().unwrap_or(i64::MIN);
-            if generation <= current {
+            // Reject only a STRICTLY-older generation (a stale host trying to clobber a newer snapshot).
+            // Equal is allowed: a generation is unique per host start, so the only re-sign at the same
+            // generation is the same host retrying its own upload (e.g. after a transient PUT failure) —
+            // rejecting that would poison every retry with a 409 and lose the backup. The retry just
+            // overwrites its own objects, which is idempotent.
+            if generation < current {
                 return None;
             }
             fence.insert(world_id, generation);
@@ -119,12 +126,14 @@ mod tests {
     }
 
     #[test]
-    fn equal_or_lower_generation_is_rejected() {
+    fn equal_generation_is_allowed_but_lower_is_rejected() {
         let store = fence_only();
         let w = Uuid::new_v4();
         assert!(store.sign_upload(w, 5).is_some());
-        assert!(store.sign_upload(w, 5).is_none(), "equal generation rejected");
-        assert!(store.sign_upload(w, 4).is_none(), "lower generation rejected");
+        // Same host retrying its own upload at the same generation must be allowed (idempotent), or
+        // every retry after a transient PUT failure would 409 and the world would lose its backup.
+        assert!(store.sign_upload(w, 5).is_some(), "equal generation allowed (same-host retry)");
+        assert!(store.sign_upload(w, 4).is_none(), "strictly-lower generation rejected");
     }
 
     #[test]
