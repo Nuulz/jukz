@@ -20,6 +20,7 @@ import dev.jukz.transport.CompositeChannelDialer
 import dev.jukz.transport.WsRelayTransport
 import dev.jukz.core.util.SystemClock
 import dev.jukz.sync.JGitWorldSync
+import dev.jukz.sync.R2SnapshotStore
 import dev.jukz.world.WorldSaveLocator
 import kotlinx.coroutines.runBlocking
 import net.minecraft.client.MinecraftClient
@@ -73,6 +74,13 @@ object JoinCoordinator {
             // Track the live session so leaving the world (a normal disconnect) tears the controller
             // down — otherwise its handoff watcher outlives the visit and pops a stale "Host now".
             if (result is JoinResult.Connected) GuestSession.install(controller)
+            if (result is JoinResult.HostUnavailable) {
+                val ghost = R2SnapshotStore.ghostSnapshot(worldId)
+                if (ghost != null) {
+                    client.execute { showGhostTakeover(client, worldId, shortCode, parent, ghost) }
+                    return@Thread
+                }
+            }
             client.execute { applyResult(client, result, worldId, shortCode, parent) }
         }.apply {
             isDaemon = true
@@ -165,6 +173,43 @@ object JoinCoordinator {
             // were never connected to a world), just show it.
             if (client.world != null) client.disconnect(screen) else client.setScreen(screen)
         }
+    }
+
+    /**
+     * No live host, but R2 holds a snapshot (ghost takeover). Prefetch the pack over HTTP and offer
+     * the same "Host now" prompt the live handoff uses; taking over reuses [beginTakeover].
+     */
+    private fun showGhostTakeover(
+        client: MinecraftClient,
+        worldId: WorldId,
+        shortCode: String,
+        parent: Screen?,
+        ghost: R2SnapshotStore.GhostUrls,
+    ) {
+        val prefetch = prefetchGhostSnapshot(ghost)
+        val screen = HostHandoffScreen(
+            snapshotApplied = true,
+            onHostNow = { beginTakeover(client, worldId, shortCode, parent, prefetch) },
+            onBack = { discardPrefetch(prefetch); client.setScreen(parent) },
+        )
+        client.setScreen(screen)
+    }
+
+    /** Download the ghost pack + head from R2 into a temp [JGitWorldSync.Downloaded], off-thread. */
+    private fun prefetchGhostSnapshot(
+        ghost: R2SnapshotStore.GhostUrls,
+    ): CompletableFuture<JGitWorldSync.Downloaded?> {
+        val future = CompletableFuture<JGitWorldSync.Downloaded?>()
+        Thread {
+            val downloaded = runCatching {
+                val head = R2SnapshotStore.downloadText(ghost.headUrl) ?: return@runCatching null
+                val pack = R2SnapshotStore.downloadToTemp(ghost.packUrl) { _, _ -> } ?: return@runCatching null
+                JGitWorldSync.Downloaded(pack, org.eclipse.jgit.lib.ObjectId.fromString(head))
+            }.getOrNull()
+            JukzMod.logger.info("jukz: prefetched ghost snapshot: {}", if (downloaded != null) "ready" else "unavailable")
+            future.complete(downloaded)
+        }.apply { isDaemon = true; name = "jukz-ghost-prefetch" }.start()
+        return future
     }
 
     /**
