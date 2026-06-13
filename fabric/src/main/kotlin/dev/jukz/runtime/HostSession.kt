@@ -80,6 +80,7 @@ object HostSession {
      */
     private fun offerSnapshotForHandoff(controller: HostController, saveDir: Path) {
         val pack = SnapshotPack.build(saveDir, JGitWorldSync()) ?: return
+        scheduleCompaction(saveDir)
         val (offer, latch) = controller.offerSnapshot(pack.bytes, pack.head) ?: return
         JukzMod.logger.info("jukz: handing off — notifying {} guest(s) over the live connection", controller.connectedGuestCount())
         controller.notifyGuestsLeaving(offer) // push the snapshot endpoint over the live control channels
@@ -99,6 +100,19 @@ object HostSession {
             GhostUpload.Pending(record.worldId, record.hostGeneration, pack.bytes, pack.head),
         )
         JukzMod.logger.info("jukz: armed ghost snapshot ({} bytes) for upload", pack.bytes.size)
+        scheduleCompaction(saveDir)
+    }
+
+    /**
+     * Reclaim the host's local `.git` off the hot path: the snapshot build just re-rooted HEAD, so the
+     * old history is unreachable and collectable. Runs on a daemon thread so it never delays the world
+     * close, and is gated + grace-guarded inside [JGitWorldSync.compactIfNeeded] so it is safe to fire
+     * even if the player immediately reopens the world.
+     */
+    private fun scheduleCompaction(saveDir: Path) {
+        Thread { JGitWorldSync().compactIfNeeded(saveDir) }
+            .apply { isDaemon = true; name = "jukz-repo-compact" }
+            .start()
     }
 
     /**

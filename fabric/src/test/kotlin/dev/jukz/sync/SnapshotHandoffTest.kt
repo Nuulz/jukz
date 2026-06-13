@@ -225,4 +225,47 @@ class SnapshotHandoffTest {
             }
         }
     }
+
+    @Test
+    fun `compaction reclaims the orphaned history while keeping the current world intact`() {
+        val dir = Files.createTempDirectory("jukz-compact")
+        WorldIdSidecar.write(dir, WorldIdSidecar.Info(worldId.uuid, 1))
+        val sync = JGitWorldSync()
+        fun saveRegion(seed: Int) =
+            Files.write(dir.resolve("r.0.0.mca"), kotlin.random.Random(seed).nextBytes(512 * 1024))
+        fun gitSize() = Files.walk(dir.resolve(".git")).use { s ->
+            s.filter { Files.isRegularFile(it) }.mapToLong { Files.size(it) }.sum()
+        }
+
+        saveRegion(1)
+        SnapshotPack.build(dir, sync) ?: error("first build")
+        repeat(10) { i ->
+            saveRegion(i + 2)
+            WorldIdSidecar.write(dir, WorldIdSidecar.Info(worldId.uuid, (i + 2).toLong()))
+            SnapshotPack.build(dir, sync) ?: error("build $i")
+        }
+        val latestRegion = Files.readAllBytes(dir.resolve("r.0.0.mca"))
+        val before = gitSize()
+
+        // Force a full prune (no threshold, no grace) — the gated background compaction made determin.
+        sync.compactIfNeeded(dir, thresholdBytes = 0L, graceMillis = 0L)
+        val after = gitSize()
+
+        assertTrue(after < before / 2, "compaction did not reclaim disk: before=$before after=$after")
+
+        // The current world must still serve a faithful snapshot after the repo was compacted.
+        val (server, port) = armedHost(dir, "gate")
+        try {
+            val guestDir = Files.createTempDirectory("jukz-compact-guest")
+            val pulled = runBlocking { JGitWorldSync().pullLatest(guestDir, offerRecord(port, "gate")) }
+            assertTrue(pulled)
+            assertTrue(
+                latestRegion.contentEquals(Files.readAllBytes(guestDir.resolve("r.0.0.mca"))),
+                "compaction corrupted or dropped the current world",
+            )
+            assertEquals(11L, WorldIdSidecar.read(guestDir)?.generation)
+        } finally {
+            server.close()
+        }
+    }
 }

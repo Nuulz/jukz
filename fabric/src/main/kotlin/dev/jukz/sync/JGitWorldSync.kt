@@ -138,6 +138,50 @@ class JGitWorldSync(
         }
 
     /**
+     * Bound the host's local `.git` on disk: once it grows past [thresholdBytes], run `git gc` to
+     * repack the reachable current world and prune the now-unreachable history. The snapshot build
+     * re-roots HEAD at a parentless commit, so every prior commit/region-version is unreachable and
+     * collectable. [graceMillis] keeps very recent objects, so a gc racing a concurrent commit/apply
+     * can never prune that operation's fresh objects. Best-effort and meant for a background thread:
+     * a failure (e.g. a lock race) is logged and skipped, to be retried on a later, quieter close.
+     */
+    fun compactIfNeeded(
+        saveDir: Path,
+        thresholdBytes: Long = GC_THRESHOLD_BYTES,
+        graceMillis: Long = GC_GRACE_MS,
+    ) {
+        if (runCatching { gitDirSize(saveDir) }.getOrDefault(0L) < thresholdBytes) return
+        runCatching {
+            // Repos created before the reflog was disabled still have entries pinning old commits;
+            // drop them (jukz never reads the reflog) so gc can actually reclaim the re-rooted history.
+            deleteRecursively(saveDir.resolve(".git").resolve("logs"))
+            Git.open(saveDir.toFile()).use { git ->
+                git.gc().setExpire(java.util.Date(System.currentTimeMillis() - graceMillis)).call()
+            }
+            JukzMod.logger.info("jukz: compacted local world repo")
+        }.onFailure { JukzMod.logger.info("jukz: world repo compaction skipped ({})", it.message) }
+    }
+
+    /** Recursively delete [path] (deepest entries first); best-effort, used to drop the reflog. */
+    private fun deleteRecursively(path: Path) {
+        if (!Files.exists(path)) return
+        Files.walk(path).use { stream ->
+            stream.sorted { a, b -> b.compareTo(a) }.forEach { p -> runCatching { Files.delete(p) } }
+        }
+    }
+
+    /** Total bytes under `<saveDir>/.git`, or 0 when there is no repo yet. */
+    private fun gitDirSize(saveDir: Path): Long {
+        val gitDir = saveDir.resolve(".git")
+        if (!Files.exists(gitDir)) return 0L
+        return Files.walk(gitDir).use { stream ->
+            stream.filter { Files.isRegularFile(it) }
+                .mapToLong { runCatching { Files.size(it) }.getOrDefault(0L) }
+                .sum()
+        }
+    }
+
+    /**
      * Pull the host's armed pack into [dest] over a [ConnectionType.SNAPSHOT] channel — the same
      * connection-server port the game already reaches, so it crosses NAT without a second forward.
      * Wire: write the gate token (UTF), read a status byte (1 = accepted), then the head commit id
@@ -215,12 +259,25 @@ class JGitWorldSync(
         }.onFailure { JukzMod.logger.warn("jukz: could not strip inherited host player ({})", it.message) }
     }
 
-    private fun openOrInit(saveDir: Path): Git =
-        if (Files.exists(saveDir.resolve(".git"))) {
+    private fun openOrInit(saveDir: Path): Git {
+        val git = if (Files.exists(saveDir.resolve(".git"))) {
             Git.open(saveDir.toFile())
         } else {
             Git.init().setDirectory(saveDir.toFile()).call()
         }
+        // jukz uses git purely as snapshot transport — no branches, no history browsing, no reflog.
+        // With the reflog on, every ref update (including the snapshot re-root) pins the old commit
+        // for ~90 days, so compactIfNeeded could never reclaim a re-rooted history. Turn it off so an
+        // unreferenced commit is immediately collectable.
+        runCatching {
+            val cfg = git.repository.config
+            if (cfg.getString("core", null, "logAllRefUpdates") != "false") {
+                cfg.setBoolean("core", null, "logAllRefUpdates", false)
+                cfg.save()
+            }
+        }
+        return git
+    }
 
     /** Ensure session.lock is git-ignored so a `git add` over a loaded world doesn't choke on the lock. */
     private fun ensureGitignore(saveDir: Path) {
@@ -234,5 +291,10 @@ class JGitWorldSync(
         const val COMMIT_PREFIX = "jukz generation "
         const val IGNORED_LOCK = "session.lock"
         val COMMIT_GENERATION = Regex("""jukz generation (\d+)""")
+
+        /** Only compact once the local `.git` grows past this (the reachable world is far smaller). */
+        const val GC_THRESHOLD_BYTES = 256L * 1024 * 1024 // 256 MiB
+        /** Never prune objects newer than this — protects a concurrent commit/apply from the gc. */
+        const val GC_GRACE_MS = 10L * 60 * 1000 // 10 minutes
     }
 }

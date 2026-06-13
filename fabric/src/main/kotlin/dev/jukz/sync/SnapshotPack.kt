@@ -6,6 +6,7 @@ import kotlinx.coroutines.runBlocking
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.internal.storage.pack.PackWriter
 import org.eclipse.jgit.lib.CommitBuilder
+import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.NullProgressMonitor
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.lib.PersonIdent
@@ -58,6 +59,14 @@ object SnapshotPack {
                     val id = inserter.insert(rootCommit)
                     inserter.flush()
                     id
+                }
+                // Re-root the LOCAL repo at the orphan too, so the prior commit chain becomes
+                // unreachable and a later gc ([JGitWorldSync.compactIfNeeded]) can reclaim it —
+                // otherwise the host's .git would keep every region version of every save forever.
+                repo.updateRef(Constants.HEAD).apply {
+                    setNewObjectId(rootId)
+                    setForceUpdate(true)
+                    update()
                 }
                 val out = ByteArrayOutputStream()
                 PackWriter(repo).use { pw ->
