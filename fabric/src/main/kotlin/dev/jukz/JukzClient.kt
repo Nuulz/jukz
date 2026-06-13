@@ -8,6 +8,7 @@ import dev.jukz.client.gui.JoinPromptScreen
 import dev.jukz.client.gui.UploadingWorldScreen
 import dev.jukz.client.gui.WorldListLiveBadge
 import dev.jukz.core.model.WorldId
+import dev.jukz.runtime.GhostUpload
 import dev.jukz.world.WorldIdSidecar
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
@@ -81,6 +82,22 @@ object JukzClient : ClientModInitializer {
                 }
             }
         }
+
+        // Surface the ghost-upload screen once a guest-less close has armed it. It cannot be shown from
+        // inside MinecraftClient.disconnect(): disconnect() consumes its screen early (via reset) and
+        // GameMenuScreen sets a fresh TitleScreen *after* disconnect() returns, overriding anything the
+        // disconnect path installed — and the upload is only armed during the SERVER_STOPPING that the
+        // same disconnect() drives. So we react here, after the world is gone and the pack is ready
+        // (pending != null). This tick runs after that TitleScreen, so the screen sticks; the upload
+        // screen clears GhostUpload when it finishes, so this fires exactly once per guest-less close.
+        ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { client ->
+            if (client.world == null &&
+                GhostUpload.pending() != null &&
+                client.currentScreen !is UploadingWorldScreen
+            ) {
+                client.setScreen(UploadingWorldScreen())
+            }
+        })
 
         // Veto the window X while a ghost upload is in progress, so an accidental close doesn't
         // abandon the backup. Registered on the first tick (the window + Minecraft's own close
