@@ -34,6 +34,16 @@ class HostHandoffScreen(
 
     override fun shouldCloseOnEsc(): Boolean = true
 
+    /**
+     * Dismissing with Esc must run the same teardown as the "Back" button — otherwise the prefetched
+     * snapshot pack (downloaded eagerly the moment this prompt appeared) would be left on disk, since
+     * the default [close] just swaps the screen. "Host now" replaces the screen via setScreen (which
+     * routes through removed(), not close()), so taking over still keeps the pack.
+     */
+    override fun close() {
+        onBack()
+    }
+
     companion object {
         const val TITLE = "The host left"
 
