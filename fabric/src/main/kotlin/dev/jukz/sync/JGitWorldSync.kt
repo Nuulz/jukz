@@ -14,6 +14,8 @@ import dev.jukz.core.transport.DirectChannelDialer
 import dev.jukz.world.WorldIdSidecar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import net.minecraft.nbt.NbtIo
+import net.minecraft.nbt.NbtSizeTracker
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ResetCommand
 import org.eclipse.jgit.lib.NullProgressMonitor
@@ -125,6 +127,7 @@ class JGitWorldSync(
         withContext(Dispatchers.IO) {
             runCatching {
                 applyPack(saveDir, downloaded.packPath, downloaded.head)
+                stripInheritedHostPlayer(saveDir)
                 mirrorGeneration(saveDir, worldId, fallbackGeneration)
                 JukzMod.logger.info("jukz: applied snapshot {} for {}", downloaded.head.name, worldId)
                 true
@@ -186,6 +189,30 @@ class JGitWorldSync(
                 ?: fallbackGeneration
             WorldIdSidecar.write(saveDir, WorldIdSidecar.Info(worldId.uuid, generation))
         }
+    }
+
+    /**
+     * Drop the singleplayer-owner player data baked into the snapshot's `level.dat` (`Data.Player`).
+     * Minecraft loads that compound for whoever opens the world as host (`PlayerManager.loadPlayerData`
+     * reads `SaveProperties.getPlayerData()` for `isHost` players, only falling back to
+     * `playerdata/<uuid>.dat` when it is null). Without this, the player taking over would inherit the
+     * PREVIOUS host's position, inventory, health and XP. Removing it makes `getPlayerData()` null, so
+     * every player loads their OWN `playerdata/<uuid>.dat` (which the server saves for all players,
+     * host included, and the pack carries) — returning players resume where they were, brand-new ones
+     * spawn at the world spawn. Best-effort: a failure just leaves the inherited data.
+     */
+    private fun stripInheritedHostPlayer(saveDir: Path) {
+        val levelDat = saveDir.resolve("level.dat")
+        if (!Files.exists(levelDat)) return
+        runCatching {
+            val root = NbtIo.readCompressed(levelDat, NbtSizeTracker.ofUnlimitedBytes())
+            val data = root.getCompound("Data")
+            if (data.contains("Player")) {
+                data.remove("Player")
+                NbtIo.writeCompressed(root, levelDat)
+                JukzMod.logger.info("jukz: cleared inherited host player from snapshot level.dat")
+            }
+        }.onFailure { JukzMod.logger.warn("jukz: could not strip inherited host player ({})", it.message) }
     }
 
     private fun openOrInit(saveDir: Path): Git =
