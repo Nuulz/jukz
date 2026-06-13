@@ -386,7 +386,7 @@ async fn snapshot_upload_url(
     match store.sign_upload(body.world_id, body.generation) {
         Some((pack_url, head_url)) => {
             tracing::info!(world = %body.world_id, generation = body.generation, "snapshot upload signed");
-            (StatusCode::OK, Json(json!({ "packUrl": pack_url, "headUrl": head_url, "expiresInSec": 300 })))
+            (StatusCode::OK, Json(json!({ "packUrl": pack_url, "headUrl": head_url, "expiresInSec": snapshot::URL_TTL_SECS })))
                 .into_response()
         }
         None => (StatusCode::CONFLICT, Json(json!({ "status": "stale" }))).into_response(),

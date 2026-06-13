@@ -12,8 +12,10 @@ use std::time::Duration;
 use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
 use uuid::Uuid;
 
-/// How long a signed URL is valid. Short: the client uses it immediately.
-const URL_TTL: Duration = Duration::from_secs(300);
+/// How long a signed URL is valid, in seconds. Short: the client uses it immediately.
+/// Exposed so the handler can advertise the same value it signs with (no duplicated literal).
+pub const URL_TTL_SECS: u64 = 300;
+const URL_TTL: Duration = Duration::from_secs(URL_TTL_SECS);
 
 pub struct SnapshotStore {
     bucket: Bucket,
