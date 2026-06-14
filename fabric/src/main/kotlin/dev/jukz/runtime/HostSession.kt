@@ -110,7 +110,14 @@ object HostSession {
         if (saveDir != null) {
             if (c != null && c.connectedGuestCount() > 0) {
                 runCatching { flushSave() } // force the world to disk first so the snapshot is current
-                runCatching { offerSnapshotForHandoff(c, saveDir) }
+                val handedOff = runCatching { offerSnapshotForHandoff(c, saveDir) }.getOrDefault(false)
+                // A handoff that no guest completed (they all dropped their control channel, or it timed
+                // out) would otherwise strand the latest world on our local disk. The live handoff is an
+                // optimization; the cloud ghost is the durability net — so when nobody took over, back
+                // the world up to R2 instead, exactly as a guest-less close does.
+                if (!handedOff && worldId != null && GhostUpload.isArmed()) {
+                    runCatching { armGhostUpload(saveDir, worldId, generation) }
+                }
             } else if (worldId != null && GhostUpload.isArmed()) {
                 runCatching { flushSave() }
                 runCatching { armGhostUpload(saveDir, worldId, generation) }
@@ -130,16 +137,19 @@ object HostSession {
      * live control channels, then block up to [SNAPSHOT_WAIT_MS] for a guest to pull. The pull rides
      * the same connection-server port the game uses, so it crosses NAT exactly like play does — no
      * second port to forward. The armed server stays open until the caller's [HostController.close]
-     * withdraws. Best-effort: any failure just falls through to the withdraw.
+     * withdraws. Returns true only when a guest actually pulled the snapshot (and so became the new
+     * host); false on any failure or when nobody took over, so the caller can fall back to a cloud
+     * backup rather than strand the world.
      */
-    private fun offerSnapshotForHandoff(controller: HostController, saveDir: Path) {
-        val pack = SnapshotPack.build(saveDir, JGitWorldSync()) ?: return
+    private fun offerSnapshotForHandoff(controller: HostController, saveDir: Path): Boolean {
+        val pack = SnapshotPack.build(saveDir, JGitWorldSync()) ?: return false
         scheduleCompaction(saveDir)
-        val (offer, latch) = controller.offerSnapshot(pack.bytes, pack.head) ?: return
+        val (offer, latch) = controller.offerSnapshot(pack.bytes, pack.head) ?: return false
         JukzMod.logger.info("jukz: handing off — notifying {} guest(s) over the live connection", controller.connectedGuestCount())
         controller.notifyGuestsLeaving(offer) // push the snapshot endpoint over the live control channels
         val outcome = awaitSnapshotPull(controller, latch)
-        JukzMod.logger.info("jukz: snapshot handoff {}", outcome)
+        JukzMod.logger.info("jukz: snapshot handoff {}", outcome.log)
+        return outcome.downloaded
     }
 
     /**
@@ -174,14 +184,25 @@ object HostSession {
      * for no reason. We poll the latch in short slices and bail out the moment the connected-guest count
      * hits zero (the receiver dropped its control channel). Returns a log-ready outcome string.
      */
-    private fun awaitSnapshotPull(controller: HostController, latch: CountDownLatch): String {
+    private fun awaitSnapshotPull(controller: HostController, latch: CountDownLatch): HandoffOutcome {
         var waited = 0L
         while (waited < SNAPSHOT_WAIT_MS) {
-            if (latch.await(HANDOFF_POLL_MS, TimeUnit.MILLISECONDS)) return "downloaded by a guest"
-            if (controller.connectedGuestCount() == 0) return "no guest left to take over — not waiting"
+            if (latch.await(HANDOFF_POLL_MS, TimeUnit.MILLISECONDS)) return HandoffOutcome.DOWNLOADED
+            if (controller.connectedGuestCount() == 0) return HandoffOutcome.NO_GUEST_LEFT
             waited += HANDOFF_POLL_MS
         }
-        return "timed out"
+        return HandoffOutcome.TIMED_OUT
+    }
+
+    /**
+     * The result of awaiting a handoff pull: a [log] string for the operator line plus the one fact the
+     * caller acts on — did a guest actually take the world ([downloaded])? When none did, the leaving
+     * host backs the world up to the cloud rather than strand the latest state on local disk.
+     */
+    private enum class HandoffOutcome(val log: String, val downloaded: Boolean) {
+        DOWNLOADED("downloaded by a guest", true),
+        NO_GUEST_LEFT("no guest left to take over — not waiting", false),
+        TIMED_OUT("timed out", false),
     }
 
     private const val SNAPSHOT_WAIT_MS = 30_000L

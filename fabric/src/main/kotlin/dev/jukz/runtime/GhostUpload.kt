@@ -27,12 +27,20 @@ object GhostUpload {
     @Volatile
     private var pending: Pending? = null
 
-    /** Set the moment we decide a ghost upload will happen (before the pack is built). */
-    fun markArmed() {
-        armed = true
+    /** Arm the upload (equivalent to [setArmed]`(true)`); kept for call sites that only ever arm. */
+    fun markArmed() = setArmed(true)
+
+    /**
+     * Set whether this world close may back up to the cloud — true when the world is eligible
+     * (rendezvous configured, access open), regardless of any connected guest. A leaving host prefers a
+     * live P2P handoff when guests are present and only uploads when that handoff reaches nobody, so
+     * this is set per close (from JukzMod) so a previous world's decision never leaks into the next.
+     */
+    fun setArmed(value: Boolean) {
+        armed = value
     }
 
-    /** True once a guest-less close has decided to upload; read by the disconnect mixin. */
+    /** True when this close may upload (a handoff that reached nobody, or a guest-less close). */
     fun isArmed(): Boolean = armed
 
     /**

@@ -203,10 +203,14 @@ object HostCoordinator {
     }
 
     /**
-     * Should a guest-less world close upload a ghost snapshot? True when no guest is connected over a
-     * control channel, a rendezvous (hence an R2 signer) is configured, and access is not closed.
-     * Read by [JukzMod] at SERVER_STOPPING (which only fires for a locally-opened integrated world, so
-     * this is never a remote guest) to arm [dev.jukz.runtime.GhostUpload] before the teardown hook.
+     * Is this world eligible to be backed up to the cloud when it closes? True when a rendezvous (hence
+     * an R2 signer) is configured and access is not closed. Read by [JukzMod] at SERVER_STOPPING (which
+     * only fires for a locally-opened integrated world, so this is never a remote guest) to arm
+     * [dev.jukz.runtime.GhostUpload] before the teardown hook.
+     *
+     * Deliberately does NOT require the absence of guests: a host that leaves with a guest connected
+     * prefers a live P2P handoff, but [dev.jukz.runtime.HostSession.onServerStopping] falls back to this
+     * cloud backup when the handoff reaches nobody, so the latest state is never stranded on local disk.
      *
      * NB: deliberately does NOT require [HostSession.isHosting]. Auto-hosting can still be establishing
      * (the announce/relay round-trip takes a moment) when a player opens a world and closes it again
@@ -214,7 +218,6 @@ object HostCoordinator {
      * is ours regardless — its id and generation come from the live [WorldIdState], not the controller.
      */
     fun shouldUploadGhost(saveDir: Path): Boolean =
-        HostSession.connectedGuestCount() == 0 &&
-            dev.jukz.sync.R2SnapshotStore.isConfigured() &&
+        dev.jukz.sync.R2SnapshotStore.isConfigured() &&
             !runCatching { WorldAccessFlag.isDisabled(saveDir) }.getOrDefault(false)
 }

@@ -47,9 +47,13 @@ object JukzMod : ModInitializer {
             // The world's id + generation come from the live WorldIdState — authoritative even when
             // auto-hosting never finished announcing, so a quick open->close still backs the world up.
             val state = runCatching { WorldIdState.get(server.overworld) }.getOrNull()
-            if (saveDir != null && dev.jukz.client.HostCoordinator.shouldUploadGhost(saveDir)) {
-                dev.jukz.runtime.GhostUpload.markArmed()
-            }
+            // Arm the cloud backup whenever the world is eligible (rendezvous + access open), with or
+            // without guests: a guest-less close uploads directly, and a close mid-handoff falls back to
+            // the upload when no guest takes over. Set explicitly each close so a prior world's decision
+            // never leaks forward.
+            dev.jukz.runtime.GhostUpload.setArmed(
+                saveDir != null && dev.jukz.client.HostCoordinator.shouldUploadGhost(saveDir),
+            )
             HostSession.onServerStopping(
                 saveDir,
                 state?.let { WorldId.of(it.worldId) },
