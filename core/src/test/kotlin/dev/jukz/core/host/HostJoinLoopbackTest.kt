@@ -94,9 +94,10 @@ class HostJoinLoopbackTest {
 
         val lost = CompletableFuture<SnapshotOffer?>()
         val reachedVia = CompletableFuture<DialTarget?>()
+        val leavingGen = CompletableFuture<Long>()
         val joiner = JoinController(
             registry, DirectChannelDialer(DirectTcpTransport()), CapturingHandoff(), SystemClock, config,
-            onHostLost = { _, offer, target -> lost.complete(offer); reachedVia.complete(target) },
+            onHostLost = { _, offer, target, gen -> lost.complete(offer); reachedVia.complete(target); leavingGen.complete(gen) },
         )
         assertInstanceOf(JoinResult.Connected::class.java, joiner.join(world))
         assertEquals(1, host.connectedGuestCount())
@@ -113,6 +114,9 @@ class HostJoinLoopbackTest {
         val received = lost.get(5, TimeUnit.SECONDS)
         assertEquals("ab".repeat(32), received?.token)
         assertEquals(DialTarget.Direct(Endpoint("127.0.0.1", hosting.port)), reachedVia.get(5, TimeUnit.SECONDS))
+        // The leaving host's generation rides the notice, so a declining guest can back the snapshot up
+        // to the cloud at the right fence (generation 4, the one the host opened under).
+        assertEquals(4L, leavingGen.get(5, TimeUnit.SECONDS))
 
         joiner.close()
         host.close()
@@ -132,7 +136,7 @@ class HostJoinLoopbackTest {
         val lost = CompletableFuture<SnapshotOffer?>()
         val joiner = JoinController(
             registry, DirectChannelDialer(DirectTcpTransport()), CapturingHandoff(), SystemClock, config,
-            onHostLost = { _, offer, _ -> lost.complete(offer) },
+            onHostLost = { _, offer, _, _ -> lost.complete(offer) },
         )
         assertInstanceOf(JoinResult.Connected::class.java, joiner.join(world))
 

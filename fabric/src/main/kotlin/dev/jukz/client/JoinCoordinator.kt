@@ -21,6 +21,7 @@ import dev.jukz.transport.WsRelayTransport
 import dev.jukz.core.util.SystemClock
 import dev.jukz.core.sync.SnapshotLineage
 import dev.jukz.core.sync.SnapshotMarker
+import dev.jukz.runtime.GhostUpload
 import dev.jukz.sync.JGitWorldSync
 import dev.jukz.sync.R2SnapshotStore
 import dev.jukz.world.WorldIdSidecar
@@ -67,7 +68,7 @@ object JoinCoordinator {
         val handoff: GameHandoff = MinecraftGameHandoff { parent }
         val controller = JoinController(
             registry, dialer, handoff, SystemClock,
-            onHostLost = { wid, offer, target -> onHostLeaving(client, wid, shortCode, offer, target, dialer) },
+            onHostLost = { wid, offer, target, gen -> onHostLeaving(client, wid, shortCode, offer, target, gen, dialer) },
         )
         val cancelled = AtomicBoolean(false)
 
@@ -153,7 +154,7 @@ object JoinCoordinator {
             // The host we tried to join was already a ghost: offer the takeover with whatever it left.
             // No live connection to ride, so the offer (from the record) is pulled directly, best-effort.
             is JoinResult.ShouldHost ->
-                showHandoff(client, worldId, shortCode, parent, result.record?.snapshot, target = null, dialer = DirectChannelDialer(), intent = TakeoverIntent.GHOST)
+                showHandoff(client, worldId, shortCode, parent, result.record?.snapshot, target = null, generation = result.record?.hostGeneration ?: 0L, dialer = DirectChannelDialer(), intent = TakeoverIntent.GHOST)
             is JoinResult.Failed ->
                 client.setScreen(
                     NatErrorScreen(
@@ -175,6 +176,7 @@ object JoinCoordinator {
         shortCode: String,
         offer: SnapshotOffer?,
         target: DialTarget?,
+        generation: Long,
         dialer: ChannelDialer,
     ) {
         if (!GuestSession.recentlyEngaged()) {
@@ -185,7 +187,7 @@ object JoinCoordinator {
             return
         }
         JukzMod.logger.info("jukz: host of {} is leaving (snapshot {}) — offering handoff", shortCode, if (offer != null) "offered" else "none")
-        showHandoff(client, worldId, shortCode, TitleScreen(), offer, target, dialer, intent = TakeoverIntent.LIVE_HANDOFF)
+        showHandoff(client, worldId, shortCode, TitleScreen(), offer, target, generation, dialer, intent = TakeoverIntent.LIVE_HANDOFF)
     }
 
     private fun showHandoff(
@@ -195,6 +197,7 @@ object JoinCoordinator {
         parent: Screen?,
         offer: SnapshotOffer?,
         target: DialTarget?,
+        generation: Long,
         dialer: ChannelDialer,
         intent: TakeoverIntent,
     ) {
@@ -206,7 +209,9 @@ object JoinCoordinator {
             val screen = HostHandoffScreen(
                 snapshotApplied = offer != null,
                 onHostNow = { beginTakeover(client, worldId, shortCode, parent, prefetch, intent) },
-                onBack = { GuestSession.leave(); discardPrefetch(prefetch); client.setScreen(parent) },
+                // Declining still pulled the host's pack (the host counted it as a completed handoff and
+                // left WITHOUT a cloud backup), so back it up to the cloud rather than drop the only copy.
+                onBack = { GuestSession.leave(); backupDeclinedSnapshot(worldId, generation, prefetch); client.setScreen(parent) },
             )
             // If we are still in the host's world (a live handoff), leave it cleanly WITH this prompt
             // as the screen, so the vanilla "Connection lost" never flashes. For a ghost takeover (we
@@ -320,6 +325,51 @@ object JoinCoordinator {
         Thread {
             runCatching { prefetch.get(SNAPSHOT_WAIT_MS, TimeUnit.MILLISECONDS)?.let { Files.deleteIfExists(it.packPath) } }
         }.apply { isDaemon = true; name = "jukz-snapshot-discard" }.start()
+    }
+
+    /**
+     * Back up a declined handoff's snapshot to the cloud. The eager prefetch already made the leaving
+     * host count us as "downloaded by a guest" and withdraw WITHOUT a cloud backup, so the pack we hold
+     * is the only copy of the latest world. Rather than [discardPrefetch] it, upload it to R2 (when a
+     * rendezvous is configured) through the same [GhostUpload] path a guest-less host close uses — the
+     * [dev.jukz.client.gui.UploadingWorldScreen] picks the armed pack up and pushes it. Off the render
+     * thread; with no rendezvous there is nowhere to upload, so it just drops the pack.
+     */
+    private fun backupDeclinedSnapshot(
+        worldId: WorldId,
+        generation: Long,
+        prefetch: CompletableFuture<JGitWorldSync.Downloaded?>,
+    ) {
+        if (!R2SnapshotStore.isConfigured()) {
+            discardPrefetch(prefetch)
+            return
+        }
+        Thread {
+            val downloaded = runCatching { prefetch.get(SNAPSHOT_WAIT_MS, TimeUnit.MILLISECONDS) }.getOrNull()
+                ?: return@Thread
+            try {
+                armDeclinedSnapshotForUpload(worldId, generation, downloaded)
+                JukzMod.logger.info("jukz: declined the handoff — backing the latest world up to the cloud")
+            } finally {
+                runCatching { Files.deleteIfExists(downloaded.packPath) }
+            }
+        }.apply { isDaemon = true; name = "jukz-snapshot-backup" }.start()
+    }
+
+    /**
+     * Read the prefetched [downloaded] pack and publish it to [GhostUpload] so the upload screen pushes
+     * it to R2. [generation] is the leaving host's, so the cloud head fences correctly. Split out (no
+     * Minecraft, no threading) so the decline-backs-up-the-world contract is unit-testable. Returns true
+     * once the pack is armed.
+     */
+    internal fun armDeclinedSnapshotForUpload(
+        worldId: WorldId,
+        generation: Long,
+        downloaded: JGitWorldSync.Downloaded,
+    ): Boolean {
+        val pack = Files.readAllBytes(downloaded.packPath)
+        GhostUpload.arm(GhostUpload.Pending(worldId, generation, pack, downloaded.head.name))
+        return true
     }
 
     /**
