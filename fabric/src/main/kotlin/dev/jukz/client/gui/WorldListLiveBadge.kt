@@ -101,7 +101,7 @@ object WorldListLiveBadge {
         ensureFresh(worldId, Discovery.registry)
         val record = cachedRecord(worldId) ?: return
 
-        val cxp = entryX + -8
+        val cxp = entryX - 14
         val cyp = entryY + 9
         fillCircle(context, cxp, cyp, RADIUS, COLOR_LIVE)
 

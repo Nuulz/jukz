@@ -43,6 +43,12 @@ public abstract class MinecraftClientDisconnectMixin {
         require = 0
     )
     private Screen jukz$handoffScreen(Screen original) {
+        // NB: the ghost-upload screen is NOT shown here. disconnect() consumes this screen early (via
+        // reset()) and, for a host's voluntary close, GameMenuScreen.disconnect() calls setScreen(new
+        // TitleScreen()) *after* disconnect() returns — so any screen installed here is overridden. The
+        // guest-less upload is also only armed later, during the SERVER_STOPPING that this very call
+        // drives, so it would still read false at HEAD. JukzClient surfaces UploadingWorldScreen
+        // reactively (after that TitleScreen) once the world is gone and the pack is ready.
         if (HostSession.INSTANCE.isHosting() && HostSession.INSTANCE.connectedGuestCount() > 0) {
             return new MessageScreen(Text.literal("Handing the world to the next host…"));
         }

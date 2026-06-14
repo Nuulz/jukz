@@ -14,6 +14,8 @@ import dev.jukz.core.transport.DirectChannelDialer
 import dev.jukz.world.WorldIdSidecar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import net.minecraft.nbt.NbtIo
+import net.minecraft.nbt.NbtSizeTracker
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ResetCommand
 import org.eclipse.jgit.lib.NullProgressMonitor
@@ -41,6 +43,16 @@ class JGitWorldSync(
 
     override fun currentGeneration(saveDir: Path): Long =
         WorldIdSidecar.read(saveDir)?.generation ?: 0L
+
+    /**
+     * The current snapshot commit id of the local world repo in [saveDir], or null when there is no
+     * repo (no snapshot has ever been built). Used with the generation to identify our local snapshot's
+     * lineage so a takeover never replaces it with a same-generation but divergent cloud sibling.
+     */
+    fun headCommit(saveDir: Path): String? = runCatching {
+        if (!Files.exists(saveDir.resolve(".git"))) return null
+        Git.open(saveDir.toFile()).use { it.repository.resolve("HEAD")?.name }
+    }.getOrNull()
 
     override suspend fun commit(saveDir: Path, generation: Long): CommitId = withContext(Dispatchers.IO) {
         openOrInit(saveDir).use { git ->
@@ -125,6 +137,7 @@ class JGitWorldSync(
         withContext(Dispatchers.IO) {
             runCatching {
                 applyPack(saveDir, downloaded.packPath, downloaded.head)
+                stripInheritedHostPlayer(saveDir)
                 mirrorGeneration(saveDir, worldId, fallbackGeneration)
                 JukzMod.logger.info("jukz: applied snapshot {} for {}", downloaded.head.name, worldId)
                 true
@@ -133,6 +146,50 @@ class JGitWorldSync(
                 false
             }
         }
+
+    /**
+     * Bound the host's local `.git` on disk: once it grows past [thresholdBytes], run `git gc` to
+     * repack the reachable current world and prune the now-unreachable history. The snapshot build
+     * re-roots HEAD at a parentless commit, so every prior commit/region-version is unreachable and
+     * collectable. [graceMillis] keeps very recent objects, so a gc racing a concurrent commit/apply
+     * can never prune that operation's fresh objects. Best-effort and meant for a background thread:
+     * a failure (e.g. a lock race) is logged and skipped, to be retried on a later, quieter close.
+     */
+    fun compactIfNeeded(
+        saveDir: Path,
+        thresholdBytes: Long = GC_THRESHOLD_BYTES,
+        graceMillis: Long = GC_GRACE_MS,
+    ) {
+        if (runCatching { gitDirSize(saveDir) }.getOrDefault(0L) < thresholdBytes) return
+        runCatching {
+            // Repos created before the reflog was disabled still have entries pinning old commits;
+            // drop them (jukz never reads the reflog) so gc can actually reclaim the re-rooted history.
+            deleteRecursively(saveDir.resolve(".git").resolve("logs"))
+            Git.open(saveDir.toFile()).use { git ->
+                git.gc().setExpire(java.util.Date(System.currentTimeMillis() - graceMillis)).call()
+            }
+            JukzMod.logger.info("jukz: compacted local world repo")
+        }.onFailure { JukzMod.logger.info("jukz: world repo compaction skipped ({})", it.message) }
+    }
+
+    /** Recursively delete [path] (deepest entries first); best-effort, used to drop the reflog. */
+    private fun deleteRecursively(path: Path) {
+        if (!Files.exists(path)) return
+        Files.walk(path).use { stream ->
+            stream.sorted { a, b -> b.compareTo(a) }.forEach { p -> runCatching { Files.delete(p) } }
+        }
+    }
+
+    /** Total bytes under `<saveDir>/.git`, or 0 when there is no repo yet. */
+    private fun gitDirSize(saveDir: Path): Long {
+        val gitDir = saveDir.resolve(".git")
+        if (!Files.exists(gitDir)) return 0L
+        return Files.walk(gitDir).use { stream ->
+            stream.filter { Files.isRegularFile(it) }
+                .mapToLong { runCatching { Files.size(it) }.getOrDefault(0L) }
+                .sum()
+        }
+    }
 
     /**
      * Pull the host's armed pack into [dest] over a [ConnectionType.SNAPSHOT] channel — the same
@@ -188,12 +245,49 @@ class JGitWorldSync(
         }
     }
 
-    private fun openOrInit(saveDir: Path): Git =
-        if (Files.exists(saveDir.resolve(".git"))) {
+    /**
+     * Drop the singleplayer-owner player data baked into the snapshot's `level.dat` (`Data.Player`).
+     * Minecraft loads that compound for whoever opens the world as host (`PlayerManager.loadPlayerData`
+     * reads `SaveProperties.getPlayerData()` for `isHost` players, only falling back to
+     * `playerdata/<uuid>.dat` when it is null). Without this, the player taking over would inherit the
+     * PREVIOUS host's position, inventory, health and XP. Removing it makes `getPlayerData()` null, so
+     * every player loads their OWN `playerdata/<uuid>.dat` (which the server saves for all players,
+     * host included, and the pack carries) — returning players resume where they were, brand-new ones
+     * spawn at the world spawn. Best-effort: a failure just leaves the inherited data.
+     */
+    private fun stripInheritedHostPlayer(saveDir: Path) {
+        val levelDat = saveDir.resolve("level.dat")
+        if (!Files.exists(levelDat)) return
+        runCatching {
+            val root = NbtIo.readCompressed(levelDat, NbtSizeTracker.ofUnlimitedBytes())
+            val data = root.getCompound("Data")
+            if (data.contains("Player")) {
+                data.remove("Player")
+                NbtIo.writeCompressed(root, levelDat)
+                JukzMod.logger.info("jukz: cleared inherited host player from snapshot level.dat")
+            }
+        }.onFailure { JukzMod.logger.warn("jukz: could not strip inherited host player ({})", it.message) }
+    }
+
+    private fun openOrInit(saveDir: Path): Git {
+        val git = if (Files.exists(saveDir.resolve(".git"))) {
             Git.open(saveDir.toFile())
         } else {
             Git.init().setDirectory(saveDir.toFile()).call()
         }
+        // jukz uses git purely as snapshot transport — no branches, no history browsing, no reflog.
+        // With the reflog on, every ref update (including the snapshot re-root) pins the old commit
+        // for ~90 days, so compactIfNeeded could never reclaim a re-rooted history. Turn it off so an
+        // unreferenced commit is immediately collectable.
+        runCatching {
+            val cfg = git.repository.config
+            if (cfg.getString("core", null, "logAllRefUpdates") != "false") {
+                cfg.setBoolean("core", null, "logAllRefUpdates", false)
+                cfg.save()
+            }
+        }
+        return git
+    }
 
     /** Ensure session.lock is git-ignored so a `git add` over a loaded world doesn't choke on the lock. */
     private fun ensureGitignore(saveDir: Path) {
@@ -207,5 +301,10 @@ class JGitWorldSync(
         const val COMMIT_PREFIX = "jukz generation "
         const val IGNORED_LOCK = "session.lock"
         val COMMIT_GENERATION = Regex("""jukz generation (\d+)""")
+
+        /** Only compact once the local `.git` grows past this (the reachable world is far smaller). */
+        const val GC_THRESHOLD_BYTES = 256L * 1024 * 1024 // 256 MiB
+        /** Never prune objects newer than this — protects a concurrent commit/apply from the gc. */
+        const val GC_GRACE_MS = 10L * 60 * 1000 // 10 minutes
     }
 }

@@ -10,6 +10,8 @@ import dev.jukz.core.model.WorldId
 import dev.jukz.core.transport.ChannelDialer
 import dev.jukz.core.transport.DialTarget
 import dev.jukz.core.transport.SocketChannel
+import dev.jukz.runtime.GhostUpload
+import dev.jukz.runtime.HostSession
 import dev.jukz.world.WorldIdSidecar
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -186,5 +188,108 @@ class SnapshotHandoffTest {
 
         assertFalse(pulled)
         assertEquals("local-only", Files.readString(guestDir.resolve("level.dat")))
+    }
+
+    @Test
+    fun `snapshot pack carries only the current world, not the accumulated git history`() {
+        val dir = Files.createTempDirectory("jukz-nogrowth")
+        WorldIdSidecar.write(dir, WorldIdSidecar.Info(worldId.uuid, 1))
+        val sync = JGitWorldSync()
+
+        // Stand-in for a region file; rewrite it with fresh, incompressible bytes on each "save" so
+        // every commit creates a distinct large blob — exactly how Minecraft churns region data.
+        fun saveRegion(seed: Int) =
+            Files.write(dir.resolve("r.0.0.mca"), kotlin.random.Random(seed).nextBytes(512 * 1024))
+
+        saveRegion(1)
+        val first = SnapshotPack.build(dir, sync) ?: error("first build")
+
+        var last = first
+        repeat(8) { i ->
+            saveRegion(i + 2)
+            WorldIdSidecar.write(dir, WorldIdSidecar.Info(worldId.uuid, (i + 2).toLong()))
+            last = SnapshotPack.build(dir, sync) ?: error("build $i")
+        }
+
+        // Old behaviour (pack everything reachable from HEAD) carried all 9 distinct ~512KB blobs
+        // (~9x). Re-rooted at the current tree, the pack holds only the latest one, so it stays near
+        // the first build's size no matter how many saves happened.
+        assertTrue(
+            last.bytes.size < first.bytes.size * 2,
+            "snapshot pack accumulated history: first=${first.bytes.size}B last=${last.bytes.size}B",
+        )
+
+        // The served head must be a re-rooted, parentless commit.
+        org.eclipse.jgit.api.Git.open(dir.toFile()).use { git ->
+            org.eclipse.jgit.revwalk.RevWalk(git.repository).use { rw ->
+                val commit = rw.parseCommit(org.eclipse.jgit.lib.ObjectId.fromString(last.head))
+                assertEquals(0, commit.parentCount, "snapshot head must be parentless")
+            }
+        }
+    }
+
+    @Test
+    fun `compaction reclaims the orphaned history while keeping the current world intact`() {
+        val dir = Files.createTempDirectory("jukz-compact")
+        WorldIdSidecar.write(dir, WorldIdSidecar.Info(worldId.uuid, 1))
+        val sync = JGitWorldSync()
+        fun saveRegion(seed: Int) =
+            Files.write(dir.resolve("r.0.0.mca"), kotlin.random.Random(seed).nextBytes(512 * 1024))
+        fun gitSize() = Files.walk(dir.resolve(".git")).use { s ->
+            s.filter { Files.isRegularFile(it) }.mapToLong { Files.size(it) }.sum()
+        }
+
+        saveRegion(1)
+        SnapshotPack.build(dir, sync) ?: error("first build")
+        repeat(10) { i ->
+            saveRegion(i + 2)
+            WorldIdSidecar.write(dir, WorldIdSidecar.Info(worldId.uuid, (i + 2).toLong()))
+            SnapshotPack.build(dir, sync) ?: error("build $i")
+        }
+        val latestRegion = Files.readAllBytes(dir.resolve("r.0.0.mca"))
+        val before = gitSize()
+
+        // Force a full prune (no threshold, no grace) — the gated background compaction made determin.
+        sync.compactIfNeeded(dir, thresholdBytes = 0L, graceMillis = 0L)
+        val after = gitSize()
+
+        assertTrue(after < before / 2, "compaction did not reclaim disk: before=$before after=$after")
+
+        // The current world must still serve a faithful snapshot after the repo was compacted.
+        val (server, port) = armedHost(dir, "gate")
+        try {
+            val guestDir = Files.createTempDirectory("jukz-compact-guest")
+            val pulled = runBlocking { JGitWorldSync().pullLatest(guestDir, offerRecord(port, "gate")) }
+            assertTrue(pulled)
+            assertTrue(
+                latestRegion.contentEquals(Files.readAllBytes(guestDir.resolve("r.0.0.mca"))),
+                "compaction corrupted or dropped the current world",
+            )
+            assertEquals(11L, WorldIdSidecar.read(guestDir)?.generation)
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun `a guest-less close arms the ghost upload even when host announce never completed`() {
+        // The race the live logs showed: a player opens a world and closes it within a second or two,
+        // before auto-hosting finished installing a HostController. The world is still ours and must be
+        // backed up — its id + generation come from the live WorldIdState, handed in by JukzMod.
+        val dir = Files.createTempDirectory("jukz-race")
+        Files.writeString(dir.resolve("level.dat"), "world-state")
+        WorldIdSidecar.write(dir, WorldIdSidecar.Info(worldId.uuid, 41)) // a deliberately stale sidecar
+        GhostUpload.clear()
+        try {
+            GhostUpload.markArmed() // JukzMod armed it; no controller was ever installed
+            HostSession.onServerStopping(dir, worldId, 42L) {}
+
+            val pending = GhostUpload.pending()
+            assertTrue(pending != null, "a guest-less close must arm the ghost without a host controller")
+            assertEquals(worldId, pending!!.worldId)
+            assertEquals(42L, pending.generation) // the live generation handed in, not the stale sidecar's 41
+        } finally {
+            GhostUpload.clear()
+        }
     }
 }

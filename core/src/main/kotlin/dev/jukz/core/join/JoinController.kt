@@ -48,10 +48,12 @@ class JoinController(
      * Invoked once when the host goes away after a successful connect: either it sent a
      * [Message.HostLeaving] (clean handoff — the [SnapshotOffer] carries the gate token) or the control
      * channel broke (abrupt drop — offer is null). The [DialTarget] is how this guest reached the host
-     * (direct endpoint or relay session); the caller pulls the snapshot over that same path. The caller
+     * (direct endpoint or relay session); the caller pulls the snapshot over that same path. The final
+     * Long is the leaving host's generation (from its fencing token), so a guest that declines the
+     * takeover can still back the host's snapshot up to the cloud at the correct generation. The caller
      * takes over hosting.
      */
-    private val onHostLost: (WorldId, SnapshotOffer?, DialTarget?) -> Unit = { _, _, _ -> },
+    private val onHostLost: (WorldId, SnapshotOffer?, DialTarget?, Long) -> Unit = { _, _, _, _ -> },
 ) : AutoCloseable {
 
     private val nonces = AtomicInteger(0)
@@ -160,11 +162,14 @@ class JoinController(
                 val msg = try {
                     framed.receive()
                 } catch (_: Exception) {
-                    if (!closing) onHostLost(worldId, null, target) // channel broke -> host gone abruptly, no offer
+                    // Channel broke -> host gone abruptly, no offer. The generation we joined under is the
+                    // best fence available (there is no snapshot to back up here anyway).
+                    if (!closing) onHostLost(worldId, null, target, token.hostGeneration)
                     return@launch
                 }
                 if (msg is Message.HostLeaving) {
-                    onHostLost(worldId, msg.snapshot, target) // pull over the same path we reached the host on
+                    // Pull over the same path we reached the host on; carry the leaving host's generation.
+                    onHostLost(worldId, msg.snapshot, target, msg.token.hostGeneration)
                     return@launch
                 }
                 // Pong / anything else -> host still alive; keep reading.

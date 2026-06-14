@@ -1,5 +1,6 @@
 package dev.jukz
 
+import dev.jukz.core.model.WorldId
 import dev.jukz.runtime.HostSession
 import dev.jukz.world.WorldIdSidecar
 import dev.jukz.world.WorldIdState
@@ -25,6 +26,10 @@ object JukzMod : ModInitializer {
     val logger = LoggerFactory.getLogger(MOD_ID)
 
     override fun onInitialize() {
+        ServerLifecycleEvents.SERVER_STARTING.register { _ ->
+            HostSession.onServerStarting()
+        }
+
         ServerWorldEvents.LOAD.register { server, world ->
             if (world.registryKey == World.OVERWORLD) {
                 val state = WorldIdState.get(world)
@@ -34,11 +39,26 @@ object JukzMod : ModInitializer {
         }
 
         ServerLifecycleEvents.SERVER_STOPPING.register { server ->
+            HostSession.markServerStopped()
             // Hand the save dir to the session so it can hand off to any connected guest (over the live
             // control channel) before withdrawing. Whether a guest is connected is read from the
             // connection server, not the player list (which is already being torn down here).
             val saveDir = runCatching { server.getSavePath(WorldSavePath.ROOT) }.getOrNull()
-            HostSession.onServerStopping(saveDir) { runCatching { server.saveAll(true, true, true) } }
+            // The world's id + generation come from the live WorldIdState — authoritative even when
+            // auto-hosting never finished announcing, so a quick open->close still backs the world up.
+            val state = runCatching { WorldIdState.get(server.overworld) }.getOrNull()
+            // Arm the cloud backup whenever the world is eligible (rendezvous + access open), with or
+            // without guests: a guest-less close uploads directly, and a close mid-handoff falls back to
+            // the upload when no guest takes over. Set explicitly each close so a prior world's decision
+            // never leaks forward.
+            dev.jukz.runtime.GhostUpload.setArmed(
+                saveDir != null && dev.jukz.client.HostCoordinator.shouldUploadGhost(saveDir),
+            )
+            HostSession.onServerStopping(
+                saveDir,
+                state?.let { WorldId.of(it.worldId) },
+                state?.generation ?: 0L,
+            ) { runCatching { server.saveAll(true, true, true) } }
         }
 
         logger.info("jukz initialized")

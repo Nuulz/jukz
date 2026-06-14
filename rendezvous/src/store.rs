@@ -57,6 +57,8 @@ pub struct WorldRecord {
     pub token: Token,
     pub endpoints: Vec<Endpoint>,
     pub heartbeat_seq: i64,
+    #[serde(default)]
+    pub player_count: i32,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub relay: Option<RelayInfo>,
 }
@@ -106,12 +108,13 @@ impl Store {
         AnnounceOutcome::Published
     }
 
-    pub fn heartbeat(&self, world_id: Uuid, token: &Token, heartbeat_seq: i64, now: Instant) -> HeartbeatOutcome {
+    pub fn heartbeat(&self, world_id: Uuid, token: &Token, heartbeat_seq: i64, player_count: i32, now: Instant) -> HeartbeatOutcome {
         let mut worlds = self.worlds.lock().unwrap();
         match worlds.get_mut(&world_id) {
             Some(entry) if entry.expires_at > now => {
                 if entry.record.token == *token {
                     entry.record.heartbeat_seq = heartbeat_seq;
+                    entry.record.player_count = player_count;
                     entry.expires_at = now + self.ttl;
                     HeartbeatOutcome::Refreshed
                 } else {
@@ -167,6 +170,7 @@ mod tests {
             token: t,
             endpoints: vec![Endpoint { host: "192.168.1.7".into(), port: 51820 }],
             heartbeat_seq: 0,
+            player_count: 0,
             relay: None,
         }
     }
@@ -236,7 +240,7 @@ mod tests {
         store.announce(record(world, t.clone()), now);
 
         let near_expiry = now + TTL - Duration::from_millis(1);
-        assert_eq!(store.heartbeat(world, &t, 7, near_expiry), HeartbeatOutcome::Refreshed);
+        assert_eq!(store.heartbeat(world, &t, 7, 0, near_expiry), HeartbeatOutcome::Refreshed);
 
         // Past the original expiry but within one TTL of the heartbeat: still live, seq updated.
         let past_original = now + TTL + Duration::from_millis(1);
@@ -254,9 +258,9 @@ mod tests {
         store.announce(record(world, mine.clone()), now);
         store.announce(usurper.clone(), now);
 
-        assert_eq!(store.heartbeat(world, &mine, 1, now), HeartbeatOutcome::Superseded(usurper));
-        assert_eq!(store.heartbeat(Uuid::new_v4(), &mine, 1, now), HeartbeatOutcome::Unknown);
-        assert_eq!(store.heartbeat(world, &token(6, 0, "00"), 1, now + TTL), HeartbeatOutcome::Unknown);
+        assert_eq!(store.heartbeat(world, &mine, 1, 0, now), HeartbeatOutcome::Superseded(usurper));
+        assert_eq!(store.heartbeat(Uuid::new_v4(), &mine, 1, 0, now), HeartbeatOutcome::Unknown);
+        assert_eq!(store.heartbeat(world, &token(6, 0, "00"), 1, 0, now + TTL), HeartbeatOutcome::Unknown);
     }
 
     #[test]

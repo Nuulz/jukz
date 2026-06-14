@@ -26,6 +26,7 @@ import net.minecraft.client.gui.screen.TitleScreen
 import net.minecraft.server.integrated.IntegratedServer
 import net.minecraft.text.Text
 import net.minecraft.util.WorldSavePath
+import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -116,6 +117,11 @@ object HostCoordinator {
             endpointResolver = ForwardingEndpointResolver(forwarder, LocalEndpointResolver()),
             nodeId = PersistentNodeId.nodeId,
             clock = SystemClock,
+            // Self-heal: if our lease is genuinely lost to a newer host (the heartbeat CAS fails),
+            // stop serving our fork and offer the player the live winner — never keep a silent second
+            // server running (the 2026-06-13 split-brain, where this callback was unwired and a
+            // superseded host served + LAN-announced forever).
+            onHostLost = { lostWorldId -> onAutoHostLost(lostWorldId) },
             // Connected players (host + any relayed-in guests) for the world-list live badge.
             playerCount = { runCatching { server.playerManager.playerList.size }.getOrDefault(0) },
             // When UPnP could not open the port, register a relay session so non-reachable guests
@@ -152,6 +158,25 @@ object HostCoordinator {
     }
 
     /**
+     * The auto-host lost its lease *after* it had been serving: a newer host genuinely superseded us
+     * (the heartbeat CAS failed — see [dev.jukz.discovery.CompositeWorldRegistry.heartbeat], which now
+     * reports a real LAN supersession even when the rendezvous is optimistically up). Stop serving our
+     * losing fork at once (withdraw + close, no handoff, no ghost backup) and offer the player the live
+     * winner, instead of silently running a divergent second copy — the 2026-06-13 split-brain, where a
+     * superseded host kept serving and LAN-announcing forever. Fired off the heartbeat coroutine, so the
+     * registry lookup + teardown run on a daemon thread and the UI hops back via [promptSuperseded].
+     */
+    private fun onAutoHostLost(worldId: WorldId) {
+        if (!HostSession.isHosting) return // already torn down (the world is closing) — nothing to recover
+        Thread {
+            JukzMod.logger.info("jukz: lost the host lease for {} — a newer host took over", worldId.shortCode())
+            val winner = runCatching { runBlocking { Discovery.registry.lookup(worldId) } }.getOrNull()
+            HostSession.stopHostingSuperseded()
+            if (winner != null) promptSuperseded(winner)
+        }.apply { isDaemon = true; name = "jukz-superseded" }.start()
+    }
+
+    /**
      * Decision 4: a rejected announce is never silent. The world already opened locally (the open
      * raced another host, or discovery was unreachable during the lookup), so the player decides:
      * keep playing the local copy (it will diverge) or leave it and join the live host as a guest.
@@ -176,4 +201,23 @@ object HostCoordinator {
         client.disconnect(MessageScreen(Text.translatable("menu.savingLevel")))
         JoinCoordinator.start(worldId, shortCode, TitleScreen())
     }
+
+    /**
+     * Is this world eligible to be backed up to the cloud when it closes? True when a rendezvous (hence
+     * an R2 signer) is configured and access is not closed. Read by [JukzMod] at SERVER_STOPPING (which
+     * only fires for a locally-opened integrated world, so this is never a remote guest) to arm
+     * [dev.jukz.runtime.GhostUpload] before the teardown hook.
+     *
+     * Deliberately does NOT require the absence of guests: a host that leaves with a guest connected
+     * prefers a live P2P handoff, but [dev.jukz.runtime.HostSession.onServerStopping] falls back to this
+     * cloud backup when the handoff reaches nobody, so the latest state is never stranded on local disk.
+     *
+     * NB: deliberately does NOT require [HostSession.isHosting]. Auto-hosting can still be establishing
+     * (the announce/relay round-trip takes a moment) when a player opens a world and closes it again
+     * right away; gating on the live controller would skip the backup for that quick close. The world
+     * is ours regardless — its id and generation come from the live [WorldIdState], not the controller.
+     */
+    fun shouldUploadGhost(saveDir: Path): Boolean =
+        dev.jukz.sync.R2SnapshotStore.isConfigured() &&
+            !runCatching { WorldAccessFlag.isDisabled(saveDir) }.getOrDefault(false)
 }

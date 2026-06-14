@@ -16,6 +16,7 @@
 //! (default 120, per client IP).
 
 mod relay;
+mod snapshot;
 mod store;
 
 use std::collections::HashMap;
@@ -35,6 +36,7 @@ use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
+use snapshot::SnapshotStore;
 use store::{AnnounceOutcome, Endpoint, HeartbeatOutcome, Store, Token, WorldRecord};
 
 const MAX_ENDPOINTS: usize = 8;
@@ -59,6 +61,7 @@ struct AppState {
     relay: relay::RelayState,
     relay_pending_tx: Mutex<HashMap<u64, tokio::sync::oneshot::Sender<WebSocket>>>,
     relay_signal_tx: Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<u64>>>,
+    snapshot: Option<SnapshotStore>,
 }
 
 #[tokio::main]
@@ -91,6 +94,7 @@ async fn main() {
         }),
         relay_pending_tx: Mutex::new(HashMap::new()),
         relay_signal_tx: Mutex::new(HashMap::new()),
+        snapshot: SnapshotStore::from_env(),
     });
 
     // Periodic sweep so abandoned worlds don't accumulate (lookups already ignore expired ones).
@@ -111,6 +115,8 @@ async fn main() {
         .route("/v1/relay/host", get(relay_host))
         .route("/v1/relay/connect", get(relay_connect))
         .route("/v1/relay/work", get(relay_work))
+        .route("/v1/snapshot/upload-url", post(snapshot_upload_url))
+        .route("/v1/snapshot/{world_id}", get(snapshot_download_url))
         .route("/healthz", get(healthz))
         .layer(axum::extract::DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(state);
@@ -137,6 +143,8 @@ struct AnnounceBody {
     endpoints: Vec<Endpoint>,
     heartbeat_seq: i64,
     #[serde(default)]
+    player_count: i32,
+    #[serde(default)]
     relay: Option<store::RelayInfo>,
 }
 
@@ -146,6 +154,8 @@ struct HeartbeatBody {
     world_id: Uuid,
     token: Token,
     heartbeat_seq: i64,
+    #[serde(default)]
+    player_count: i32,
 }
 
 #[derive(Deserialize)]
@@ -153,6 +163,13 @@ struct HeartbeatBody {
 struct WithdrawBody {
     world_id: Uuid,
     token: Token,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SnapshotUploadBody {
+    world_id: Uuid,
+    generation: i64,
 }
 
 // ---- guards (auth + rate limit + validation) ------------------------------------------------
@@ -267,7 +284,7 @@ async fn announce(
 
     let mut endpoints = body.endpoints;
     merge_observed_endpoint(&mut endpoints, ip);
-    let record = WorldRecord { world_id: body.world_id, token, endpoints, heartbeat_seq: body.heartbeat_seq, relay: body.relay };
+    let record = WorldRecord { world_id: body.world_id, token, endpoints, heartbeat_seq: body.heartbeat_seq, player_count: body.player_count, relay: body.relay };
     let ttl_ms = state.store.ttl().as_millis() as u64;
 
     match state.store.announce(record.clone(), Instant::now()) {
@@ -302,7 +319,7 @@ async fn heartbeat(
     state.counters.heartbeats.fetch_add(1, AtomicOrdering::Relaxed);
     let ttl_ms = state.store.ttl().as_millis() as u64;
 
-    match state.store.heartbeat(body.world_id, &token, body.heartbeat_seq, Instant::now()) {
+    match state.store.heartbeat(body.world_id, &token, body.heartbeat_seq, body.player_count, Instant::now()) {
         HeartbeatOutcome::Refreshed => {
             (StatusCode::OK, Json(json!({ "status": "refreshed", "ttlMs": ttl_ms }))).into_response()
         }
@@ -352,12 +369,56 @@ async fn withdraw(
     StatusCode::NO_CONTENT.into_response()
 }
 
+/// Sign presigned PUT URLs for a world snapshot (pack + head). Gated by the generation fence.
+async fn snapshot_upload_url(
+    State(state): State<Arc<AppState>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<SnapshotUploadBody>,
+) -> Response {
+    if let Err(response) = guard(&state, &headers, peer) {
+        return response;
+    }
+    let store = match &state.snapshot {
+        Some(s) => s,
+        None => return error_response(StatusCode::SERVICE_UNAVAILABLE, "snapshot store disabled"),
+    };
+    match store.sign_upload(body.world_id, body.generation) {
+        Some((pack_url, head_url)) => {
+            tracing::info!(world = %body.world_id, generation = body.generation, "snapshot upload signed");
+            (StatusCode::OK, Json(json!({ "packUrl": pack_url, "headUrl": head_url, "expiresInSec": snapshot::URL_TTL_SECS })))
+                .into_response()
+        }
+        None => (StatusCode::CONFLICT, Json(json!({ "status": "stale" }))).into_response(),
+    }
+}
+
+/// Sign presigned GET URLs for a world snapshot. 404 when the store is disabled; otherwise the
+/// guest probes the head URL and treats a 404 from R2 as "no ghost".
+async fn snapshot_download_url(
+    State(state): State<Arc<AppState>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Path(world_id): Path<Uuid>,
+) -> Response {
+    if let Err(response) = guard(&state, &headers, peer) {
+        return response;
+    }
+    let store = match &state.snapshot {
+        Some(s) => s,
+        None => return (StatusCode::NOT_FOUND, Json(json!({ "status": "none" }))).into_response(),
+    };
+    let (pack_url, head_url) = store.sign_download(world_id);
+    (StatusCode::OK, Json(json!({ "packUrl": pack_url, "headUrl": head_url }))).into_response()
+}
+
 async fn healthz(State(state): State<Arc<AppState>>) -> Response {
     let counters = &state.counters;
     let body = json!({
         "status": "ok",
         "liveWorlds": state.store.live_count(Instant::now()),
         "relaySessions": state.relay.live_sessions(),
+        "snapshotStore": if state.snapshot.is_some() { "enabled" } else { "disabled" },
         "counters": {
             "announces": counters.announces.load(AtomicOrdering::Relaxed),
             "rejectedAnnounces": counters.rejected_announces.load(AtomicOrdering::Relaxed),

@@ -171,6 +171,17 @@ class HostController(
     private fun startHeartbeat(worldId: WorldId) {
         heartbeatJob = scope.launch {
             try {
+                // Settle re-probe: beat once soon after announcing. If another opener of this world
+                // published a competing token at nearly the same instant — the registry CAS can admit
+                // both before their records propagate (notably the eventually-consistent LAN multicast
+                // on loopback) — the loser detects the lost claim here, within the settle window, rather
+                // than after a full heartbeat interval (up to ~60 s LAN-only). This bounds the transient
+                // split-brain that two simultaneous ghost takeovers would otherwise create.
+                delay(minOf(config.settleWindowMs, heartbeatDelayMs()))
+                if (!beat()) {
+                    onHostLost(worldId)
+                    return@launch
+                }
                 while (true) {
                     delay(heartbeatDelayMs())
                     if (!beat()) {

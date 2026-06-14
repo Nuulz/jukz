@@ -5,10 +5,13 @@ import dev.jukz.client.HostCoordinator
 import dev.jukz.client.gui.HostInfoScreen
 import dev.jukz.client.gui.HostLeavingScreen
 import dev.jukz.client.gui.JoinPromptScreen
+import dev.jukz.client.gui.UploadingWorldScreen
 import dev.jukz.client.gui.WorldListLiveBadge
 import dev.jukz.core.model.WorldId
+import dev.jukz.runtime.GhostUpload
 import dev.jukz.world.WorldIdSidecar
 import net.fabricmc.api.ClientModInitializer
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.fabric.api.client.screen.v1.Screens
@@ -19,6 +22,9 @@ import net.minecraft.client.gui.screen.multiplayer.MultiplayerScreen
 import net.minecraft.client.gui.screen.world.SelectWorldScreen
 import net.minecraft.client.gui.widget.ButtonWidget
 import net.minecraft.text.Text
+import org.lwjgl.glfw.GLFW
+import org.lwjgl.glfw.GLFWWindowCloseCallback
+import org.lwjgl.glfw.GLFWWindowCloseCallbackI
 
 /**
  * Client entrypoint. No mixins here (both UI hooks ride `ScreenEvents.AFTER_INIT`); the auto-join
@@ -76,6 +82,42 @@ object JukzClient : ClientModInitializer {
                 }
             }
         }
+
+        // Surface the ghost-upload screen once a guest-less close has armed it. It cannot be shown from
+        // inside MinecraftClient.disconnect(): disconnect() consumes its screen early (via reset) and
+        // GameMenuScreen sets a fresh TitleScreen *after* disconnect() returns, overriding anything the
+        // disconnect path installed — and the upload is only armed during the SERVER_STOPPING that the
+        // same disconnect() drives. So we react here, after the world is gone and the pack is ready
+        // (pending != null). This tick runs after that TitleScreen, so the screen sticks; the upload
+        // screen clears GhostUpload when it finishes, so this fires exactly once per guest-less close.
+        ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { client ->
+            if (client.world == null &&
+                GhostUpload.pending() != null &&
+                client.currentScreen !is UploadingWorldScreen
+            ) {
+                client.setScreen(UploadingWorldScreen())
+            }
+        })
+
+        // Veto the window X while a ghost upload is in progress, so an accidental close doesn't
+        // abandon the backup. Registered on the first tick (the window + Minecraft's own close
+        // callback exist by then); we chain to Minecraft's callback for every non-upload close so
+        // normal quitting still works. An OS force-kill remains uncatchable, by design.
+        val installed = java.util.concurrent.atomic.AtomicBoolean(false)
+        ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { client ->
+            if (!installed.compareAndSet(false, true)) return@EndTick
+            val handle = client.window.handle
+            var previous: GLFWWindowCloseCallback? = null
+            previous = GLFW.glfwSetWindowCloseCallback(handle, GLFWWindowCloseCallbackI { window ->
+                val screen = client.currentScreen
+                if (screen is UploadingWorldScreen && screen.isUploading()) {
+                    GLFW.glfwSetWindowShouldClose(window, false) // veto
+                    JukzMod.logger.info("jukz: window close vetoed — world still uploading")
+                } else {
+                    previous?.invoke(window) // hand off to Minecraft's own close handling
+                }
+            })
+        })
 
         JukzMod.logger.info("jukz initialized")
     }

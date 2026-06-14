@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Deterministic host-flow tests, mirroring the loopback/InMemory style of the join tests. The
@@ -119,6 +120,26 @@ class HostControllerTest {
         registry.publishIfNewer(WorldRecord(world, ClaimToken(2, 1_000, node(1)), Endpoint("10.0.0.2", 25565), 0))
 
         assertFalse(host.beat())
+        host.close()
+    }
+
+    @Test
+    fun `a superseded host fires onHostLost from the settle re-probe, not a full heartbeat later`() = runBlocking {
+        val clock = FakeClock(1_000)
+        val registry = InMemoryWorldRegistry(clock)
+        val lost = CountDownLatch(1)
+        val host = HostController(
+            registry, opener(45678), fakeServer(), resolver, nodeId, clock,
+            config = HostConfig(settleWindowMs = 50),
+            onHostLost = { lost.countDown() },
+        )
+        host.host(world, generation = 1)
+
+        // A newer host claims the world a beat after we published (the simultaneous-open race): the
+        // settle re-probe must catch it within its window rather than waiting a whole heartbeat interval.
+        registry.publishIfNewer(WorldRecord(world, ClaimToken(2, 2_000, node(9)), Endpoint("10.0.0.9", 25565), 0))
+
+        assertTrue(lost.await(2, TimeUnit.SECONDS), "onHostLost should fire from the settle re-probe")
         host.close()
     }
 

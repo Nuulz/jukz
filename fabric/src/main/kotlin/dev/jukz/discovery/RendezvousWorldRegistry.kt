@@ -87,6 +87,7 @@ class RendezvousWorldRegistry(
             addProperty("worldId", record.worldId.uuid.toString())
             add("token", tokenToJson(record.token))
             addProperty("heartbeatSeq", record.heartbeatSeq)
+            addProperty("playerCount", record.playerCount)
         }
         val response = try {
             send(post("/v1/heartbeat", body), writeTimeout)
@@ -189,6 +190,7 @@ class RendezvousWorldRegistry(
         add("token", tokenToJson(record.token))
         add("endpoints", endpointsToJson(record.endpoints))
         addProperty("heartbeatSeq", record.heartbeatSeq)
+        addProperty("playerCount", record.playerCount)
         record.relay?.let { add("relay", JsonObject().apply { addProperty("sessionId", it.sessionId) }) }
     }
 
@@ -221,6 +223,7 @@ class RendezvousWorldRegistry(
                 Endpoint(o.get("host").asString, o.get("port").asInt)
             },
             heartbeatSeq = json.get("heartbeatSeq").asLong,
+            playerCount = json.get("playerCount")?.asInt ?: 0,
             relay = json.getAsJsonObject("relay")?.let { RelayOffer(it.get("sessionId").asString) },
         )
     }
