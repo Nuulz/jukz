@@ -44,6 +44,16 @@ class JGitWorldSync(
     override fun currentGeneration(saveDir: Path): Long =
         WorldIdSidecar.read(saveDir)?.generation ?: 0L
 
+    /**
+     * The current snapshot commit id of the local world repo in [saveDir], or null when there is no
+     * repo (no snapshot has ever been built). Used with the generation to identify our local snapshot's
+     * lineage so a takeover never replaces it with a same-generation but divergent cloud sibling.
+     */
+    fun headCommit(saveDir: Path): String? = runCatching {
+        if (!Files.exists(saveDir.resolve(".git"))) return null
+        Git.open(saveDir.toFile()).use { it.repository.resolve("HEAD")?.name }
+    }.getOrNull()
+
     override suspend fun commit(saveDir: Path, generation: Long): CommitId = withContext(Dispatchers.IO) {
         openOrInit(saveDir).use { git ->
             // Minecraft holds session.lock with an exclusive FileLock while the world is loaded, so a

@@ -45,7 +45,17 @@ class CompositeWorldRegistry(
 
     override suspend fun heartbeat(record: WorldRecord): Boolean {
         runCatching { lan.heartbeat(record) } // best-effort refresh; LAN re-announces on its own
-        return rendezvous.heartbeat(record) // authoritative lease verdict
+        // The rendezvous is the authoritative lease verdict, BUT it is optimistically `true` when the
+        // backend is unreachable — so on a LAN-only / rendezvous-down deployment a host that a newer
+        // same-network peer has already superseded would otherwise keep this returning true forever and
+        // never withdraw (the 2026-06-13 permanent split-brain). A definitive rendezvous "superseded"
+        // (false) loses immediately; otherwise we still honour a genuine LAN supersession — a strictly
+        // higher token holding the slot. A transient LAN cache miss (lookup null / our own token) is NOT
+        // a supersession, so a healthy host is never self-evicted by a dropped multicast.
+        if (!rendezvous.heartbeat(record)) return false
+        val lanCurrent = runCatching { lan.lookup(record.worldId) }.getOrNull()
+        if (lanCurrent != null && lanCurrent.token > record.token) return false
+        return true
     }
 
     override suspend fun lookup(worldId: WorldId): WorldRecord? {

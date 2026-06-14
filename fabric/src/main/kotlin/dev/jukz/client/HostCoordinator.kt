@@ -117,6 +117,11 @@ object HostCoordinator {
             endpointResolver = ForwardingEndpointResolver(forwarder, LocalEndpointResolver()),
             nodeId = PersistentNodeId.nodeId,
             clock = SystemClock,
+            // Self-heal: if our lease is genuinely lost to a newer host (the heartbeat CAS fails),
+            // stop serving our fork and offer the player the live winner — never keep a silent second
+            // server running (the 2026-06-13 split-brain, where this callback was unwired and a
+            // superseded host served + LAN-announced forever).
+            onHostLost = { lostWorldId -> onAutoHostLost(lostWorldId) },
             // Connected players (host + any relayed-in guests) for the world-list live badge.
             playerCount = { runCatching { server.playerManager.playerList.size }.getOrDefault(0) },
             // When UPnP could not open the port, register a relay session so non-reachable guests
@@ -150,6 +155,25 @@ object HostCoordinator {
             is HostResult.Failed ->
                 JukzMod.logger.warn("jukz: could not auto-host this world: {}", result.reason)
         }
+    }
+
+    /**
+     * The auto-host lost its lease *after* it had been serving: a newer host genuinely superseded us
+     * (the heartbeat CAS failed — see [dev.jukz.discovery.CompositeWorldRegistry.heartbeat], which now
+     * reports a real LAN supersession even when the rendezvous is optimistically up). Stop serving our
+     * losing fork at once (withdraw + close, no handoff, no ghost backup) and offer the player the live
+     * winner, instead of silently running a divergent second copy — the 2026-06-13 split-brain, where a
+     * superseded host kept serving and LAN-announcing forever. Fired off the heartbeat coroutine, so the
+     * registry lookup + teardown run on a daemon thread and the UI hops back via [promptSuperseded].
+     */
+    private fun onAutoHostLost(worldId: WorldId) {
+        if (!HostSession.isHosting) return // already torn down (the world is closing) — nothing to recover
+        Thread {
+            JukzMod.logger.info("jukz: lost the host lease for {} — a newer host took over", worldId.shortCode())
+            val winner = runCatching { runBlocking { Discovery.registry.lookup(worldId) } }.getOrNull()
+            HostSession.stopHostingSuperseded()
+            if (winner != null) promptSuperseded(winner)
+        }.apply { isDaemon = true; name = "jukz-superseded" }.start()
     }
 
     /**

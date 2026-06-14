@@ -77,6 +77,23 @@ object HostSession {
     fun currentStatus(): HostStatus? = controller?.let { runBlocking { it.status() } }
 
     /**
+     * Stop hosting because a newer host superseded us — NOT a clean world close. Closes the controller
+     * (which withdraws our record via the token CAS, so the winner is never clobbered) and clears the
+     * session. Deliberately does NO handoff and NO ghost upload: our copy is a losing fork, not the
+     * canonical world, so backing it up would only re-pollute discovery/R2 with a divergent snapshot
+     * (the seed of the 2026-06-13 incident). Safe to call when not hosting. The caller (HostCoordinator)
+     * then offers the player the live winner via [dev.jukz.client.HostCoordinator] supersession prompt.
+     */
+    fun stopHostingSuperseded() {
+        val c = controller ?: return
+        runCatching { c.close() } // withdraw (CAS on our own token) + stop heartbeat + close the server
+        runCatching { onWithdraw() } // tear down any relay control link
+        controller = null
+        onWithdraw = {}
+        JukzMod.logger.info("jukz: stopped hosting — superseded by a newer host")
+    }
+
+    /**
      * Withdraw the discovery record and stop heartbeating. Safe to call when not hosting. When a guest
      * is connected over a live control channel and [saveDir] is known, first hand the world off (F4): we
      * arm the snapshot and push a `HostLeaving` notice (with the snapshot endpoint) to each connected

@@ -19,8 +19,11 @@ import dev.jukz.core.transport.DirectChannelDialer
 import dev.jukz.transport.CompositeChannelDialer
 import dev.jukz.transport.WsRelayTransport
 import dev.jukz.core.util.SystemClock
+import dev.jukz.core.sync.SnapshotLineage
+import dev.jukz.core.sync.SnapshotMarker
 import dev.jukz.sync.JGitWorldSync
 import dev.jukz.sync.R2SnapshotStore
+import dev.jukz.world.WorldIdSidecar
 import dev.jukz.world.WorldSaveLocator
 import kotlinx.coroutines.runBlocking
 import net.minecraft.client.MinecraftClient
@@ -40,6 +43,18 @@ import java.util.concurrent.atomic.AtomicBoolean
  * and open it locally, which auto-hosts and fences past the old host. No discovery, no race.
  */
 object JoinCoordinator {
+
+    /**
+     * Why a takeover is happening — decides whether discovery may be consulted before booting.
+     *  - [LIVE_HANDOFF]: the host sent `HostLeaving` (or its control channel broke) over the LIVE
+     *    connection and authoritatively chose us. The contract is "no discovery, no race": we apply the
+     *    offered snapshot and boot, and the authoritative publishIfNewer CAS at auto-host time is what
+     *    fences a concurrent taker (the loser self-heals via [HostCoordinator]).
+     *  - [GHOST]: no live host; we are reviving a cloud/ghost snapshot. Same fencing applies — the
+     *    post-boot CAS arbitrates — so this no longer re-reads discovery either (a stale LAN record was
+     *    mistaken for a live host in the 2026-06-13 incident, discarding the just-applied snapshot).
+     */
+    enum class TakeoverIntent { LIVE_HANDOFF, GHOST }
 
     fun start(
         worldId: WorldId,
@@ -83,7 +98,25 @@ object JoinCoordinator {
                 val ghost = R2SnapshotStore.ghostSnapshot(worldId)
                 val head = ghost?.let { R2SnapshotStore.ghostHead(it.headUrl) }
                 if (ghost != null && head != null) {
-                    client.execute { showGhostTakeover(client, worldId, shortCode, parent, ghost, head.commit) }
+                    // Only revive the cloud ghost if it is a strictly-newer lineage than our local copy.
+                    // A same-generation but divergent sibling (two split-brain forks share a generation)
+                    // or an older snapshot must NOT overwrite what we already hold — that silent
+                    // replacement is how the 2026-06-13 incident lost a shared-session snapshot to an
+                    // older solo fork (both gen 40).
+                    val candidate = SnapshotMarker(head.generation, head.commit)
+                    if (SnapshotLineage.shouldReplace(localSnapshotMarker(client, worldId), candidate)) {
+                        client.execute { showGhostTakeover(client, worldId, shortCode, parent, ghost, head.commit) }
+                    } else {
+                        JukzMod.logger.info("jukz: cloud ghost for {} is not newer than the local copy — keeping local", shortCode)
+                        client.execute {
+                            client.setScreen(
+                                ShouldHostScreen(
+                                    "No live host was found for $shortCode.",
+                                    onBack = { client.setScreen(parent) },
+                                ),
+                            )
+                        }
+                    }
                     return@Thread
                 }
             }
@@ -120,7 +153,7 @@ object JoinCoordinator {
             // The host we tried to join was already a ghost: offer the takeover with whatever it left.
             // No live connection to ride, so the offer (from the record) is pulled directly, best-effort.
             is JoinResult.ShouldHost ->
-                showHandoff(client, worldId, shortCode, parent, result.record?.snapshot, target = null, dialer = DirectChannelDialer())
+                showHandoff(client, worldId, shortCode, parent, result.record?.snapshot, target = null, dialer = DirectChannelDialer(), intent = TakeoverIntent.GHOST)
             is JoinResult.Failed ->
                 client.setScreen(
                     NatErrorScreen(
@@ -152,7 +185,7 @@ object JoinCoordinator {
             return
         }
         JukzMod.logger.info("jukz: host of {} is leaving (snapshot {}) — offering handoff", shortCode, if (offer != null) "offered" else "none")
-        showHandoff(client, worldId, shortCode, TitleScreen(), offer, target, dialer)
+        showHandoff(client, worldId, shortCode, TitleScreen(), offer, target, dialer, intent = TakeoverIntent.LIVE_HANDOFF)
     }
 
     private fun showHandoff(
@@ -163,6 +196,7 @@ object JoinCoordinator {
         offer: SnapshotOffer?,
         target: DialTarget?,
         dialer: ChannelDialer,
+        intent: TakeoverIntent,
     ) {
         // Start the snapshot download NOW, while the host is still connected — its connection server is
         // torn down within ~30 s of announcing it is leaving, so we must not wait for the user's "Host
@@ -171,7 +205,7 @@ object JoinCoordinator {
         client.execute {
             val screen = HostHandoffScreen(
                 snapshotApplied = offer != null,
-                onHostNow = { beginTakeover(client, worldId, shortCode, parent, prefetch) },
+                onHostNow = { beginTakeover(client, worldId, shortCode, parent, prefetch, intent) },
                 onBack = { GuestSession.leave(); discardPrefetch(prefetch); client.setScreen(parent) },
             )
             // If we are still in the host's world (a live handoff), leave it cleanly WITH this prompt
@@ -195,7 +229,7 @@ object JoinCoordinator {
     ) {
         val client = MinecraftClient.getInstance()
         val prefetch = prefetchGhostSnapshot(ghost, headCommit)
-        beginTakeover(client, worldId, shortCode, parent, prefetch)
+        beginTakeover(client, worldId, shortCode, parent, prefetch, intent = TakeoverIntent.GHOST)
     }
 
     /**
@@ -213,7 +247,7 @@ object JoinCoordinator {
         val prefetch = prefetchGhostSnapshot(ghost, head)
         val screen = HostHandoffScreen(
             snapshotApplied = true,
-            onHostNow = { beginTakeover(client, worldId, shortCode, parent, prefetch) },
+            onHostNow = { beginTakeover(client, worldId, shortCode, parent, prefetch, intent = TakeoverIntent.GHOST) },
             onBack = { discardPrefetch(prefetch); client.setScreen(parent) },
         )
         client.setScreen(screen)
@@ -268,6 +302,19 @@ object JoinCoordinator {
         return future
     }
 
+    /**
+     * The local copy's snapshot identity (generation + head commit) for the lineage guard, or null when
+     * we hold no local copy of the world. Used to refuse a cloud ghost that is not a strictly-newer
+     * lineage, so a same-generation sibling fork never overwrites what we already have.
+     */
+    private fun localSnapshotMarker(client: MinecraftClient, worldId: WorldId): SnapshotMarker? {
+        val savesDir = client.levelStorage.savesDirectory
+        val levelName = WorldSaveLocator.findLevelName(savesDir, worldId.uuid) ?: return null
+        val saveDir = savesDir.resolve(levelName)
+        val generation = WorldIdSidecar.read(saveDir)?.generation ?: return null
+        return SnapshotMarker(generation, JGitWorldSync().headCommit(saveDir) ?: "")
+    }
+
     /** Drop a prefetched pack the user declined to take over with, off the render thread. */
     private fun discardPrefetch(prefetch: CompletableFuture<JGitWorldSync.Downloaded?>) {
         Thread {
@@ -281,6 +328,14 @@ object JoinCoordinator {
      * generation), then open it locally bypassing discovery so it auto-hosts. Off the render thread
      * until the open. The download already ran eagerly in [showHandoff]; here we only await + apply it,
      * so a slow "Host now" click never misses the host's brief snapshot window.
+     *
+     * No discovery is consulted here, for EITHER [intent]. A [TakeoverIntent.LIVE_HANDOFF] was
+     * authoritatively chosen by the departing host over the live control channel; re-reading discovery
+     * raced a stale LAN record and discarded the just-applied snapshot (the 2026-06-13 state loss). A
+     * [TakeoverIntent.GHOST] revival is likewise fenced by the authoritative publishIfNewer CAS at
+     * auto-host time: if another opener won the race, our announce is rejected and [HostCoordinator]
+     * prompts the player to join the winner — so booting first and letting the CAS arbitrate is correct
+     * and never silently forks the world.
      */
     private fun beginTakeover(
         client: MinecraftClient,
@@ -288,6 +343,7 @@ object JoinCoordinator {
         shortCode: String,
         parent: Screen?,
         prefetch: CompletableFuture<JGitWorldSync.Downloaded?>,
+        intent: TakeoverIntent,
     ) {
         GuestSession.leave() // the old guest session is done; we are about to become the host
         client.setScreen(SearchingHostScreen(shortCode) {}) // "preparing" spinner; no cancel mid-takeover
@@ -315,18 +371,10 @@ object JoinCoordinator {
                 return@Thread
             }
 
-            // The ghost apply took a few seconds — check once more whether another client announced
-            // in the meantime. If so, join that host instead of opening a duplicate local server.
-            // Without this check, two clients that both see "no live host" can race to take over
-            // the same ghost and end up on separate servers for up to a heartbeat interval (~30s).
-            val raceWinner = runCatching { runBlocking { Discovery.registry.lookup(worldId) } }.getOrNull()
-            if (raceWinner != null) {
-                JukzMod.logger.info("jukz: {} was claimed by another host while taking over — joining instead", shortCode)
-                client.execute { start(worldId, shortCode, parent) }
-                return@Thread
-            }
-
-            JukzMod.logger.info("jukz: taking over {} (snapshot {})", shortCode, if (applied) "applied" else "unavailable")
+            // No discovery re-check (see the kdoc): the live handoff authoritatively chose us, and a
+            // ghost revival is fenced by the publishIfNewer CAS at auto-host time. Re-reading discovery
+            // here raced a stale LAN record and discarded the snapshot we just applied (2026-06-13).
+            JukzMod.logger.info("jukz: taking over {} ({}, snapshot {})", shortCode, intent.name.lowercase(), if (applied) "applied" else "unavailable")
             client.execute { WorldOpenInterceptor.openLocallyBypassingDiscovery(levelName) }
         }.apply { isDaemon = true; name = "jukz-takeover" }.start()
     }
