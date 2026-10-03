@@ -2,10 +2,15 @@ package dev.jukz.client.gui
 
 import dev.jukz.client.HostCoordinator
 import dev.jukz.core.host.HostStatus
+import dev.jukz.core.model.ClaimToken
 import dev.jukz.runtime.HostSession
-import net.minecraft.client.gui.DrawContext
+import io.wispforest.owo.ui.component.ButtonComponent
+import io.wispforest.owo.ui.component.Components
+import io.wispforest.owo.ui.component.LabelComponent
+import io.wispforest.owo.ui.container.FlowLayout
+import io.wispforest.owo.ui.core.Color
+import io.wispforest.owo.ui.core.Insets
 import net.minecraft.client.gui.screen.Screen
-import net.minecraft.client.gui.widget.ButtonWidget
 import net.minecraft.text.Text
 
 /**
@@ -13,42 +18,73 @@ import net.minecraft.text.Text
  * shareable code (copyable), the world's identity (UUID + fencing generation), the endpoint guests
  * dial, and a live self-check — does the registry still hold our record under our token? — so the
  * host can confirm at a glance that the share is healthy. The check runs off the render thread (it
- * is a registry/network read) and is re-runnable with Refresh.
+ * is a registry/network read), re-runs with Refresh, and re-polls on its own while not yet live. The
+ * panel also rebuilds itself when the hosted record changes underneath it — closing or reopening
+ * access withdraws/announces off-thread, so the first build often sees the state before the switch.
+ *
+ * Layout and style: `assets/jukz/owo_ui/host_info.xml`.
  */
-class HostInfoScreen(private val parent: Screen?) : Screen(Text.literal("World info")) {
+class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
 
     private val record get() = HostSession.record
 
     @Volatile private var status: HostStatus? = null
     @Volatile private var checking = true
+    private var statusLabel: LabelComponent? = null
+    private var shownStatus: Pair<String, Int>? = null
+    private var ticksSinceCheck = 0
+    private var builtFor: ClaimToken? = null // the hosting session this panel shows (null = not hosting)
 
-    override fun init() {
-        val cx = width / 2
-        val y = height - 40
-        addDrawableChild(
-            ButtonWidget.builder(Text.literal("Copy code")) {
-                record?.let { client?.keyboard?.clipboard = it.worldId.shortCode() }
-            }.dimensions(cx - 154, y, 100, 20).build(),
-        )
-        addDrawableChild(
-            ButtonWidget.builder(Text.literal("Refresh")) { refresh() }
-                .dimensions(cx - 50, y, 100, 20).build(),
-        )
-        addDrawableChild(
-            ButtonWidget.builder(Text.literal("Done")) { client?.setScreen(parent) }
-                .dimensions(cx + 54, y, 100, 20).build(),
-        )
+    override fun recreate(): Screen = HostInfoScreen(parent)
+
+    override fun build(root: FlowLayout) {
+        val rows = root.childById(FlowLayout::class.java, "rows")
+        val rec = record
+        builtFor = rec?.token
+        if (rec == null) {
+            rows.child(Components.label(Text.literal("Not hosting this world.")).color(Color.ofArgb(JukzStatusScreen.COLOR_SUBTLE)))
+        } else {
+            listOfNotNull(
+                "Share code" to rec.worldId.shortCode(),
+                "World UUID" to rec.worldId.uuid.toString(),
+                "Generation" to rec.token.hostGeneration.toString(),
+                "Endpoints" to rec.endpoints.joinToString(", ") { it.format() },
+                // Guests that can't reach the endpoints (CGNAT / no UPnP) come in through this relay session.
+                rec.relay?.let { "Relay" to "via rendezvous · ${it.sessionId.take(8)}" },
+            ).forEachIndexed { i, (label, value) -> rows.child(infoRow(label, value, "row-$i").first) }
+            val (statusRow, label) = infoRow("Status", "", "row-status")
+            statusRow.margins(Insets.top(6))
+            rows.child(statusRow)
+            statusLabel = label
+            showStatus()
+        }
+
         // Access toggle (F4-D): open/close the world to guests. Reads the per-world flag for its label.
-        addDrawableChild(
-            ButtonWidget.builder(accessLabel()) { toggleAccess() }
-                .dimensions(cx - 75, y - 26, 150, 20).build(),
-        )
+        button(root, "access-button", accessLabel()) { toggleAccess() }
+        button(root, "copy-button", Text.literal("Copy code")) {
+            record?.let { client?.keyboard?.clipboard = it.worldId.shortCode() }
+        }
+        button(root, "refresh-button", Text.literal("Refresh")) { refresh() }
+        button(root, "done-button", Text.literal("Done")) { client?.setScreen(parent) }
+
         // Self-heal: every jukz world is auto-hosted on open, but if that hasn't taken (or failed),
         // kick it off now so opening this panel always ends with the world online.
         if (!HostSession.isHosting) {
             client?.server?.let { HostCoordinator.autoHost(it) }
         }
         refresh()
+    }
+
+    /** One "label: value" row from the model's `info-row` template; returns the row and its value label. */
+    private fun infoRow(label: String, value: String, id: String): Pair<FlowLayout, LabelComponent> {
+        val row = model.expandTemplate(FlowLayout::class.java, "info-row", mapOf("label" to label, "id" to id))
+        val valueLabel = row.childById(LabelComponent::class.java, id)
+        valueLabel.text(Text.literal(value))
+        return row to valueLabel
+    }
+
+    private fun button(root: FlowLayout, id: String, text: Text, onPress: () -> Unit) {
+        root.childById(ButtonComponent::class.java, id).apply { message = text }.onPress { onPress() }
     }
 
     /** "Access: Open" / "Access: Closed", read from the per-world flag at build time. */
@@ -70,59 +106,41 @@ class HostInfoScreen(private val parent: Screen?) : Screen(Text.literal("World i
     private fun refresh() {
         checking = true
         status = null
+        ticksSinceCheck = 0
         Thread {
             status = runCatching { HostSession.currentStatus() }.getOrNull()
             checking = false
         }.apply { isDaemon = true; name = "jukz-host-status" }.start()
     }
 
-    override fun render(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
-        super.render(context, mouseX, mouseY, delta) // background + buttons
-        val cx = width / 2
-
-        context.drawCenteredTextWithShadow(textRenderer, JukzStatusScreen.BRAND, cx, 28, JukzStatusScreen.ACCENT_INFO)
-        context.drawCenteredTextWithShadow(textRenderer, title, cx, 44, JukzStatusScreen.COLOR_TITLE)
-
-        val rec = record
-        if (rec == null) {
-            context.drawCenteredTextWithShadow(textRenderer, Text.literal("Not hosting this world."), cx, 80, JukzStatusScreen.COLOR_SUBTLE)
+    override fun tick() {
+        super.tick()
+        if (record?.token != builtFor) { // heartbeats replace the record but keep its token
+            client?.setScreen(recreate()) // hosting started/stopped/re-announced since this panel was built
             return
         }
+        showStatus()
+        ticksSinceCheck++
+        if (!checking && status?.live != true && HostSession.isHosting && ticksSinceCheck >= REPOLL_TICKS) refresh()
+    }
 
-        val rows = listOfNotNull(
-            "Share code" to rec.worldId.shortCode(),
-            "World UUID" to rec.worldId.uuid.toString(),
-            "Generation" to rec.token.hostGeneration.toString(),
-            "Endpoints" to rec.endpoints.joinToString(", ") { it.format() },
-            // Guests that can't reach the endpoints (CGNAT / no UPnP) come in through this relay session.
-            rec.relay?.let { "Relay" to "via rendezvous · ${it.sessionId.take(8)}" },
-        )
-        var y = 78
-        for ((label, value) in rows) {
-            drawRow(context, cx, y, label, value)
-            y += 16
-        }
-
-        // Live self-check line.
-        val (text, color) = when {
+    /** Push the latest self-check into the status label (only when it changed). */
+    private fun showStatus() {
+        val label = statusLabel ?: return
+        val current = when {
             checking -> "checking…" to JukzStatusScreen.COLOR_SUBTLE
             status?.live == true -> "live · heartbeat #${status!!.heartbeatSeq}" to COLOR_LIVE
             else -> "not announced" to JukzStatusScreen.ACCENT_ERROR
         }
-        y += 8
-        drawRow(context, cx, y, "Status", text, valueColor = color)
-    }
-
-    /** A "label   value" row: label right-aligned just left of centre, value left-aligned just right. */
-    private fun drawRow(context: DrawContext, cx: Int, y: Int, label: String, value: String, valueColor: Int = JukzStatusScreen.COLOR_TITLE) {
-        val labelText = Text.literal("$label:")
-        context.drawTextWithShadow(textRenderer, labelText, cx - 8 - textRenderer.getWidth(labelText), y, JukzStatusScreen.COLOR_SUBTLE)
-        context.drawTextWithShadow(textRenderer, Text.literal(value), cx + 8, y, valueColor)
+        if (current == shownStatus) return
+        shownStatus = current
+        label.text(Text.literal(current.first)).color(Color.ofArgb(current.second))
     }
 
     override fun shouldCloseOnEsc(): Boolean = true
 
     companion object {
         private const val COLOR_LIVE = 0xFF6BCB6B.toInt()
+        private const val REPOLL_TICKS = 60 // 3 s
     }
 }

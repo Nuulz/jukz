@@ -11,6 +11,7 @@ base { archivesName = project.archives_base_name }
 repositories {
     maven { name = 'FabricMC'; url = 'https://maven.fabricmc.net/' }
     maven { name = 'JitPack'; url = 'https://jitpack.io' }
+    maven { name = 'wispforest'; url = 'https://maven.wispforest.io/releases/' }
     mavenCentral()
 }
 
@@ -20,6 +21,11 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
     modImplementation "net.fabricmc:fabric-language-kotlin:${fabric_kotlin_version}"
+
+    // owo-ui: screens are XML models under assets/jukz/owo_ui, hot-reloaded in dev (see JukzUiScreen).
+    // Players install owo-lib like fabric-api; the tiny sentinel JiJ explains it if it is missing.
+    modImplementation "io.wispforest:owo-lib:${owo_version}"
+    include "io.wispforest:owo-sentinel:${owo_version}"
 
     // The deterministic core. include() jar-in-jars it so it ships inside the mod.
     implementation project(':core')
@@ -56,6 +62,11 @@ loom {
     // and a fixed username so the two windows are easy to tell apart in logs.
     // Launch:  gradlew runClientA   and   gradlew runClientB   (or run-client-a.bat / run-client-b.bat).
     runs {
+        // Dev runs point owo-ui's hot reload at the XML in src/, so saving a screen's model redraws it
+        // in-game immediately (JukzUiScreen watches the file). Never set outside dev runs.
+        configureEach {
+            vmArg "-Djukz.uiSourceDir=${file('src/main/resources/assets/jukz/owo_ui').absolutePath}"
+        }
         clientA {
             inherit client
             name "Client A (jukz host)"

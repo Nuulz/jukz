@@ -1,0 +1,108 @@
+<!--
+  World info (pause menu → "World info (jukz)"). Layout and style live here; HostInfoScreen.kt fills in
+  the data and wires the buttons by id. In a dev run (gradlew runClientA/B) saving this file redraws
+  the open screen in-game — see JukzUiScreen.
+-->
+<owo-ui xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/wisp-forest/owo-lib/1.21/owo-ui.xsd">
+    <components>
+        <flow-layout direction="vertical">
+            <children>
+                <flow-layout direction="vertical" id="panel">
+                    <children>
+                        <label>
+                            <text>jukz</text>
+                            <color>#7FB2FF</color>
+                            <shadow>true</shadow>
+                        </label>
+                        <label>
+                            <text>World info</text>
+                            <color>#FFFFFF</color>
+                            <shadow>true</shadow>
+                        </label>
+
+                        <!-- Filled from code with one "info-row" per field. -->
+                        <flow-layout direction="vertical" id="rows">
+                            <children/>
+                            <gap>5</gap>
+                            <margins>
+                                <vertical>8</vertical>
+                            </margins>
+                        </flow-layout>
+
+                        <template name="jukz-button">
+                            <id>access-button</id>
+                            <width>150</width>
+                        </template>
+
+                        <flow-layout direction="horizontal">
+                            <children>
+                                <template name="jukz-button">
+                                    <id>copy-button</id>
+                                    <width>100</width>
+                                </template>
+                                <template name="jukz-button">
+                                    <id>refresh-button</id>
+                                    <width>100</width>
+                                </template>
+                                <template name="jukz-button">
+                                    <id>done-button</id>
+                                    <width>100</width>
+                                </template>
+                            </children>
+                            <gap>4</gap>
+                        </flow-layout>
+                    </children>
+
+                    <horizontal-alignment>center</horizontal-alignment>
+                    <gap>6</gap>
+                    <padding>
+                        <all>12</all>
+                    </padding>
+                    <surface>
+                        <flat>#AA0B0F1A</flat>
+                        <outline>#FF2A3B5C</outline>
+                    </surface>
+                </flow-layout>
+            </children>
+
+            <surface>
+                <vanilla-translucent/>
+            </surface>
+            <horizontal-alignment>center</horizontal-alignment>
+            <vertical-alignment>center</vertical-alignment>
+        </flow-layout>
+    </components>
+
+    <templates>
+        <!-- "Label:   value" — the label column is fixed-width and right-aligned so values line up. -->
+        <template name="info-row">
+            <flow-layout direction="horizontal">
+                <children>
+                    <label>
+                        <text>{{label}}:</text>
+                        <color>#A0A0A0</color>
+                        <horizontal-text-alignment>right</horizontal-text-alignment>
+                        <sizing>
+                            <horizontal method="fixed">80</horizontal>
+                        </sizing>
+                    </label>
+                    <label id="{{id}}">
+                        <color>#FFFFFF</color>
+                    </label>
+                </children>
+                <gap>8</gap>
+            </flow-layout>
+        </template>
+
+        <!-- Buttons get their text from code (it depends on state, e.g. "Access: Open"). -->
+        <template name="jukz-button">
+            <button id="{{id}}">
+                <sizing>
+                    <horizontal method="fixed">{{width}}</horizontal>
+                    <vertical method="fixed">20</vertical>
+                </sizing>
+            </button>
+        </template>
+    </templates>
+</owo-ui>

@@ -4,6 +4,7 @@ import dev.jukz.client.GuestSession
 import dev.jukz.client.HostCoordinator
 import dev.jukz.client.gui.HostInfoScreen
 import dev.jukz.client.gui.HostLeavingScreen
+import dev.jukz.client.gui.UiHotReload
 import dev.jukz.client.gui.JoinPromptScreen
 import dev.jukz.client.gui.UploadingWorldScreen
 import dev.jukz.client.gui.WorldListLiveBadge
@@ -37,6 +38,8 @@ import org.lwjgl.glfw.GLFWWindowCloseCallbackI
  */
 object JukzClient : ClientModInitializer {
     override fun onInitializeClient() {
+        UiHotReload.install() // dev runs only: owo-ui models are read live from src/
+
         ScreenEvents.AFTER_INIT.register { client, screen, scaledWidth, scaledHeight ->
             when (screen) {
                 is MultiplayerScreen -> {

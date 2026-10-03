@@ -24,6 +24,7 @@
     "minecraft": "~1.21.1",
     "java": ">=21",
     "fabric-api": "*",
-    "fabric-language-kotlin": ">=1.12.0"
+    "fabric-language-kotlin": ">=1.12.0",
+    "owo-lib": ">=0.12.15"
   }
 }

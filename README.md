@@ -151,6 +151,19 @@ hole-punch/relay fallback for routers without UPnP remain flagged.
 
 Requires JDK 21. The Gradle wrapper pins Gradle 8.10.1 and Fabric Loom 1.7.
 
+### Editing screens (owo-ui, hot reload)
+
+jukz screens are moving to [owo-ui](https://docs.wispforest.io/owo/ui/) XML models: layout and style
+live in `fabric/src/main/resources/assets/jukz/owo_ui/<screen>.xml`, and the Kotlin class (a
+`JukzUiScreen`) only fills in data and wires components by `id`. `World info` (`host_info.xml` +
+`HostInfoScreen.kt`) is the first one; the rest still draw by hand.
+
+In a dev run (`gradlew runClientA` / `runClientB`) the models are read straight from `src/` and an open
+screen redraws itself when its XML is saved — edit, save, look, no restart. A malformed model falls back
+to the packaged copy and owo reports the parse error in chat and the log. Kotlin changes still need a
+restart. Players need [owo-lib](https://modrinth.com/mod/owo-lib) installed, like Fabric API; the
+bundled owo-sentinel tells them if it is missing.
+
 ### Testing host ↔ guest on one machine
 
 Two isolated dev clients (separate `runDir`, so separate logs / saves / config / `jukz.nodeid` —
