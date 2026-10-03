@@ -8,8 +8,26 @@ close, the announcement is withdrawn. The world effectively lives in one place a
 whoever's host is "switched on" — with rotating ownership and no manual coordination. There is no
 save synchronization: a guest plays live on the host's world (like Open-to-LAN), not on a copy.
 
-Host ↔ guest is verified working end-to-end (two instances on one machine: auto-host on open,
-discovery via the rendezvous server, relay, and a guest joining the live world).
+Verified in-game end-to-end with two clients against the production rendezvous (`jukz.nuulm.com`),
+with the WebSocket relay forced: auto-host on open, auto-join, joining by code, the live-connection
+handoff, the cloud (ghost) takeover, closing/reopening access and the world-list live badge.
+
+## Playing
+
+Install, next to Minecraft **1.21.1** with Fabric Loader ≥ 0.16.5:
+[Fabric API](https://modrinth.com/mod/fabric-api),
+[Fabric Language Kotlin](https://modrinth.com/mod/fabric-language-kotlin),
+[owo-lib](https://modrinth.com/mod/owo-lib) and the jukz jar (`fabric/build/libs/jukz-0.1.0.jar`).
+
+- **Host:** just open a world. It is announced automatically; the share code is in the pause menu →
+  **World info (jukz)**, which also has **Access: Open/Closed** to make the world private for a while.
+- **Join:** Multiplayer → **Play together** → paste the code. A friend's world you already have a copy
+  of shows a green dot in the world list while someone hosts it; opening it joins them.
+- **Leaving:** quitting with guests online hands the world to one of them (**Host now**); quitting
+  alone backs it up to the cloud, and whoever opens it next continues from there.
+
+Settings live in `config/jukz.properties`: `rendezvous.url` (empty = the public server, `none` =
+LAN-only, or your own), `rendezvous.auth-token`, and `jukz.force-relay` (testing).
 
 ## Screenshots
 
@@ -45,126 +63,85 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
 
 ## What is real and tested
 
-- **`core` (67 passing tests):**
+- **`core` (90 tests):**
   - `WorldId` with a copyable Base32 share code; `NodeId`; `Endpoint`; `ClaimToken` (the fencing
     token: `generation → millis → nodeId`).
   - `WorldRegistry` + `InMemoryWorldRegistry` — CAS-on-token publish, TTL expiry, heartbeat refresh.
-    `WorldRecordCodec` — compact binary wire encoding of a record (round-trip tested, < 1000 bytes).
+    `WorldRecordCodec` — compact binary wire encoding of a record (v4: endpoint candidate list +
+    optional relay offer; still decodes v1; < 1000 bytes).
   - `HostElection` — split-brain tie-break, ghost detection + fenced takeover (`generation+1`),
     stale-token rejection (rules R1–R14 from the spec). `HeartbeatLivenessProbe` for R10/R11.
-  - `handshake` — sealed `Message` set, byte-exact binary `MessageCodec`, host/joiner state
-    machines, and `FramedMessageChannel` (length-prefixed messages over a channel).
-  - `transport` — `LocalTcpRelay` (transparent TCP byte pump, verified over loopback),
-    `DirectTcpTransport`, `SocketChannel`, `ConnectionType` (control/data discriminator byte).
-  - `join` — `JoinController`: the guest flow (lookup → control-channel handshake → relay →
-    game hand-off), with `GameHandoff` kept Minecraft-free. Validated end-to-end over loopback
-    against a stand-in host (connected / should-host / host-unavailable).
-  - `host` — `HostController`: the host flow (open → **serve** → publish under a fencing `ClaimToken`
-    → heartbeat → withdraw), with `LanOpener`, `EndpointResolver` (the NAT frontier) and
-    `ConnectionServer` kept Minecraft-free. `HostConnectionServer` is the real host listener (routes
-    CONTROL→handshake, DATA→pipe to the local game). Unit-tested against `InMemoryWorldRegistry`, plus
-    a full **end-to-end loopback test** where a real `HostController` serves a real `JoinController`
-    (discovery → handshake → byte relay) — the host is no longer a test double.
-    `ForwardingEndpointResolver` + `PortForwarder` encode the NAT-traversal invariant that *opening
-    the router port is best-effort and must never fail the host* — tested with fakes, so the real
-    UPnP adapter stays flagged without risking hosting.
-- **`fabric` (compiles, builds the mod jar):**
-  - `WorldIdState` (verified 1.21.1 `PersistentState` API) + `WorldIdSidecar` (pre-start `jukz.dat`).
-  - Lifecycle wiring (`ServerWorldEvents.LOAD`, `SERVER_STOPPING`) and `HostSession` (host withdrawal).
-  - Client join flow wired end-to-end: a **"Play together"** button on the multiplayer screen
-    (`ScreenEvents.AFTER_INIT`) opens a short-code prompt → `JoinCoordinator` runs `JoinController`
-    off-thread and maps the result to animated status screens (searching / connecting / nobody-
-    hosting / error), with `MinecraftGameHandoff` opening the vanilla `ConnectScreen` on success.
-  - Auto-host on open: every jukz world is permanently shareable. When a world boots locally,
-    `HostCoordinator` (on `ClientPlayConnectionEvents.JOIN`, so the local player already exists — the
-    moment `openToLan` needs) bumps the fence and runs `HostController` with `MinecraftLanOpener`
-    (real `IntegratedServer.openToLan`, then drops the integrated server to **offline-mode** so guests
-    relayed in aren't kicked by Mojang online-auth — jukz authorizes via the world code) and the
-    UPnP-opening `ForwardingEndpointResolver`, announcing it so others can join. Silent; `HostSession`
-    withdraws on world close. The pause menu gains a **"World info (jukz)"** button
-    (`ScreenEvents.AFTER_INIT`, no mixin) opening `HostInfoScreen` (share code + copy, UUID,
-    generation, endpoints, live self-check); it takes the vanilla "Open to LAN" slot, or pins itself
-    when that button is already gone.
-  - Auto-join on open (mixin): the flip side — opening a world first consults discovery. A tiny Java
-    `IntegratedServerLoaderMixin` at the head of `IntegratedServerLoader.start` reads the world's
-    `jukz.dat` UUID and, via `WorldOpenInterceptor`, looks it up in the shared `Discovery` registry; a
-    live host cancels the local boot and joins as a guest, otherwise the world boots locally (and then
-    auto-hosts). Joining/hosting is intrinsic to opening a world, never a button.
-  - **Real LAN cross-machine discovery** (`LanMulticastWorldRegistry`, the default `Discovery`
-    backend): hosts multicast their record to a private group; every node caches what it hears with
-    the same token-CAS + TTL fencing. Two Minecraft instances on the same network actually find and
-    join each other's worlds today — no server, no NAT. Falls back to in-memory if multicast is blocked.
-  - **Internet-wide discovery via a rendezvous server**: `RendezvousWorldRegistry` speaks
-    the JSON `/v1` contract of the self-hostable Rust + Axum server in [`rendezvous/`](rendezvous/)
-    (90 s leases, heartbeat at TTL/3 derived from the server's announce response, ClaimToken CAS
-    replicated server-side, observed-public-IP appended to the announced endpoints). On by default
-    against the public instance (`jukz.nuulm.com`); override `rendezvous.url` in
-    `config/jukz.properties` to self-host, or set it to `none` for LAN-only.
-    `CompositeWorldRegistry` layers it over LAN multicast — same-network play
-    keeps working with no internet — and `WorldRecord` now carries an ordered **endpoint candidate
-    list** (wire format v2, still decodes v1) that guests dial in order. A rejected announce is no
-    longer silent: `SupersededScreen` lets the player keep the local copy or leave and join the live
-    host. The per-install `NodeId` is persisted (`config/jukz.nodeid`).
-  - `StunClient` — a real, dependency-free RFC 5389 STUN client. `UpnpMapper` — a real, dependency-free
-    UPnP IGD client (SSDP + SOAP port-map / external-IP).
-  - **Automatic UPnP port-opening on the host path** (`UpnpPortForwarder`, wired via the core
-    `ForwardingEndpointResolver`): when a world is hosted, jukz best-effort maps its listen port on
-    the router so the rendezvous server's observed-public-IP endpoint is dialable from another
-    network — cross-internet play with no manual port-forward where the router supports UPnP. It is
-    non-fatal: no UPnP just falls back to LAN-only reach (the SSDP/SOAP round-trip itself is still
-    flagged for live-NAT validation).
-  - **World handoff over the live connection (F4)** — when a host with a connected guest closes its
-    world, it forces a save, snapshots it with JGit (`commit` — excluding Minecraft's locked
-    `session.lock`), arms the pack on its connection server under a one-shot gate token, and pushes a
-    `HostLeaving` message — carrying that token-gated snapshot offer — to each guest over the **control
-    channel that is already open**. This never goes through discovery, so it can't race the
-    registry/cache (the earlier discovery-based attempt did, and failed). The guest's `JoinController`
-    runs a continuous reader on that channel: a `HostLeaving` (clean handoff) or a broken channel (abrupt
-    drop) fires `onHostLost`. The pack streams back over a third connection type (`ConnectionType.SNAPSHOT`)
-    on the **same listen port the game uses** — so it crosses NAT exactly like play does, with no second
-    port to forward — and the guest pulls from the endpoint it actually reached (the host's advertised
-    snapshot host/port may be a LAN address an internet guest can't dial), keeping only the gate token.
-    `pullLatest` → channel download → JGit `PackParser` → `git reset --hard` → mirror the generation into
-    `jukz.dat`; then `HostHandoffScreen`'s "Host now" opens it locally bypassing the discovery consult —
-    auto-hosting with a bumped generation that **fences past the old host**. Proven end-to-end over
-    loopback (host serves the pack, guest pulls it and resets) and **in-game, including a round-trip
-    A→B→A handoff**. Non-fatal throughout, on the LAN and across the internet (it rides the one NAT
-    traversal that already carries play).
-  - **Live badge + access control (F4)** — a `WorldEntry` mixin draws a green "Live · N" badge on each
-    save currently hosted (player count from the record), behind a per-world 10 s lookup cache; clicking
-    the badge joins directly. `HostInfoScreen`'s "Access: Open/Closed" toggle withdraws + kicks guests
-    and writes `jukz.access=disabled` to the world's `jukz.properties`; while set, opening the world
-    skips the auto-announce. (The snapshot transfer, generation mirroring, cache de-dup, session-lock
-    exclusion, and access flag are unit-tested; the badge draw/click and the kick path are
-    mixin/Minecraft surfaces still to be validated in-game.)
+  - `handshake` — sealed `Message` set (incl. `HostLeaving` with a snapshot offer and `HostClosed`),
+    byte-exact binary `MessageCodec`, host/joiner state machines, and `FramedMessageChannel`.
+  - `transport` — `LocalTcpRelay`, `DirectTcpTransport`, `SocketChannel`, `ConnectionType`
+    (CONTROL / DATA / SNAPSHOT discriminator byte), and the `ChannelDialer` ladder (direct endpoints
+    first, then the relay).
+  - `join` — `JoinController`: the guest flow (lookup → control-channel handshake → relay → game
+    hand-off), plus a live reader on the control channel that reports a handoff (`HostLeaving`), a
+    closed world (`HostClosed`) or an abrupt drop.
+  - `host` — `HostController` + `HostConnectionServer`: open → serve → publish under a fencing
+    `ClaimToken` → heartbeat → withdraw, routing CONTROL / DATA / SNAPSHOT channels on the one port the
+    game uses. End-to-end loopback tests run a real host against a real guest (discovery → handshake →
+    byte relay → handoff / close). `ForwardingEndpointResolver` + `PortForwarder` keep router
+    port-opening best-effort: it never fails the host.
+- **`fabric` (34 tests, plus the in-game runs above):**
+  - World identity: `WorldIdState` (1.21.1 `PersistentState`) + `WorldIdSidecar` (pre-start
+    `jukz.dat`), and `WorldSaveLocator` to find a world's save by UUID.
+  - **Auto-host on open** — `HostCoordinator` (on `ClientPlayConnectionEvents.JOIN`) bumps the fence
+    and runs `HostController` with `MinecraftLanOpener` (`IntegratedServer.openToLan`, then
+    offline-mode so relayed guests aren't kicked by Mojang auth — jukz authorizes via the world code).
+  - **Auto-join on open** — `IntegratedServerLoaderMixin` + `WorldOpenInterceptor` consult discovery
+    before booting a world; a live host turns the open into a join. If the cloud holds a strictly newer
+    copy than the local one, it is pulled first.
+  - **Discovery** — `CompositeWorldRegistry` layers `RendezvousWorldRegistry` (the JSON `/v1`
+    contract; 90 s leases, heartbeat at TTL/3, observed public IP appended server-side) over
+    `LanMulticastWorldRegistry` (same-network play with no internet; falls back to in-memory if
+    multicast is blocked). A rejected announce is never silent: `SupersededScreen` lets the player keep
+    the local copy or join the live host. The per-install `NodeId` lives in `config/jukz.nodeid`.
+  - **NAT traversal** — `UpnpPortForwarder` (dependency-free SSDP + SOAP `UpnpMapper`) opens the router
+    port when it can. When it can't (no UPnP / CGNAT, or `jukz.force-relay`), `WsRelayClient` registers
+    a WebSocket relay session on the rendezvous and the record advertises it; guests fall back to it via
+    `WsRelayTransport`. Validated live, locally and against production.
+  - **World handoff (F4)** — a host closing with guests forces a save, snapshots the world with JGit
+    (excluding `session.lock`), arms the pack under a one-shot gate token and pushes `HostLeaving` over
+    the control channel that is already open. The guest pulls the pack over a SNAPSHOT channel on the
+    same path it plays on (direct or relay), resets to it, and **Host now** re-opens it locally under a
+    bumped generation that fences past the old host. Taking over reopens access if that copy was closed.
+  - **Ghost takeover (R2)** — a host closing alone uploads the pack to the rendezvous' R2 store
+    (`R2SnapshotStore`, `UploadingWorldScreen` with progress, retries and an escape valve); a guest that
+    finds no live host but a newer cloud copy is offered to take over from it. If a live handoff reaches
+    nobody, or the guest declines, the world is backed up to the cloud instead of stranded.
+  - **Access control** — World info's **Access: Open/Closed** writes `jukz.access=disabled` to the
+    world's `jukz.properties`, sends guests `HostClosed`, then withdraws and kicks them. Guests see
+    `AccessClosedScreen` with no takeover offered, so a stale copy can't go live beside the private one.
+  - **World list** — `WorldEntryMixin` + `WorldListLiveBadge` draw a green "live · N" dot on hosted
+    saves (10 s per-world lookup cache, clicking it joins), and a **Copy jukz code** button.
+  - **UI** — every screen is an owo-ui model on one shared theme (see *Editing screens* below).
+- **`rendezvous-worker`** — 13 tests (the rules ported from the Rust unit tests, plus URL signing);
+  validated in production with the two-client run. **`rendezvous`** (Rust) — 20 `cargo test`s.
 
 ## What is flagged (`// requires live-network testing`)
 
-These implement the same interfaces but throw `NotImplementedError`, with the exact live API calls
-documented in KDoc. They need real machines behind real NATs to validate:
-
-- `StunEndpointResolver` — resolves the host's public, cross-NAT endpoint *client-side* (UPnP IGD
-  external IP, STUN fallback). Flagged: it needs a real router/NAT to validate. The rendezvous path
-  no longer needs it — the server observes the public IP and `UpnpPortForwarder` opens the port — but
-  it remains the right primitive for a serverless path, where there is no server to observe the IP.
-- `IceTransport` / `HolePuncher` — symmetric-NAT UDP hole punch, QUIC tunnel, TURN relay (the
-  fallback for when UPnP isn't available).
-
-The world-open interception itself is real (`IntegratedServerLoaderMixin` + `WorldOpenInterceptor`),
-and the discovery backend it queries is now live: LAN multicast finds same-network hosts, the
-rendezvous server finds internet-wide ones, and `UpnpPortForwarder` opens the router port so a
-remote guest can actually connect. Only the client-side public-endpoint resolution and the
-hole-punch/relay fallback for routers without UPnP remain flagged.
+- `IceTransport` / `HolePuncher` throw `NotImplementedError`, with the live API calls documented in
+  KDoc: symmetric-NAT UDP hole punch / QUIC tunnel. The WebSocket relay already covers hosts without
+  UPnP, so these would only cut relay traffic.
+- `StunEndpointResolver` (UPnP external IP, STUN fallback) is implemented but not wired: the rendezvous
+  observes the public IP itself. It remains the primitive for a serverless path.
+- Real routers: the UPnP round-trip and the relay have only crossed loopback/one machine so far — a
+  test from two different networks (one behind CGNAT) is still to do.
 
 ## Build & test
 
 ```bash
-./gradlew :core:test     # run the deterministic core tests (67 tests)
-./gradlew :fabric:test   # run the fabric JUnit tests (snapshot handoff, access flag, badge cache, ...)
+./gradlew :core:test     # the deterministic core tests (90)
+./gradlew :fabric:test   # the fabric JUnit tests (snapshot handoff, access flag, UI models, ...)
 ./gradlew build          # compile everything + assemble fabric/build/libs/jukz-0.1.0.jar
+(cd rendezvous-worker && npm install && npm test)   # the Cloudflare rendezvous
+(cd rendezvous && cargo test)                       # the self-hostable Rust rendezvous
 ```
 
-Requires JDK 21. The Gradle wrapper pins Gradle 8.10.1 and Fabric Loom 1.7.
+Requires **JDK 21** (`JAVA_HOME`; Gradle 8.10.1 does not run on newer JDKs). The wrapper pins Gradle
+8.10.1 and Fabric Loom 1.7.
 
 ### Editing screens (owo-ui, hot reload)
 
@@ -194,44 +171,33 @@ Two isolated dev clients (separate `runDir`, so separate logs / saves / config /
 distinct peers) are wired as Loom run configs:
 
 ```bash
-run-client-a.bat   # gradlew runClientA — instance A (username HostA),  run dir fabric/run/clientA
-run-client-b.bat   # gradlew runClientB — instance B (username GuestB), run dir fabric/run/clientB
+./gradlew runClientA   # instance A (username HostA),  run dir fabric/run/clientA  (Windows: run-client-a.bat)
+./gradlew runClientB   # instance B (username GuestB), run dir fabric/run/clientB  (Windows: run-client-b.bat)
 ```
 
 Open a world in A (it auto-hosts; the share code is under pause menu → **World info (jukz)**), then
 in B either open a copy of the same world (auto-join) or use **Play together** on the multiplayer
-screen with A's code. Both pre-point at the public rendezvous server.
+screen with A's code. Both use the public rendezvous unless `rendezvous.url` in
+`fabric/run/client{A,B}/config/jukz.properties` says otherwise. Two instances on one machine find each
+other directly, so set `jukz.force-relay=true` in both to exercise the relay path. To test server
+changes, run the Worker locally (`npx wrangler dev --port 18791 --local` in `rendezvous-worker`, see
+its README) and point `rendezvous.url` at `http://127.0.0.1:18791`.
 
 To verify the **handoff**: A opens a world, B joins, A does **Save and Quit**, then B clicks **Host
 now** on the prompt — B pulls A's snapshot and takes over (the A↔B generation keeps climbing). The log
 lines `handing off — notifying N guest(s)` (host) and `taking over … (snapshot applied)` (guest)
 confirm each step.
 
-## Follow-ups (next session)
+## Follow-ups
 
-- **Relay path for non-UPnP / CGNAT hosts — implemented, pending live validation.** A host that cannot
-  open a port (no UPnP / CGNAT) registers a WebSocket relay session on the rendezvous and advertises it
-  in the record (wire v4 `RelayOffer`); a guest tries the direct endpoints first and falls back to the
-  relay (`/v1/relay/{host,connect,work}`), which splices the two outbound streams — so play crosses any
-  NAT. core (`ChannelDialer` ladder, codec) + the Rust relay registry are unit/cargo-tested; the WS
-  adapters (`WsRelayTransport`/`WsRelayClient`) need a **rendezvous redeploy + two-instance E2E** with
-  the direct path forced to fail. Design/plan: `docs/superpowers/{specs,plans}/2026-06-10-*relay*`.
-  Once this lands, the flagged `StunEndpointResolver`/`IceTransport`/`HolePuncher` are superseded for
-  the non-UPnP case. The F4 snapshot *handoff* now also rides the relay (`JGitWorldSync` pulls over the
-  same `DialTarget` play connected on), so a relay-only guest takes over with the host's current world —
-  fixing the world desync the first force-relay test hit.
-- **In-game validation still pending:** the world-list **live badge** (`WorldEntryMixin` +
-  `WorldListLiveBadge`) and the **access-control kick** (`HostCoordinator.disableAccess`) — both are
-  mixin/Minecraft surfaces not yet exercised in a live session.
-- **Cold-start handoff over the internet:** the live-connection handoff now crosses NAT (the pack rides
-  the host's already-forwarded game port via `ConnectionType.SNAPSHOT`). Still open is the *ghost*
-  takeover — a guest looking up a world whose host is already gone — because the rendezvous server does
-  not relay the snapshot offer in the record. A blob relay through the rendezvous (host uploads, guest
-  downloads, both outbound) would close that gap and need no reachability at all.
-- **Cleanup:** `JoinCoordinator.recordFor` builds a dummy `WorldRecord` just to reach `pullLatest` —
-  give `WorldSync` an offer-based overload instead. Taking over a never-seen world leaves a
-  `jukz-<code>` save folder; consider naming/cleanup. The flagged NAT-traversal adapters
-  (`StunEndpointResolver` / `IceTransport` / `HolePuncher`) remain for routers without UPnP.
+- **Two real networks:** play once across two homes (one behind CGNAT) to confirm UPnP and the relay
+  outside one machine.
+- **Relay cost:** relayed play is billed as Durable Object WebSocket messages; batching small frames
+  in `WsRelayClient`/`WsRelayTransport` would cut that if it ever matters. World packs over the plan's
+  request limit (100 MB on Free) can't be backed up through the Worker.
+- **Cleanup:** taking over a never-seen world leaves a `jukz-<code>` save folder; consider naming.
+- **Polish:** World info briefly shows "not announced" right after a world opens, until the first
+  announce lands (it re-polls on its own).
 
 ## License
 
