@@ -9,7 +9,7 @@ The mod side of this contract is `fabric/.../discovery/RendezvousWorldRegistry.k
 at a server via `config/jukz.properties`:
 
 ```properties
-rendezvous.url=https://your-app.fly.dev
+rendezvous.url=https://your-rendezvous.example.com
 # Only when the server sets RENDEZVOUS_AUTH_TOKEN:
 rendezvous.auth-token=...
 ```
@@ -66,23 +66,23 @@ To test the whole mod flow on one machine: run the server, set
 open a world in one and watch the second instance's open of the same world (copied save with the
 same `jukz.dat`) turn into a join.
 
-## Deploy on Fly.io
+## Deploy (self-hosting)
+
+The official instance at `jukz.nuulm.com` runs the Cloudflare Worker port in
+[`../rendezvous-worker`](../rendezvous-worker). This Rust server is for self-hosting: build the
+`Dockerfile` (or `cargo build --release`) and run it behind any TLS-terminating reverse proxy.
 
 ```bash
-cd rendezvous
-fly launch --no-deploy      # once; reuses fly.toml, pick your own app name
-fly secrets set RENDEZVOUS_AUTH_TOKEN=...   # optional, for private instances
-fly deploy
-curl -s https://<your-app>.fly.dev/healthz
+docker build -t jukz-rendezvous rendezvous
+docker run -p 8080:8080 -e RENDEZVOUS_AUTH_TOKEN=... jukz-rendezvous   # token optional
+curl -s https://<your-host>/healthz
 ```
 
 Notes:
 - The store is **in-memory by design**: a redeploy/restart drops all leases, and clients
   transparently re-announce on their next heartbeat (the `unknown` path above). No volume needed.
-- `fly.toml` ships with `auto_stop_machines`/`min_machines_running = 0`: with no active hosts the
-  machine scales to zero and costs nothing; heartbeats keep it awake while anyone is hosting.
-- Fly terminates TLS; the server reads the real client IP from `Fly-Client-IP` (falls back to
-  `X-Forwarded-For`, then the socket peer).
+- The server reads the real client IP from `Fly-Client-IP`, then `X-Forwarded-For`, then the socket
+  peer — make sure your proxy sets `X-Forwarded-For`.
 
 ## Limits (v1, by decision)
 

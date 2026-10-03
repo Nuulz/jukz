@@ -1,0 +1,23 @@
+// jukz rendezvous on Cloudflare: one Worker + one Durable Object (the hub) + the R2 bucket for ghost
+// snapshots. Deploy: `npx wrangler deploy`. Secrets: `npx wrangler secret put SNAPSHOT_SIGNING_KEY`
+// (required for snapshots) and, optionally, RENDEZVOUS_AUTH_TOKEN (bearer auth for /v1).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jukz-rendezvous",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "routes": [{ "pattern": "jukz.nuulm.com", "custom_domain": true }],
+  "durable_objects": {
+    "bindings": [{ "name": "HUB", "class_name": "RendezvousHub" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RendezvousHub"] }],
+  "r2_buckets": [{ "binding": "SNAPSHOTS", "bucket_name": "jukz-snapshots" }],
+  "vars": {
+    "RENDEZVOUS_TTL_MS": "90000",
+    "RENDEZVOUS_RATE_LIMIT_PER_MIN": "120",
+    "RELAY_MAX_SESSIONS": "200",
+    "RELAY_MAX_STREAMS_PER_SESSION": "16",
+    "RELAY_WORKCONN_TIMEOUT_MS": "8000"
+  },
+  "observability": { "enabled": true }
+}

@@ -22,7 +22,8 @@ for the implementation plan.
 |---|---|---|
 | `core` | The deterministic protocol heart — pure Kotlin, fully unit-tested | No |
 | `fabric` | Wires `core` into Minecraft 1.21.1 via Fabric API + network adapters | Yes |
-| `rendezvous` | Self-hostable discovery backend (Rust + Axum, outside Gradle) — see [`rendezvous/README.md`](rendezvous/README.md) | No |
+| `rendezvous-worker` | The production discovery backend at `jukz.nuulm.com` (Cloudflare Worker + Durable Objects + R2) — see [`rendezvous-worker/README.md`](rendezvous-worker/README.md) | No |
+| `rendezvous` | Self-hostable discovery backend with the same `/v1` contract (Rust + Axum, outside Gradle) — see [`rendezvous/README.md`](rendezvous/README.md) | No |
 
 Keeping `core` Minecraft-free means the hard logic (host election, fencing, handshake, registry,
 relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolchain.
