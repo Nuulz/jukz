@@ -11,6 +11,21 @@ save synchronization: a guest plays live on the host's world (like Open-to-LAN),
 Host ↔ guest is verified working end-to-end (two instances on one machine: auto-host on open,
 discovery via the rendezvous server, relay, and a guest joining the live world).
 
+## Screenshots
+
+Two dev clients on one machine, against the production rendezvous with the relay forced.
+
+| | |
+|---|---|
+| ![A guest playing live in the host's world, joined through the relay](docs/screenshots/playing.png) | ![The world list: the green dot marks a world someone is hosting right now](docs/screenshots/world-list.png) |
+| A guest playing live in the host's world, joined through the relay | The world list: the green dot means someone is hosting it right now |
+| ![Looking for a host](docs/screenshots/searching.png) | ![The host left: host now to keep the world online](docs/screenshots/host-left.png) |
+| Opening a world first asks the network who is hosting it | The host left with a guest connected: the guest has the latest world and can take over |
+| ![World info, the host's panel](docs/screenshots/world-info.png) | ![Saving the world to the cloud](docs/screenshots/cloud-upload.png) |
+| World info: share code, generation, relay and a live self-check (endpoints blurred) | Closing with nobody around backs the world up to R2 for the next player |
+| ![The host closed access](docs/screenshots/access-closed.png) | |
+| The host closed access: no takeover is offered, so the world can't split | |
+
 See [`docs/superpowers/specs/2026-06-08-jukz-design.md`](docs/superpowers/specs/2026-06-08-jukz-design.md)
 for the full design rationale (verified against primary sources) and
 [`docs/superpowers/plans/2026-06-08-jukz-core.md`](docs/superpowers/plans/2026-06-08-jukz-core.md)
