@@ -1,6 +1,7 @@
 package dev.jukz.client
 
 import dev.jukz.JukzMod
+import dev.jukz.client.gui.AccessClosedScreen
 import dev.jukz.client.gui.HostHandoffScreen
 import dev.jukz.client.gui.NatErrorScreen
 import dev.jukz.client.gui.SearchingHostScreen
@@ -24,6 +25,7 @@ import dev.jukz.core.sync.SnapshotMarker
 import dev.jukz.runtime.GhostUpload
 import dev.jukz.sync.JGitWorldSync
 import dev.jukz.sync.R2SnapshotStore
+import dev.jukz.world.WorldAccessFlag
 import dev.jukz.world.WorldIdSidecar
 import dev.jukz.world.WorldSaveLocator
 import kotlinx.coroutines.runBlocking
@@ -69,6 +71,7 @@ object JoinCoordinator {
         val controller = JoinController(
             registry, dialer, handoff, SystemClock,
             onHostLost = { wid, offer, target, gen -> onHostLeaving(client, wid, shortCode, offer, target, gen, dialer) },
+            onHostClosed = { onHostClosedAccess(client, shortCode) },
         )
         val cancelled = AtomicBoolean(false)
 
@@ -188,6 +191,22 @@ object JoinCoordinator {
         }
         JukzMod.logger.info("jukz: host of {} is leaving (snapshot {}) — offering handoff", shortCode, if (offer != null) "offered" else "none")
         showHandoff(client, worldId, shortCode, TitleScreen(), offer, target, generation, dialer, intent = TakeoverIntent.LIVE_HANDOFF)
+    }
+
+    /**
+     * The host closed access to the world (control channel `HostClosed`). It keeps playing privately, so
+     * this is NOT a handoff: never offer "Host now" (our local copy is stale — hosting it would split the
+     * world). Leave the session and say why, whether the kick already dropped us or not.
+     */
+    private fun onHostClosedAccess(client: MinecraftClient, shortCode: String) {
+        val engaged = GuestSession.recentlyEngaged()
+        GuestSession.leave() // also stops the disconnect hooks from swapping in the "host left" wait
+        if (!engaged) return
+        JukzMod.logger.info("jukz: host of {} closed access — not offering handoff", shortCode)
+        client.execute {
+            val screen = AccessClosedScreen { client.setScreen(TitleScreen()) }
+            if (client.world != null) client.disconnect(screen) else client.setScreen(screen)
+        }
     }
 
     private fun showHandoff(
@@ -424,6 +443,12 @@ object JoinCoordinator {
             // No discovery re-check (see the kdoc): the live handoff authoritatively chose us, and a
             // ghost revival is fenced by the publishIfNewer CAS at auto-host time. Re-reading discovery
             // here raced a stale LAN record and discarded the snapshot we just applied (2026-06-13).
+            // "Host now" means hosting for everyone: a local copy this player once closed would otherwise
+            // boot silently un-announced, taking the world offline for the other guests.
+            if (WorldAccessFlag.isDisabled(saveDir)) {
+                WorldAccessFlag.enable(saveDir)
+                JukzMod.logger.info("jukz: reopened access on {} for the takeover", shortCode)
+            }
             JukzMod.logger.info("jukz: taking over {} ({}, snapshot {})", shortCode, intent.name.lowercase(), if (applied) "applied" else "unavailable")
             client.execute { WorldOpenInterceptor.openLocallyBypassingDiscovery(levelName) }
         }.apply { isDaemon = true; name = "jukz-takeover" }.start()

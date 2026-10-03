@@ -48,8 +48,10 @@ object R2SnapshotStore {
         onProgress: (Long, Long) -> Unit,
     ): Boolean {
         val base = JukzConfig.rendezvousUrl ?: return false
-        val urls = signUpload(base, worldId, generation) ?: return false
         return runCatching {
+            // Signing is inside the catch too: a rendezvous blip (connection refused) must fail this
+            // attempt so the caller retries, not kill the upload thread mid-"retrying" screen.
+            val urls = signUpload(base, worldId, generation) ?: return false
             putBytes(urls.packUrl, pack, onProgress)
             // The head object carries the fencing generation alongside the commit id ("<gen> <commit>"),
             // so a direct-open can compare it to the local copy without downloading the whole pack.

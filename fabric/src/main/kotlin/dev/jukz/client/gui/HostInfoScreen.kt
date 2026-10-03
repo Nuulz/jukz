@@ -89,11 +89,13 @@ class HostInfoScreen(private val parent: Screen?) : Screen(Text.literal("World i
             return
         }
 
-        val rows = listOf(
+        val rows = listOfNotNull(
             "Share code" to rec.worldId.shortCode(),
             "World UUID" to rec.worldId.uuid.toString(),
             "Generation" to rec.token.hostGeneration.toString(),
             "Endpoints" to rec.endpoints.joinToString(", ") { it.format() },
+            // Guests that can't reach the endpoints (CGNAT / no UPnP) come in through this relay session.
+            rec.relay?.let { "Relay" to "via rendezvous · ${it.sessionId.take(8)}" },
         )
         var y = 78
         for ((label, value) in rows) {

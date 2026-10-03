@@ -49,7 +49,7 @@ object JukzClient : ClientModInitializer {
                 is GameMenuScreen ->
                     if (client.isIntegratedServerRunning) replaceOpenToLanButton(screen)
 
-                is SelectWorldScreen -> addCopyCodeButton(screen, scaledHeight)
+                is SelectWorldScreen -> addCopyCodeButton(screen, scaledWidth, scaledHeight)
             }
         }
 
@@ -151,9 +151,10 @@ object JukzClient : ClientModInitializer {
     /**
      * Add a "Copy jukz code" button to the world-select screen. It copies the last-clicked jukz world's
      * share code to the clipboard so the player can share it without opening the world. Bottom-left, in
-     * the side margin clear of the vanilla button block.
+     * the side margin beside the vanilla button block — or top-left when that margin is too narrow (a
+     * small window / large GUI scale), where it would otherwise cover the vanilla "Edit" button.
      */
-    private fun addCopyCodeButton(screen: SelectWorldScreen, scaledHeight: Int) {
+    private fun addCopyCodeButton(screen: SelectWorldScreen, scaledWidth: Int, scaledHeight: Int) {
         val button = ButtonWidget.builder(Text.literal("Copy jukz code")) { btn ->
             val level = WorldListLiveBadge.selectedLevelName()
             val code = level?.let { jukzCodeFor(it) }
@@ -165,8 +166,16 @@ object JukzClient : ClientModInitializer {
                 level != null -> Text.literal("Not a jukz world")
                 else -> Text.literal("Click a world first")
             }
-        }.dimensions(4, scaledHeight - 24, 110, 20).build()
+        }.dimensions(4, copyButtonY(scaledWidth, scaledHeight), COPY_BUTTON_WIDTH, 20).build()
         Screens.getButtons(screen).add(button)
+    }
+
+    private const val COPY_BUTTON_WIDTH = 110
+
+    /** Vanilla's world-select bottom buttons span 308 px centred; keep 4 px clear of them. */
+    internal fun copyButtonY(scaledWidth: Int, scaledHeight: Int): Int {
+        val vanillaLeft = scaledWidth / 2 - 154
+        return if (4 + COPY_BUTTON_WIDTH + 4 <= vanillaLeft) scaledHeight - 24 else 4
     }
 
     /** The jukz share code for a save folder, or null if it is not a jukz world. */

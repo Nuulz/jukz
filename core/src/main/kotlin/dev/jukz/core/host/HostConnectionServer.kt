@@ -121,6 +121,12 @@ class HostConnectionServer(
         controlChannels.forEach { runCatching { it.send(msg) } } // send is thread-safe (synchronized output)
     }
 
+    override fun notifyGuestsClosed() {
+        val sess = session ?: return
+        val msg = Message.HostClosed(sess.worldId, sess.token, 0)
+        controlChannels.forEach { runCatching { it.send(msg) } }
+    }
+
     override fun armSnapshot(pack: ByteArray, head: String, token: String): CountDownLatch {
         val latch = CountDownLatch(1)
         armedSnapshot = ArmedSnapshot(pack, head, token, latch)

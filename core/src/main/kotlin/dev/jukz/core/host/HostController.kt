@@ -103,6 +103,9 @@ class HostController(
      */
     fun notifyGuestsLeaving(snapshot: SnapshotOffer?) = connectionServer.notifyGuestsLeaving(snapshot)
 
+    /** Tell connected guests the host closed access (no handoff). See [ConnectionServer.notifyGuestsClosed]. */
+    fun notifyGuestsClosed() = connectionServer.notifyGuestsClosed()
+
     /**
      * Arm the connection server to serve the world [pack] (head commit [head]) for take-over, and build
      * the matching [SnapshotOffer]. The offer dials our **announced endpoint** — the connection-server

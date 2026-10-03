@@ -86,6 +86,18 @@ sealed interface Message {
         val snapshot: SnapshotOffer?,
     ) : Message
 
+    /**
+     * Sent by the host to each connected guest when it closes access to the world (F4-D) — the world
+     * stays open on the host, privately. Unlike [HostLeaving] this is NOT a handoff: the guest must not
+     * offer to take over, or its stale local copy would go live beside the host's private one (a split).
+     * Pushed before the host withdraws and kicks, so the guest learns why its connection is ending.
+     */
+    data class HostClosed(
+        override val worldId: WorldId,
+        override val token: ClaimToken,
+        override val nonce: Int,
+    ) : Message
+
     companion object {
         const val PROTOCOL_VERSION = 1
     }

@@ -28,6 +28,7 @@ class MessageCodecTest {
         Message.Nack(world, token, 8, NackReason.STALE_TOKEN),
         Message.HostLeaving(world, token, 9, snapshot = SnapshotOffer("192.168.1.7", 50777, "ab".repeat(32))),
         Message.HostLeaving(world, token, 10, snapshot = null),
+        Message.HostClosed(world, token, 11),
     )
 
     @Test

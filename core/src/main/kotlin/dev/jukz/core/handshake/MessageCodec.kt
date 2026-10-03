@@ -28,6 +28,7 @@ object MessageCodec {
     private const val T_ACK = 7
     private const val T_NACK = 8
     private const val T_HOST_LEAVING = 9
+    private const val T_HOST_CLOSED = 10
 
     fun encode(message: Message): ByteArray {
         val w = ByteWriter()
@@ -53,7 +54,7 @@ object MessageCodec {
                     w.putString(s.token)
                 }
             }
-            is Message.Claim, is Message.Ping, is Message.Ack -> {} // header only
+            is Message.Claim, is Message.Ping, is Message.Ack, is Message.HostClosed -> {} // header only
         }
         return w.toByteArray()
     }
@@ -78,6 +79,7 @@ object MessageCodec {
                     val snapshot = if (r.getByte() == 1) SnapshotOffer(r.getString(), r.getInt(), r.getString()) else null
                     Message.HostLeaving(worldId, token, nonce, snapshot)
                 }
+                T_HOST_CLOSED -> Message.HostClosed(worldId, token, nonce)
                 else -> throw MalformedMessageException("unknown message type byte: $type")
             }
             r.expectEnd()
@@ -99,6 +101,7 @@ object MessageCodec {
         is Message.Ack -> T_ACK
         is Message.Nack -> T_NACK
         is Message.HostLeaving -> T_HOST_LEAVING
+        is Message.HostClosed -> T_HOST_CLOSED
     }
 
     private fun encodeToken(w: ByteWriter, t: ClaimToken) {

@@ -54,6 +54,11 @@ class JoinController(
      * takes over hosting.
      */
     private val onHostLost: (WorldId, SnapshotOffer?, DialTarget?, Long) -> Unit = { _, _, _, _ -> },
+    /**
+     * Invoked once instead of [onHostLost] when the host sent [Message.HostClosed]: it closed access and
+     * keeps the world privately, so the caller must NOT offer a takeover.
+     */
+    private val onHostClosed: (WorldId) -> Unit = {},
 ) : AutoCloseable {
 
     private val nonces = AtomicInteger(0)
@@ -170,6 +175,12 @@ class JoinController(
                 if (msg is Message.HostLeaving) {
                     // Pull over the same path we reached the host on; carry the leaving host's generation.
                     onHostLost(worldId, msg.snapshot, target, msg.token.hostGeneration)
+                    return@launch
+                }
+                if (msg is Message.HostClosed) {
+                    // Access closed, not a handoff: the channel break that follows must not read as a drop.
+                    closing = true
+                    onHostClosed(worldId)
                     return@launch
                 }
                 // Pong / anything else -> host still alive; keep reading.

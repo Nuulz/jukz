@@ -31,6 +31,12 @@ interface ConnectionServer : AutoCloseable {
     fun notifyGuestsLeaving(snapshot: SnapshotOffer?) {}
 
     /**
+     * Push a [Message.HostClosed] to every connected guest: the host closed access (the world stays open
+     * privately), so guests must NOT offer a takeover. Best-effort.
+     */
+    fun notifyGuestsClosed() {}
+
+    /**
      * Arm this server to answer [ConnectionType.SNAPSHOT] channels with [pack] (the JGit pack of the
      * world save), gated by [token]; [head] is the commit id the guest resets to. Serving the snapshot
      * over the same listen port the game uses means it rides the one NAT traversal that already works

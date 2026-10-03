@@ -15,6 +15,7 @@ import dev.jukz.core.transport.DirectTcpTransport
 import dev.jukz.core.util.SystemClock
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -143,6 +144,36 @@ class HostJoinLoopbackTest {
         host.close() // abrupt: tears the control channel down without a HostLeaving
 
         assertNull(lost.get(5, TimeUnit.SECONDS)) // reported lost, with no snapshot to pull
+
+        joiner.close()
+        game.close()
+    }
+
+    @Test
+    fun `closing access tells the guest it was closed, never offering a takeover`() = runBlocking {
+        val game = EchoServer().also { it.start() }
+        val registry = InMemoryWorldRegistry(SystemClock)
+        val host = HostController(
+            registry, LanOpener { game.port }, HostConnectionServer(bindHost = "127.0.0.1"),
+            EndpointResolver { port -> Endpoint("127.0.0.1", port) }, node(7), SystemClock,
+        )
+        host.host(world, generation = 4)
+
+        val lost = CompletableFuture<SnapshotOffer?>()
+        val closed = CompletableFuture<WorldId>()
+        val joiner = JoinController(
+            registry, DirectChannelDialer(DirectTcpTransport()), CapturingHandoff(), SystemClock, config,
+            onHostLost = { _, offer, _, _ -> lost.complete(offer) },
+            onHostClosed = { wid -> closed.complete(wid) },
+        )
+        assertInstanceOf(JoinResult.Connected::class.java, joiner.join(world))
+
+        host.notifyGuestsClosed()
+        host.close() // the withdraw that follows breaks the channel — it must not read as a host drop
+
+        assertEquals(world, closed.get(5, TimeUnit.SECONDS))
+        Thread.sleep(300)
+        assertFalse(lost.isDone, "a closed-access host must not trigger the takeover path")
 
         joiner.close()
         game.close()

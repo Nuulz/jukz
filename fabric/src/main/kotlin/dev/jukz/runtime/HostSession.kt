@@ -37,6 +37,11 @@ object HostSession {
     /** Guests connected over a live control channel right now (0 when not hosting). */
     fun connectedGuestCount(): Int = controller?.connectedGuestCount() ?: 0
 
+    /** Tell connected guests we closed access (no handoff), before withdrawing and kicking them. */
+    fun notifyGuestsClosed() {
+        controller?.let { runCatching { it.notifyGuestsClosed() } }
+    }
+
     /** The record we are currently announcing (static info for the host UI), or null. */
     val record: WorldRecord? get() = controller?.sharedRecord
 

@@ -42,6 +42,9 @@ object HostCoordinator {
 
     private val starting = AtomicBoolean(false)
 
+    /** How long [disableAccess] waits after pushing `HostClosed` before withdrawing and kicking. */
+    private const val NOTICE_GRACE_MS = 300L
+
     /** Open + announce the running integrated world, unless already hosting or mid-start. Idempotent. */
     fun autoHost(server: IntegratedServer) {
         if (HostSession.isHosting) return
@@ -77,6 +80,10 @@ object HostCoordinator {
     fun disableAccess(server: IntegratedServer) {
         WorldAccessFlag.disable(server.getSavePath(WorldSavePath.ROOT))
         Thread {
+            // Tell guests first, over their live control channels: without this the withdraw + kick read
+            // as an abrupt host drop, and a guest would offer to host its stale copy beside ours (a split).
+            HostSession.notifyGuestsClosed()
+            Thread.sleep(NOTICE_GRACE_MS) // let the notice land before the channels close
             HostSession.onServerStopping() // withdraw from discovery (no snapshot — the world stays open locally)
             val message = Text.literal("The host has closed access to this world.")
             server.execute {
