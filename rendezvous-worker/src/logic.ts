@@ -204,3 +204,80 @@ export function shardOfNonce(nonce: number): number | undefined {
   if (!Number.isSafeInteger(nonce) || nonce <= 0) return undefined;
   return Math.floor(nonce / NONCE_LOW_BITS);
 }
+
+// ---- world ownership (Ed25519) -------------------------------------------------------------------
+// Mirrors dev.jukz.core.model.WorldKey. Changing a world's record or cloud copy needs a signature from
+// the world's key; the first valid signature binds the public key (trust on first use). Requests with
+// no signature still work for worlds that never bound a key (older mods).
+
+export const OWNER_HEADERS = { key: "x-jukz-key", ts: "x-jukz-ts", sig: "x-jukz-sig" } as const;
+export const SIGNATURE_WINDOW_MS = 5 * 60_000;
+
+export type OwnerOp = "announce" | "heartbeat" | "withdraw" | "snapshot-upload" | "snapshot-download";
+
+export type OwnerCheck =
+  | { ok: true; bind?: string } // bind: a public key to store once the change succeeds
+  | { ok: false; status: 401 | 403; message: string };
+
+export function b64urlDecode(text: string): Uint8Array | null {
+  if (!/^[A-Za-z0-9_-]*$/.test(text)) return null;
+  const b64 = text.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((text.length + 3) % 4);
+  try {
+    return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+export function signedPayload(op: OwnerOp, worldId: string, ts: number, body: string): Uint8Array {
+  return new TextEncoder().encode(`jukz-v1\n${op}\n${worldId}\n${ts}\n${body}`);
+}
+
+async function signatureValid(publicKey: Uint8Array, payload: Uint8Array, signature: Uint8Array): Promise<boolean> {
+  try {
+    const key = await crypto.subtle.importKey("raw", publicKey, { name: "Ed25519" }, false, ["verify"]);
+    return await crypto.subtle.verify({ name: "Ed25519" }, key, signature, payload);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Decide whether a change to [worldId] may go through. [bound] is the public key stored for the world
+ * (undefined: none yet); [header] reads a request header; [body] is the exact request body text.
+ */
+export async function checkOwner(
+  op: OwnerOp,
+  worldId: string,
+  body: string,
+  bound: string | undefined,
+  header: (name: string) => string | null,
+  now: number,
+): Promise<OwnerCheck> {
+  const keyText = header(OWNER_HEADERS.key);
+  const tsText = header(OWNER_HEADERS.ts);
+  const sigText = header(OWNER_HEADERS.sig);
+  const signedRequest = keyText != null || tsText != null || sigText != null;
+
+  if (!signedRequest) {
+    return bound === undefined
+      ? { ok: true }
+      : { ok: false, status: 401, message: "this world needs a signature from its key" };
+  }
+  const publicKey = keyText ? b64urlDecode(keyText) : null;
+  const signature = sigText ? b64urlDecode(sigText) : null;
+  const ts = Number(tsText);
+  if (!publicKey || publicKey.length !== 32 || !signature || signature.length !== 64 || !Number.isSafeInteger(ts)) {
+    return { ok: false, status: 401, message: "malformed signature headers" };
+  }
+  if (Math.abs(now - ts) > SIGNATURE_WINDOW_MS) {
+    return { ok: false, status: 401, message: "signature timestamp outside the allowed window" };
+  }
+  if (bound !== undefined && bound !== keyText) {
+    return { ok: false, status: 403, message: "another key owns this world" };
+  }
+  if (!(await signatureValid(publicKey, signedPayload(op, worldId, ts, body), signature))) {
+    return { ok: false, status: 401, message: "bad signature" };
+  }
+  return bound === undefined ? { ok: true, bind: keyText! } : { ok: true };
+}

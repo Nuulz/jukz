@@ -27,7 +27,28 @@ Install, next to Minecraft **1.21.1** with Fabric Loader ≥ 0.16.5:
   alone backs it up to the cloud, and whoever opens it next continues from there.
 
 Settings live in `config/jukz.properties`: `rendezvous.url` (empty = the public server, `none` =
-LAN-only, or your own), `rendezvous.auth-token`, and `jukz.force-relay` (testing).
+LAN-only, or your own), `rendezvous.auth-token`, `jukz.offline-guests` (see below) and
+`jukz.force-relay` (testing).
+
+### Who can do what
+
+- **The share code** finds a world and lets you *ask* to join. The game login is vanilla's: when the
+  host has a Microsoft account, guests are verified by Mojang exactly like on a normal server (the relay
+  only moves bytes). A host without one (offline launchers) — or one that sets
+  `jukz.offline-guests=true` for a group that trusts each other — hosts in offline mode, where names
+  can't be verified; jukz then refuses the host's name and names already in the world, so nobody gets
+  kicked out of their own character.
+- **The world key** (`jukz.key` in the save, Ed25519) is what changes the world online: announcing it,
+  heartbeats, withdrawing, and uploading or downloading its cloud backup are signed with it, and the
+  rendezvous binds the key on first use. It travels with the world files (handoff, cloud backup), and
+  the host gives it — with the handoff gate — over the game connection to each player it lets in, who
+  keep it in `config/jukz-keys/`. So a player who has been in a world can host it and revive it from the
+  cloud; someone with only the code can't take over the live record, overwrite the backup, download it,
+  or grab a handoff.
+- A copy that holds a different key than the one bound online (e.g. two copies of a world made before
+  keys existed) still plays locally and on the LAN; World info says why it isn't online. Taking the world
+  over from its host (handoff or cloud) brings the right key.
+- LAN multicast discovery is unsigned: the local network is trusted.
 
 ## Screenshots
 
@@ -63,9 +84,9 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
 
 ## What is real and tested
 
-- **`core` (90 tests):**
+- **`core` (94 tests):**
   - `WorldId` with a copyable Base32 share code; `NodeId`; `Endpoint`; `ClaimToken` (the fencing
-    token: `generation → millis → nodeId`).
+    token: `generation → millis → nodeId`); `WorldKey` (Ed25519 ownership key and request signing).
   - `WorldRegistry` + `InMemoryWorldRegistry` — CAS-on-token publish, TTL expiry, heartbeat refresh.
     `WorldRecordCodec` — compact binary wire encoding of a record (v4: endpoint candidate list +
     optional relay offer; still decodes v1; < 1000 bytes).
@@ -84,7 +105,7 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     game uses. End-to-end loopback tests run a real host against a real guest (discovery → handshake →
     byte relay → handoff / close). `ForwardingEndpointResolver` + `PortForwarder` keep router
     port-opening best-effort: it never fails the host.
-- **`fabric` (34 tests, plus the in-game runs above):**
+- **`fabric` (42 tests, plus the in-game runs above):**
   - World identity: `WorldIdState` (1.21.1 `PersistentState`) + `WorldIdSidecar` (pre-start
     `jukz.dat`), and `WorldSaveLocator` to find a world's save by UUID.
   - **Auto-host on open** — `HostCoordinator` (on `ClientPlayConnectionEvents.JOIN`) bumps the fence
@@ -111,14 +132,20 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     (`R2SnapshotStore`, `UploadingWorldScreen` with progress, retries and an escape valve); a guest that
     finds no live host but a newer cloud copy is offered to take over from it. If a live handoff reaches
     nobody, or the guest declines, the world is backed up to the cloud instead of stranded.
+  - **Ownership & admission** — `WorldKeyStore` (save key + keys received as a guest), signed
+    rendezvous calls, `WorldAccessPayload` (key + handoff gate, sent in-game on join),
+    `GuestAdmission` + `PlayerManagerJoinMixin` (online mode for real accounts; offline-mode name
+    refusals). Validated in-game: an impostor with the code is refused and gets neither the key nor the
+    handoff, and can't revive the world from the cloud, while a real guest takes over and later revives it.
   - **Access control** — World info's **Access: Open/Closed** writes `jukz.access=disabled` to the
     world's `jukz.properties`, sends guests `HostClosed`, then withdraws and kicks them. Guests see
     `AccessClosedScreen` with no takeover offered, so a stale copy can't go live beside the private one.
   - **World list** — `WorldEntryMixin` + `WorldListLiveBadge` draw a green "live · N" dot on hosted
     saves (10 s per-world lookup cache, clicking it joins), and a **Copy jukz code** button.
   - **UI** — every screen is an owo-ui model on one shared theme (see *Editing screens* below).
-- **`rendezvous-worker`** — 13 tests (the rules ported from the Rust unit tests, plus URL signing);
-  validated in production with the two-client run. **`rendezvous`** (Rust) — 20 `cargo test`s.
+- **`rendezvous-worker`** — 18 tests (the rules ported from the Rust unit tests, URL signing, and the
+  ownership checks, including a signature made by the JDK); validated in production. **`rendezvous`**
+  (Rust) — 20 `cargo test`s; it does not check world keys (see its README).
 
 ## What is flagged (`// requires live-network testing`)
 
@@ -133,7 +160,7 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
 ## Build & test
 
 ```bash
-./gradlew :core:test     # the deterministic core tests (90)
+./gradlew :core:test     # the deterministic core tests (94)
 ./gradlew :fabric:test   # the fabric JUnit tests (snapshot handoff, access flag, UI models, ...)
 ./gradlew build          # compile everything + assemble fabric/build/libs/jukz-0.1.0.jar
 (cd rendezvous-worker && npm install && npm test)   # the Cloudflare rendezvous

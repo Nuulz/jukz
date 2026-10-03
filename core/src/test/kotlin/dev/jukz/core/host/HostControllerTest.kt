@@ -1,5 +1,6 @@
 package dev.jukz.core.host
 
+import dev.jukz.core.discovery.SnapshotOffer
 import dev.jukz.core.discovery.InMemoryWorldRegistry
 import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.discovery.WorldRegistry
@@ -237,7 +238,10 @@ class HostControllerTest {
         assertEquals(listenPort, offer.port)
         assertArrayEquals(byteArrayOf(7, 8, 9), server.armedPack)
         assertEquals("deadbeef", server.armedHead)
-        assertEquals(offer.token, server.armedToken) // the same gate token is armed and advertised
+        // The gate is armed but NOT advertised: the control-channel offer only carries a placeholder.
+        assertEquals(host.handoffGate, server.armedToken)
+        assertEquals(SnapshotOffer.GATE_SENT_IN_GAME, offer.token)
+        assertTrue(offer.gateSentInGame)
         assertNotNull(latch)
         host.close()
     }

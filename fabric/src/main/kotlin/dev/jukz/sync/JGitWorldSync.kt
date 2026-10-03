@@ -18,9 +18,12 @@ import net.minecraft.nbt.NbtIo
 import net.minecraft.nbt.NbtSizeTracker
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ResetCommand
+import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription
+import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository
 import org.eclipse.jgit.lib.NullProgressMonitor
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.treewalk.TreeWalk
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.EOFException
@@ -146,6 +149,25 @@ class JGitWorldSync(
                 false
             }
         }
+
+    /**
+     * Read one file of a downloaded snapshot without applying it anywhere: the pack is indexed into a
+     * throwaway in-memory repo and [path] is looked up in the head commit's tree. Used to pick the
+     * world key out of a handoff the guest declined, so the backup it then uploads can be signed.
+     */
+    fun readFileAtHead(downloaded: Downloaded, path: String): ByteArray? = runCatching {
+        val repo = InMemoryRepository(DfsRepositoryDescription("jukz-snapshot"))
+        repo.newObjectInserter().use { inserter ->
+            Files.newInputStream(downloaded.packPath).use { input ->
+                inserter.newPackParser(input).parse(NullProgressMonitor.INSTANCE)
+            }
+            inserter.flush()
+        }
+        RevWalk(repo).use { walk ->
+            val tree = walk.parseCommit(downloaded.head).tree
+            TreeWalk.forPath(repo, path, tree)?.use { repo.open(it.getObjectId(0)).bytes }
+        }
+    }.getOrNull()
 
     /**
      * Bound the host's local `.git` on disk: once it grows past [thresholdBytes], run `git gc` to

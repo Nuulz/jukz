@@ -111,15 +111,22 @@ class HostController(
      * the matching [SnapshotOffer]. The offer dials our **announced endpoint** — the connection-server
      * port the guests already reach for play — so the snapshot rides the one NAT traversal that works,
      * with no second port to forward. Returns the offer plus a latch that counts down on each completed
-     * download, or null when we are not hosting (no endpoint to advertise). The token gates the
-     * download; only a guest handed this exact token (over the live control channel) can pull.
+     * download, or null when we are not hosting (no endpoint to advertise). [handoffGate] gates the
+     * download; only a guest that received it in-game can pull.
      */
     fun offerSnapshot(pack: ByteArray, head: String): Pair<SnapshotOffer, CountDownLatch>? {
         val endpoint = record?.primaryEndpoint ?: return null
-        val token = randomToken()
-        val latch = connectionServer.armSnapshot(pack, head, token) ?: return null
-        return SnapshotOffer(endpoint.host, endpoint.port, token) to latch
+        val latch = connectionServer.armSnapshot(pack, head, handoffGate) ?: return null
+        // The offer says where; the gate itself only went to players in the world (see handoffGate).
+        return SnapshotOffer(endpoint.host, endpoint.port, SnapshotOffer.GATE_SENT_IN_GAME) to latch
     }
+
+    /**
+     * The token that unlocks this session's handoff snapshot. The host hands it — with the world key —
+     * to each player who actually joins the world, over the game connection; it never rides the control
+     * channel, which anyone with the share code can open.
+     */
+    val handoffGate: String = randomToken()
 
     /**
      * Poll the registry to confirm our record is still the live, announced one. Returns null when not

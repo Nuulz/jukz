@@ -20,6 +20,18 @@ object GuestSession {
     @Volatile private var controller: AutoCloseable? = null
     @Volatile private var disconnectedAt: Long = 0L // 0 = still connected
 
+    /**
+     * The handoff gate the host gave us in-game ([dev.jukz.net.WorldAccessPayload]). Only a guest that
+     * actually got into the world has it; one holding just a control channel (e.g. refused at login)
+     * doesn't, and is never offered the world.
+     */
+    @Volatile var handoffGate: String? = null
+        private set
+
+    fun onWorldAccess(gate: String) {
+        handoffGate = gate
+    }
+
     val isActive: Boolean get() = controller != null
 
     /** Record the controller for a freshly-connected guest. Closes any prior session first. */
@@ -28,6 +40,9 @@ object GuestSession {
         this.controller = controller
         disconnectedAt = 0L
     }
+
+    /** In the world (or just dropped from it) AND let in by the host — i.e. holds the handoff gate. */
+    fun admitted(): Boolean = handoffGate != null
 
     /** The game connection dropped. Timestamp it; do NOT close the controller (see the class doc). */
     fun markDisconnected() {
@@ -39,12 +54,13 @@ object GuestSession {
      * belongs to THIS visit, not a stale watcher from a world the player left long ago.
      */
     fun recentlyEngaged(): Boolean =
-        isActive && (disconnectedAt == 0L || System.currentTimeMillis() - disconnectedAt <= ENGAGED_WINDOW_MS)
+        isActive && admitted() && (disconnectedAt == 0L || System.currentTimeMillis() - disconnectedAt <= ENGAGED_WINDOW_MS)
 
     /** Close and forget the session (the guest moved on, or the handoff resolved). Idempotent. */
     fun leave() {
         runCatching { controller?.close() }
         controller = null
         disconnectedAt = 0L
+        handoffGate = null
     }
 }

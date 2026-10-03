@@ -12,6 +12,8 @@ import dev.jukz.core.model.ClaimToken
 import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.NodeId
 import dev.jukz.core.model.WorldId
+import dev.jukz.core.model.WorldKey
+import dev.jukz.world.WorldKeyStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URI
@@ -57,7 +59,7 @@ class RendezvousWorldRegistry(
 
     override suspend fun publishIfNewer(record: WorldRecord): PublishResult = withContext(Dispatchers.IO) {
         val response = try {
-            send(post("/v1/announce", announceBody(record)), writeTimeout)
+            send(signed(post("/v1/announce", announceBody(record)), WorldKey.OP_ANNOUNCE, record.worldId), writeTimeout)
         } catch (e: Exception) {
             logUnreachable("announce", e)
             // Optimistic: keep hosting; the heartbeat loop keeps retrying the announce.
@@ -75,6 +77,14 @@ class RendezvousWorldRegistry(
                 val body = JsonParser.parseString(response.body()).asJsonObject
                 PublishResult.Rejected(recordFromJson(body.getAsJsonObject("current")))
             }
+            403 -> {
+                // Another key owns this world on the rendezvous: this copy can play locally / on the LAN
+                // but not be found over the internet until it gets the owner's key (a handoff or a
+                // cloud takeover brings it). World info shows why.
+                WorldKeyStore.markRefused(record.worldId)
+                JukzMod.logger.warn("jukz: the rendezvous refused this copy of {} — it holds a different world key", record.worldId.shortCode())
+                PublishResult.Published(record)
+            }
             else -> {
                 JukzMod.logger.warn("jukz: rendezvous announce returned HTTP {}", response.statusCode())
                 PublishResult.Published(record) // treat like unreachable: never block local play
@@ -90,7 +100,7 @@ class RendezvousWorldRegistry(
             addProperty("playerCount", record.playerCount)
         }
         val response = try {
-            send(post("/v1/heartbeat", body), writeTimeout)
+            send(signed(post("/v1/heartbeat", body), WorldKey.OP_HEARTBEAT, record.worldId), writeTimeout)
         } catch (e: Exception) {
             logUnreachable("heartbeat", e)
             return@withContext true // optimistic; retried on the next beat
@@ -150,7 +160,7 @@ class RendezvousWorldRegistry(
             addProperty("worldId", worldId.uuid.toString())
             add("token", tokenToJson(token))
         }
-        runCatching { send(post("/v1/withdraw", body), writeTimeout) }
+        runCatching { send(signed(post("/v1/withdraw", body), WorldKey.OP_WITHDRAW, worldId), writeTimeout) }
             .onFailure { logUnreachable("withdraw", it) } // best-effort; the lease TTL covers us
         Unit
     }
@@ -164,8 +174,20 @@ class RendezvousWorldRegistry(
         return builder
     }
 
-    private fun post(path: String, body: JsonObject): HttpRequest.Builder =
-        request(path).POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+    /** A POST plus the exact body text it sends (the signature covers those bytes). */
+    private class Post(val builder: HttpRequest.Builder, val body: String)
+
+    private fun post(path: String, body: JsonObject): Post {
+        val text = body.toString()
+        return Post(request(path).POST(HttpRequest.BodyPublishers.ofString(text)), text)
+    }
+
+    /** Sign with the world's ownership key when this install holds it (see [WorldKeyStore]). */
+    private fun signed(post: Post, op: String, worldId: WorldId): HttpRequest.Builder {
+        WorldKeyStore.keyFor(worldId)?.headers(op, worldId, post.body, System.currentTimeMillis())
+            ?.forEach { (name, value) -> post.builder.header(name, value) }
+        return post.builder
+    }
 
     private fun send(builder: HttpRequest.Builder, timeout: Duration): HttpResponse<String> =
         http.send(builder.timeout(timeout).build(), HttpResponse.BodyHandlers.ofString())

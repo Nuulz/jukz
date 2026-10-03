@@ -6,6 +6,8 @@ import dev.jukz.core.host.HostController
 import dev.jukz.core.host.HostStatus
 import dev.jukz.core.model.WorldId
 import dev.jukz.sync.JGitWorldSync
+import dev.jukz.net.WorldAccessPayload
+import dev.jukz.world.WorldKeyStore
 import dev.jukz.sync.SnapshotPack
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
@@ -44,6 +46,17 @@ object HostSession {
 
     /** The record we are currently announcing (static info for the host UI), or null. */
     val record: WorldRecord? get() = controller?.sharedRecord
+
+    /**
+     * What a player who joins the hosted world receives in-game: the world key and this session's
+     * handoff gate (see [WorldAccessPayload]). Null when not hosting or the key isn't loaded.
+     */
+    fun accessPayload(): WorldAccessPayload? {
+        val c = controller ?: return null
+        val worldId = c.sharedRecord?.worldId ?: return null
+        val key = WorldKeyStore.keyFor(worldId) ?: return null
+        return WorldAccessPayload(worldId.uuid, key.encode(), c.handoffGate)
+    }
 
     /** Reset the stopped flag at the start of each new world so the next announce can install. */
     fun onServerStarting() {
@@ -164,6 +177,7 @@ object HostSession {
      * when auto-hosting never finished installing a controller (a quick open->close racing the announce).
      */
     private fun armGhostUpload(saveDir: Path, worldId: WorldId, generation: Long) {
+        WorldKeyStore.loadOrCreate(saveDir, worldId) // the upload is signed (auto-host may not have run)
         val pack = SnapshotPack.build(saveDir, JGitWorldSync()) ?: run { GhostUpload.clear(); return }
         GhostUpload.arm(GhostUpload.Pending(worldId, generation, pack.bytes, pack.head))
         JukzMod.logger.info("jukz: armed ghost snapshot ({} bytes) for upload", pack.bytes.size)

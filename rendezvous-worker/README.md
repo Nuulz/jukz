@@ -24,12 +24,18 @@ contract as the Rust server in [`../rendezvous`](../rendezvous), so the mod talk
   pointing at itself (`/v1/snapshot/blob/<id>/<pack|head>`) and streams to/from R2 via the binding.
 - **Observed IP** comes from `CF-Connecting-IP` (Rust: `Fly-Client-IP` / `X-Forwarded-For`).
 - `/healthz` reports `status` and `snapshotStore` only (state is sharded, so there are no global counts).
+- **World ownership.** Announce, heartbeat, withdraw and the snapshot upload/download are checked
+  against the world's Ed25519 key (`X-Jukz-Key` / `X-Jukz-Ts` / `X-Jukz-Sig` over
+  `jukz-v1\n{op}\n{worldId}\n{ts}\n{body}`, ±5 min). The first valid signature binds the key in the
+  world's shard (`k:<id>`); after that, unsigned calls get 401 and other keys 403, and a download without
+  the key looks like "no backup" (404). Worlds that never bound a key keep working unsigned (older mods).
+  `checkOwner` in `src/logic.ts` mirrors `dev.jukz.core.model.WorldKey`.
 
 ## Develop, test, deploy
 
 ```bash
 npm install
-npm run typecheck && npm test          # pure rules (ported from the Rust unit tests) + URL signing
+npm run typecheck && npm test          # pure rules (ported from the Rust unit tests), URL signing, ownership
 npx wrangler dev --port 18791 --local  # needs .dev.vars, see below
 npx wrangler deploy
 openssl rand -hex 32 | tr -d '\n' | npx wrangler secret put SNAPSHOT_SIGNING_KEY

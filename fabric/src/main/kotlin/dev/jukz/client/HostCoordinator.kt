@@ -18,6 +18,7 @@ import dev.jukz.transport.RecordingPortForwarder
 import dev.jukz.transport.UpnpPortForwarder
 import dev.jukz.transport.WsRelayClient
 import dev.jukz.world.WorldAccessFlag
+import dev.jukz.world.WorldKeyStore
 import dev.jukz.world.WorldIdState
 import kotlinx.coroutines.runBlocking
 import net.minecraft.client.MinecraftClient
@@ -108,6 +109,8 @@ object HostCoordinator {
 
     private fun runHost(server: IntegratedServer): HostResult {
         val (worldId, generation) = bumpGeneration(server)
+        // Every announce, heartbeat, withdraw and cloud upload for this world is signed with its key.
+        WorldKeyStore.loadOrCreate(server.getSavePath(WorldSavePath.ROOT), worldId)
         // Share one forwarder between the resolver (which attempts the UPnP map) and the relay
         // registrar (which only registers a relay session when that map failed — CGNAT / no IGD).
         val forwarder = RecordingPortForwarder(UpnpPortForwarder())
@@ -136,7 +139,13 @@ object HostCoordinator {
             relayRegistrar = relayClient,
         )
         val result = runBlocking { controller.host(worldId, generation) }
-        if (result is HostResult.Hosting) HostSession.install(controller) { relayClient.close() } else { relayClient.close(); controller.close() }
+        if (result is HostResult.Hosting) {
+            HostSession.install(controller) { relayClient.close() }
+            server.execute { JukzMod.broadcastWorldAccess(server) } // players already in get the new gate
+        } else {
+            relayClient.close()
+            controller.close()
+        }
         return result
     }
 

@@ -5,6 +5,7 @@ import dev.jukz.client.gui.SearchingHostScreen
 import dev.jukz.core.model.WorldId
 import dev.jukz.discovery.Discovery
 import dev.jukz.sync.R2SnapshotStore
+import dev.jukz.world.WorldKeyStore
 import dev.jukz.world.WorldIdSidecar
 import kotlinx.coroutines.runBlocking
 import net.minecraft.client.MinecraftClient
@@ -74,6 +75,8 @@ object WorldOpenInterceptor {
             // world from the singleplayer list gets "the world lives in one place" too, not only the
             // join-by-code flow. Probe off the render thread; the generation lives in the head object.
             val localGen = readSidecar(levelName)?.generation ?: -1L
+            // Our copy's key signs the request (a keyed world's backup only goes to key holders).
+            runCatching { WorldKeyStore.loadExisting(client.levelStorage.savesDirectory.resolve(levelName), worldId) }
             val ghost = runCatching { R2SnapshotStore.ghostSnapshot(worldId) }.getOrNull()
             val head = ghost?.let { runCatching { R2SnapshotStore.ghostHead(it.headUrl) }.getOrNull() }
             client.execute {

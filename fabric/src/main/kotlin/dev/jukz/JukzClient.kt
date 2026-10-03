@@ -5,6 +5,9 @@ import dev.jukz.client.HostCoordinator
 import dev.jukz.client.gui.HostInfoScreen
 import dev.jukz.client.gui.HostLeavingScreen
 import dev.jukz.client.gui.UiHotReload
+import dev.jukz.net.WorldAccessPayload
+import dev.jukz.world.WorldKeyStore
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
 import dev.jukz.client.gui.JoinPromptScreen
 import dev.jukz.client.gui.UploadingWorldScreen
 import dev.jukz.client.gui.WorldListLiveBadge
@@ -39,6 +42,12 @@ import org.lwjgl.glfw.GLFWWindowCloseCallbackI
 object JukzClient : ClientModInitializer {
     override fun onInitializeClient() {
         UiHotReload.install() // dev runs only: owo-ui models are read live from src/
+
+        // The host lets us in: keep the world key (to revive it from the cloud later) and the handoff gate.
+        ClientPlayNetworking.registerGlobalReceiver(WorldAccessPayload.ID) { payload, _ ->
+            WorldKeyStore.rememberFromHost(WorldId.of(payload.worldId), payload.key)
+            GuestSession.onWorldAccess(payload.gate)
+        }
 
         ScreenEvents.AFTER_INIT.register { client, screen, scaledWidth, scaledHeight ->
             when (screen) {

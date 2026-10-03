@@ -86,10 +86,12 @@ Notes:
 
 ## Limits (v1, by decision)
 
+
 - No ownership authentication: anyone who knows a world UUID can announce a takeover with a high
-  generation. The fencing protocol makes this visible (the legitimate host gets `superseded`) but
-  not preventable; real ownership proofs (per-world keypairs, BEP44-style signatures) are future
-  work and would version to `/v2`.
+  generation or replace its backup. The fencing protocol makes a takeover visible (the legitimate host
+  gets `superseded`) but not preventable. The production server (`../rendezvous-worker`) checks each
+  world's Ed25519 key; this one ignores the `X-Jukz-*` headers the mod sends. Fine for a private
+  instance among friends.
 - The relay (WebSocket reverse tunnel at `/v1/relay/{host,connect,work}`) carries play for hosts that
   cannot open a port (no UPnP / CGNAT). It is outbound-only on both sides, byte-gated to jukz's own
   `ConnectionType` first byte (never an open proxy), and capped (see the env table). A host registers a

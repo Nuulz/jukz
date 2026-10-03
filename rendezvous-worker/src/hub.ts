@@ -1,11 +1,13 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   BadRequest,
+  type OwnerOp,
   type Entry,
   RateLimiter,
   VALID_FIRST_BYTES,
   type WorldRecord,
   announce,
+  checkOwner,
   fenceAllows,
   heartbeat,
   liveRecord,
@@ -85,6 +87,8 @@ export class RendezvousHub extends DurableObject<Env> {
       if (path === "/v1/heartbeat" && request.method === "POST") return await this.heartbeat(request);
       if (path === "/v1/withdraw" && request.method === "POST") return await this.withdraw(request);
       if (path === "/v1/snapshot/fence" && request.method === "POST") return await this.fence(request);
+      const download = path.match(/^\/v1\/snapshot\/may-download\/([^/]+)$/);
+      if (download && request.method === "GET") return await this.mayDownload(request, download[1]);
       const lookup = path.match(/^\/v1\/worlds\/([^/]+)$/);
       if (lookup && request.method === "GET") return await this.lookup(lookup[1]);
       return error(404, "not found");
@@ -107,9 +111,35 @@ export class RendezvousHub extends DurableObject<Env> {
     return this.ctx.storage.get<Entry>(`w:${worldId}`);
   }
 
-  private async announce(request: Request): Promise<Response> {
-    const body = (await request.json()) as Record<string, unknown>;
+  /**
+   * Parse a write's body and check the world's ownership signature (see checkOwner). Returns the parsed
+   * body plus a `commit` to bind the key once the change succeeds, or the refusal to send back.
+   */
+  private async ownedWrite(request: Request, op: OwnerOp): Promise<
+    { body: Record<string, unknown>; worldId: string; commit: () => Promise<void> } | { refusal: Response }
+  > {
+    const text = await request.text();
+    const body = JSON.parse(text) as Record<string, unknown>;
     const worldId = parseWorldId(body.worldId);
+    const bound = await this.ctx.storage.get<string>(`k:${worldId}`);
+    const check = await checkOwner(op, worldId, text, bound, (n) => request.headers.get(n), Date.now());
+    if (!check.ok) {
+      console.log(`${op} refused world=${worldId}: ${check.message}`);
+      return { refusal: json(check.status, { status: "forbidden", message: check.message }) };
+    }
+    const commit = async () => {
+      if (check.bind) {
+        await this.ctx.storage.put(`k:${worldId}`, check.bind);
+        console.log(`world key bound world=${worldId}`);
+      }
+    };
+    return { body, worldId, commit };
+  }
+
+  private async announce(request: Request): Promise<Response> {
+    const w = await this.ownedWrite(request, "announce");
+    if ("refusal" in w) return w.refusal;
+    const { body, worldId } = w;
     const endpoints = mergeObservedEndpoint(parseEndpoints(body.endpoints), request.headers.get(CLIENT_IP_HEADER));
     const record: WorldRecord = {
       worldId,
@@ -125,14 +155,16 @@ export class RendezvousHub extends DurableObject<Env> {
       return json(409, { status: "rejected", current: outcome.current });
     }
     await this.ctx.storage.put(`w:${worldId}`, outcome.entry);
+    await w.commit();
     await this.ensureAlarm();
     console.log(`published world=${worldId} generation=${record.token.generation}`);
     return json(200, { status: "published", ttlMs: this.ttlMs, record });
   }
 
   private async heartbeat(request: Request): Promise<Response> {
-    const body = (await request.json()) as Record<string, unknown>;
-    const worldId = parseWorldId(body.worldId);
+    const w = await this.ownedWrite(request, "heartbeat");
+    if ("refusal" in w) return w.refusal;
+    const { body, worldId } = w;
     const token = parseToken(body.token);
     const outcome = heartbeat(
       await this.entry(worldId), token, Number(body.heartbeatSeq) || 0, Number(body.playerCount) || 0, Date.now(), this.ttlMs,
@@ -140,6 +172,7 @@ export class RendezvousHub extends DurableObject<Env> {
     switch (outcome.kind) {
       case "refreshed":
         await this.ctx.storage.put(`w:${worldId}`, outcome.entry);
+        await w.commit();
         return json(200, { status: "refreshed", ttlMs: this.ttlMs });
       case "superseded":
         return json(409, { status: "superseded", current: outcome.current });
@@ -155,11 +188,13 @@ export class RendezvousHub extends DurableObject<Env> {
   }
 
   private async withdraw(request: Request): Promise<Response> {
-    const body = (await request.json()) as Record<string, unknown>;
-    const worldId = parseWorldId(body.worldId);
+    const w = await this.ownedWrite(request, "withdraw");
+    if ("refusal" in w) return w.refusal;
+    const { body, worldId } = w;
     const token = parseToken(body.token);
     if (shouldWithdraw(await this.entry(worldId), token, Date.now())) {
       await this.ctx.storage.delete(`w:${worldId}`);
+      await w.commit();
       console.log(`withdrawn world=${worldId}`);
     }
     return new Response(null, { status: 204 });
@@ -167,13 +202,27 @@ export class RendezvousHub extends DurableObject<Env> {
 
   /** Snapshot upload fence (per world, durable): 200 when this generation may upload, 409 when stale. */
   private async fence(request: Request): Promise<Response> {
-    const body = (await request.json()) as Record<string, unknown>;
-    const worldId = parseWorldId(body.worldId);
+    const w = await this.ownedWrite(request, "snapshot-upload");
+    if ("refusal" in w) return w.refusal;
+    const { body, worldId } = w;
     const generation = Number(body.generation);
     if (!Number.isSafeInteger(generation)) throw new BadRequest("generation must be an integer");
     const current = await this.ctx.storage.get<number>(`f:${worldId}`);
     if (!fenceAllows(current, generation)) return json(409, { status: "stale" });
     await this.ctx.storage.put(`f:${worldId}`, generation);
+    await w.commit();
+    return json(200, { status: "ok" });
+  }
+
+  /**
+   * Whether this caller may read the world's cloud copy: anyone for a world without a key (older mods),
+   * otherwise only a request signed with the bound key. Never binds a key — reading proves nothing.
+   */
+  private async mayDownload(request: Request, rawId: string): Promise<Response> {
+    const worldId = parseWorldId(rawId);
+    const bound = await this.ctx.storage.get<string>(`k:${worldId}`);
+    const check = await checkOwner("snapshot-download", worldId, "", bound, (n) => request.headers.get(n), Date.now());
+    if (!check.ok) return json(check.status, { status: "forbidden", message: check.message });
     return json(200, { status: "ok" });
   }
 

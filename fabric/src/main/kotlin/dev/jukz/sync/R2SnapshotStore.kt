@@ -4,6 +4,8 @@ import com.google.gson.JsonParser
 import dev.jukz.JukzMod
 import dev.jukz.config.JukzConfig
 import dev.jukz.core.model.WorldId
+import dev.jukz.core.model.WorldKey
+import dev.jukz.world.WorldKeyStore
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -66,8 +68,13 @@ object R2SnapshotStore {
     /** Ask the rendezvous for the download URLs, or null when disabled / unreachable. */
     fun ghostSnapshot(worldId: WorldId): GhostUrls? {
         val base = JukzConfig.rendezvousUrl ?: return null
-        val request = signed(URI.create("$base/v1/snapshot/${worldId.uuid}")).GET()
-            .timeout(signTimeout).build()
+        val builder = signed(URI.create("$base/v1/snapshot/${worldId.uuid}")).GET().timeout(signTimeout)
+        // A world with a key only hands its cloud copy to someone holding that key (a past host, or a
+        // player the host let in); without it the rendezvous answers as if there were no backup.
+        WorldKeyStore.keyFor(worldId)
+            ?.headers(WorldKey.OP_SNAPSHOT_DOWNLOAD, worldId, "", System.currentTimeMillis())
+            ?.forEach { (name, value) -> builder.header(name, value) }
+        val request = builder.build()
         return runCatching {
             val response = http.send(request, HttpResponse.BodyHandlers.ofString())
             if (response.statusCode() != 200) return@runCatching null
@@ -137,10 +144,15 @@ object R2SnapshotStore {
 
     private fun signUpload(base: String, worldId: WorldId, generation: Long): GhostUrls? {
         val body = """{"worldId":"${worldId.uuid}","generation":$generation}"""
-        val request = signed(URI.create("$base/v1/snapshot/upload-url"))
+        val builder = signed(URI.create("$base/v1/snapshot/upload-url"))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body))
-            .timeout(signTimeout).build()
+            .timeout(signTimeout)
+        // Only the world's key holder may replace its cloud copy (see WorldKey).
+        WorldKeyStore.keyFor(worldId)
+            ?.headers(WorldKey.OP_SNAPSHOT_UPLOAD, worldId, body, System.currentTimeMillis())
+            ?.forEach { (name, value) -> builder.header(name, value) }
+        val request = builder.build()
         val response = http.send(request, HttpResponse.BodyHandlers.ofString())
         if (response.statusCode() != 200) {
             JukzMod.logger.info("jukz: snapshot upload-url returned HTTP {}", response.statusCode())

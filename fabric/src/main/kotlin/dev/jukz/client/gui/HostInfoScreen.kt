@@ -4,6 +4,7 @@ import dev.jukz.client.HostCoordinator
 import dev.jukz.core.host.HostStatus
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.runtime.HostSession
+import dev.jukz.world.WorldKeyStore
 import io.wispforest.owo.ui.component.Components
 import io.wispforest.owo.ui.component.LabelComponent
 import io.wispforest.owo.ui.container.FlowLayout
@@ -123,7 +124,10 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
     /** Push the latest self-check into the status label (only when it changed). */
     private fun showStatus() {
         val label = statusLabel ?: return
+        val refused = record?.let { WorldKeyStore.isRefused(it.worldId) } == true
         val current = when {
+            // Playable here and on the LAN, but the rendezvous holds another key for this world.
+            refused -> "not online: this copy doesn't hold the world's key" to ACCENT_ERROR
             checking -> "checking…" to COLOR_SUBTLE
             status?.live == true -> "live · heartbeat #${status!!.heartbeatSeq}" to COLOR_LIVE
             else -> "not announced" to ACCENT_ERROR

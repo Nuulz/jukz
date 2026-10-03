@@ -20,4 +20,17 @@ data class SnapshotOffer(val host: String, val port: Int, val token: String) {
         require(port in 1..65535) { "snapshot port out of range: $port" }
         require(token.isNotBlank()) { "snapshot token must not be blank" }
     }
+
+    /** True when the real gate token was handed out in-game rather than carried by this offer. */
+    val gateSentInGame: Boolean get() = token == GATE_SENT_IN_GAME
+
+    companion object {
+        /**
+         * Placeholder token for offers pushed over the control channel. The control channel is open to
+         * anyone holding the share code — even someone the game refused to log in — so the real gate
+         * (and the world key) go to the players actually in the world, over the game connection. A
+         * guest swaps this for the gate it received there.
+         */
+        const val GATE_SENT_IN_GAME = "in-game"
+    }
 }

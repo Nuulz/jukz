@@ -44,12 +44,14 @@ export default {
     if (path === "/healthz") {
       return json(200, { status: "ok", snapshotStore: env.SNAPSHOT_SIGNING_KEY ? "enabled" : "disabled" });
     }
-    if (path === "/v1/snapshot/fence") return error(404, "not found"); // hub-internal, never public
+    if (path === "/v1/snapshot/fence" || path.startsWith("/v1/snapshot/may-download/")) {
+      return error(404, "not found"); // hub-internal, never public
+    }
 
     try {
       if (path === "/v1/snapshot/upload-url" && request.method === "POST") return await snapshotUploadUrl(request, env, url);
       const download = path.match(/^\/v1\/snapshot\/([^/]+)$/);
-      if (download && request.method === "GET") return await snapshotDownloadUrl(env, url, download[1]);
+      if (download && request.method === "GET") return await snapshotDownloadUrl(request, env, url, download[1]);
       return await routeToShard(request, env, url);
     } catch (e) {
       if (e instanceof BadRequest) return error(400, e.message);
@@ -117,13 +119,15 @@ function publicOrigin(env: Env, url: URL): string {
 
 async function snapshotUploadUrl(request: Request, env: Env, url: URL): Promise<Response> {
   if (!env.SNAPSHOT_SIGNING_KEY) return error(503, "snapshot store disabled");
-  const body = (await request.json()) as Record<string, unknown>;
+  const text = await request.text();
+  const body = JSON.parse(text) as Record<string, unknown>;
   const worldId = parseWorldId(body.worldId);
-  // The generation fence lives in the world's shard (durable).
+  // The world's shard holds the generation fence and the ownership key: forward the exact body and the
+  // signature headers so it can check both.
   const fence = await hub(env, `world:${worldId}`).fetch("https://hub/v1/snapshot/fence", {
     method: "POST",
-    headers: { "content-type": "application/json", [CLIENT_IP_HEADER]: request.headers.get("cf-connecting-ip") ?? "" },
-    body: JSON.stringify({ worldId, generation: body.generation }),
+    headers: hubHeaders(request),
+    body: text,
   });
   if (fence.status !== 200) return fence;
   const key = env.SNAPSHOT_SIGNING_KEY;
@@ -135,10 +139,17 @@ async function snapshotUploadUrl(request: Request, env: Env, url: URL): Promise<
   });
 }
 
-/** Signed GET URLs; the guest probes the head URL, and a 404 there means "no ghost". */
-async function snapshotDownloadUrl(env: Env, url: URL, rawId: string): Promise<Response> {
+/**
+ * Signed GET URLs; the guest probes the head URL, and a 404 there means "no ghost". A world with a key
+ * only gives its copy to a request signed with it — anyone else gets the same 404 as "no backup".
+ */
+async function snapshotDownloadUrl(request: Request, env: Env, url: URL, rawId: string): Promise<Response> {
   if (!env.SNAPSHOT_SIGNING_KEY) return json(404, { status: "none" });
   const worldId = parseWorldId(rawId);
+  const may = await hub(env, `world:${worldId}`).fetch(`https://hub/v1/snapshot/may-download/${worldId}`, {
+    headers: hubHeaders(request),
+  });
+  if (may.status !== 200) return json(404, { status: "none" });
   const key = env.SNAPSHOT_SIGNING_KEY;
   return json(200, {
     packUrl: await signBlobUrl(publicOrigin(env, url), key, "get", worldId, "pack"),

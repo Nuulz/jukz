@@ -27,6 +27,7 @@ import dev.jukz.sync.JGitWorldSync
 import dev.jukz.sync.R2SnapshotStore
 import dev.jukz.world.WorldAccessFlag
 import dev.jukz.world.WorldIdSidecar
+import dev.jukz.world.WorldKeyStore
 import dev.jukz.world.WorldSaveLocator
 import kotlinx.coroutines.runBlocking
 import net.minecraft.client.MinecraftClient
@@ -190,7 +191,10 @@ object JoinCoordinator {
             return
         }
         JukzMod.logger.info("jukz: host of {} is leaving (snapshot {}) — offering handoff", shortCode, if (offer != null) "offered" else "none")
-        showHandoff(client, worldId, shortCode, TitleScreen(), offer, target, generation, dialer, intent = TakeoverIntent.LIVE_HANDOFF)
+        // The control-channel offer only says where; the gate that unlocks it came in-game (recentlyEngaged
+        // above already requires having it).
+        val unlocked = offer?.let { if (it.gateSentInGame) it.copy(token = GuestSession.handoffGate ?: return) else it }
+        showHandoff(client, worldId, shortCode, TitleScreen(), unlocked, target, generation, dialer, intent = TakeoverIntent.LIVE_HANDOFF)
     }
 
     /**
@@ -387,6 +391,8 @@ object JoinCoordinator {
         downloaded: JGitWorldSync.Downloaded,
     ): Boolean {
         val pack = Files.readAllBytes(downloaded.packPath)
+        // The cloud only takes a backup signed with the world's key, which travels inside the pack.
+        JGitWorldSync().readFileAtHead(downloaded, WorldKeyStore.FILE_NAME)?.let { WorldKeyStore.remember(worldId, it) }
         GhostUpload.arm(GhostUpload.Pending(worldId, generation, pack, downloaded.head.name))
         return true
     }
