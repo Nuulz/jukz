@@ -1,7 +1,4 @@
-<!--
-  World info (pause menu → "World info (jukz)"). HostInfoScreen.kt fills the rows and wires the buttons
-  by id; the look comes from theme.xml.
--->
+<!-- "Play together" (multiplayer screen): type a world code to join. Wired in JoinPromptScreen.kt. -->
 <owo-ui xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/wisp-forest/owo-lib/1.21/owo-ui.xsd">
     <components>
@@ -11,20 +8,22 @@
                 <template name="title@jukz:theme">
                     <id>title</id>
                 </template>
-
-                <!-- One "info-row@jukz:theme" per field, added from code. -->
-                <flow-layout direction="vertical" id="rows">
-                    <children/>
-                    <gap>5</gap>
-                    <margins>
-                        <vertical>8</vertical>
-                    </margins>
-                </flow-layout>
-
-                <template name="button@jukz:theme">
-                    <id>access-button</id>
-                    <width>150</width>
+                <template name="message@jukz:theme">
+                    <id>message</id>
                 </template>
+                <text-box id="code">
+                    <max-length>64</max-length>
+                    <sizing>
+                        <horizontal method="fixed">300</horizontal>
+                        <vertical method="fixed">20</vertical>
+                    </sizing>
+                    <margins>
+                        <vertical>4</vertical>
+                    </margins>
+                </text-box>
+                <label id="error">
+                    <color>#FFFF6B6B</color>
+                </label>
                 <template name="button-row@jukz:theme">
                     <id>buttons</id>
                 </template>

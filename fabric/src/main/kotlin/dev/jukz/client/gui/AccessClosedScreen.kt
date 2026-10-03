@@ -1,6 +1,5 @@
 package dev.jukz.client.gui
 
-import net.minecraft.client.gui.widget.ButtonWidget
 import net.minecraft.text.Text
 
 /**
@@ -16,12 +15,7 @@ class AccessClosedScreen(
     accentColor = ACCENT_ERROR,
     showSpinner = false,
 ) {
-    override fun init() {
-        addDrawableChild(
-            ButtonWidget.builder(Text.literal("Back")) { onBack() }
-                .dimensions(width / 2 - 75, height / 2 + 28, 150, 20).build(),
-        )
-    }
+    override fun buttons() = listOf(StatusButton("Back") { onBack() })
 
     override fun shouldCloseOnEsc(): Boolean = true
 

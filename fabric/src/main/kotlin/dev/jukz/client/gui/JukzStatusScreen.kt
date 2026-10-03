@@ -1,62 +1,47 @@
 package dev.jukz.client.gui
 
+import io.wispforest.owo.ui.container.FlowLayout
 import net.minecraft.client.gui.DrawContext
-import net.minecraft.client.gui.screen.Screen
 import net.minecraft.text.Text
 
 /**
- * Shared layout for every jukz status overlay. Renders the standard menu background, a "jukz"
- * brand header in the screen's accent colour, a primary title, a status line, and — while work is
- * in flight — an animated indeterminate progress bar. The moving bar is the cue that the mod is
- * working rather than frozen, so a slow lookup never reads as a crash.
+ * Shared layout for every jukz status overlay (model `status.xml`): the "jukz" brand in the screen's
+ * accent colour, a title, a wrapped message, and — while work is in flight — an animated
+ * indeterminate bar, so a slow lookup never reads as a crash. Subclasses only declare their [buttons].
  */
 abstract class JukzStatusScreen(
-    title: Text,
+    private val heading: Text,
     private val statusLine: Text,
     private val accentColor: Int = ACCENT_INFO,
     private val showSpinner: Boolean = true,
-) : Screen(title) {
+) : JukzUiScreen("status") {
 
-    override fun render(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
-        super.render(context, mouseX, mouseY, delta) // background + widgets
+    /** One button under the message. */
+    protected class StatusButton(val text: String, val width: Int = 150, val onPress: () -> Unit)
 
-        val cx = width / 2
-        context.drawCenteredTextWithShadow(textRenderer, BRAND, cx, height / 3 - 26, accentColor)
-        context.drawCenteredTextWithShadow(textRenderer, title, cx, height / 3, COLOR_TITLE)
-        context.drawCenteredTextWithShadow(textRenderer, statusLine, cx, height / 3 + 16, COLOR_SUBTLE)
+    /** The buttons under the message, left to right (none by default). */
+    protected open fun buttons(): List<StatusButton> = emptyList()
 
-        if (showSpinner) drawIndeterminateBar(context)
+    private var bar: ProgressBar? = null
+
+    override fun build(root: FlowLayout) {
+        accent(root, accentColor)
+        label(root, "title").text(heading)
+        label(root, "message").text(statusLine)
+        bar = progressBar(root, "bar")
+        if (!showSpinner) {
+            bar?.let { detach(root, it.track) }
+            bar = null
+        }
+        val buttons = buttons()
+        if (buttons.isEmpty()) detach(root, root.childById(FlowLayout::class.java, "buttons"))
+        buttons.forEach { addButton(root, "buttons", Text.literal(it.text), it.width, it.onPress) }
     }
 
-    /** A 1.5s ping-pong segment sliding inside a track — a texture-free indeterminate spinner. */
-    private fun drawIndeterminateBar(context: DrawContext) {
-        val barW = 160
-        val barH = 3
-        val bx = (width - barW) / 2
-        val by = height / 2 + 4
-        context.fill(bx, by, bx + barW, by + barH, COLOR_TRACK)
-
-        val period = 1500.0
-        val t = (System.currentTimeMillis() % period.toLong()) / period
-        val pingPong = if (t < 0.5) t * 2 else 2 - t * 2 // 0 -> 1 -> 0
-        val segW = 46
-        val sx = bx + ((barW - segW) * pingPong).toInt()
-        context.fill(sx, by, sx + segW, by + barH, accentColor)
+    override fun render(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
+        bar?.indeterminate(accentColor) // before drawing, so this frame shows the new position
+        super.render(context, mouseX, mouseY, delta)
     }
 
     override fun shouldCloseOnEsc(): Boolean = false
-
-    companion object {
-        val BRAND: Text = Text.literal("jukz")
-
-        // Colours are full ARGB; a missing alpha byte renders transparent on 1.21.1.
-        const val COLOR_TITLE = 0xFFFFFFFF.toInt()
-        const val COLOR_SUBTLE = 0xFFB0B0B0.toInt()
-        const val COLOR_TRACK = 0xFF2B2B2B.toInt()
-
-        const val ACCENT_INFO = 0xFF7FB2FF.toInt() // searching / working
-        const val ACCENT_CONNECT = 0xFF5B9BFF.toInt() // connecting
-        const val ACCENT_ERROR = 0xFFFF6B6B.toInt() // failure
-        const val ACCENT_ACTION = 0xFFFFC24A.toInt() // call to action (should-host)
-    }
 }

@@ -3,7 +3,6 @@ package dev.jukz.client.gui
 import dev.jukz.client.GuestSession
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.gui.screen.TitleScreen
-import net.minecraft.client.gui.widget.ButtonWidget
 import net.minecraft.text.Text
 
 /**
@@ -18,12 +17,10 @@ class HostLeavingScreen : JukzStatusScreen(
     Text.literal("Getting the world…"),
     accentColor = ACCENT_INFO,
 ) {
-    override fun init() {
-        addDrawableChild(
-            ButtonWidget.builder(Text.literal("Cancel")) {
-                GuestSession.leave()
-                MinecraftClient.getInstance().setScreen(TitleScreen())
-            }.dimensions(width / 2 - 75, height / 2 + 28, 150, 20).build(),
-        )
-    }
+    override fun buttons() = listOf(
+        StatusButton("Cancel") {
+            GuestSession.leave()
+            MinecraftClient.getInstance().setScreen(TitleScreen())
+        },
+    )
 }

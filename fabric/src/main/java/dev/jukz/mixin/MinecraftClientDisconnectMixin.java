@@ -1,13 +1,12 @@
 package dev.jukz.mixin;
 
 import dev.jukz.client.GuestSession;
+import dev.jukz.client.gui.HandingOffScreen;
 import dev.jukz.client.gui.HostLeavingScreen;
 import dev.jukz.runtime.HostSession;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.DisconnectedScreen;
-import net.minecraft.client.gui.screen.MessageScreen;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
@@ -50,7 +49,7 @@ public abstract class MinecraftClientDisconnectMixin {
         // drives, so it would still read false at HEAD. JukzClient surfaces UploadingWorldScreen
         // reactively (after that TitleScreen) once the world is gone and the pack is ready.
         if (HostSession.INSTANCE.isHosting() && HostSession.INSTANCE.connectedGuestCount() > 0) {
-            return new MessageScreen(Text.literal("Handing the world to the next host…"));
+            return new HandingOffScreen();
         }
         if (original instanceof DisconnectedScreen && GuestSession.INSTANCE.recentlyEngaged()) {
             return new HostLeavingScreen();

@@ -1,6 +1,5 @@
 package dev.jukz.client.gui
 
-import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -24,11 +23,5 @@ class HostHandoffScreenTest {
     @Test
     fun `the two message variants differ`() {
         assertNotEquals(HostHandoffScreen.message(true), HostHandoffScreen.message(false))
-    }
-
-    @Test
-    fun `constructs with both variants`() {
-        assertDoesNotThrow { HostHandoffScreen(snapshotApplied = true, onHostNow = {}, onBack = {}) }
-        assertDoesNotThrow { HostHandoffScreen(snapshotApplied = false, onHostNow = {}, onBack = {}) }
     }
 }

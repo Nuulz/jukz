@@ -4,7 +4,6 @@ import dev.jukz.client.HostCoordinator
 import dev.jukz.core.host.HostStatus
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.runtime.HostSession
-import io.wispforest.owo.ui.component.ButtonComponent
 import io.wispforest.owo.ui.component.Components
 import io.wispforest.owo.ui.component.LabelComponent
 import io.wispforest.owo.ui.container.FlowLayout
@@ -22,7 +21,7 @@ import net.minecraft.text.Text
  * panel also rebuilds itself when the hosted record changes underneath it — closing or reopening
  * access withdraws/announces off-thread, so the first build often sees the state before the switch.
  *
- * Layout and style: `assets/jukz/owo_ui/host_info.xml`.
+ * Layout: `assets/jukz/owo_ui/host_info.xml` (style from `theme.xml`).
  */
 class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
 
@@ -35,14 +34,13 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
     private var ticksSinceCheck = 0
     private var builtFor: ClaimToken? = null // the hosting session this panel shows (null = not hosting)
 
-    override fun recreate(): Screen = HostInfoScreen(parent)
-
     override fun build(root: FlowLayout) {
+        label(root, "title").text(Text.literal("World info"))
         val rows = root.childById(FlowLayout::class.java, "rows")
         val rec = record
         builtFor = rec?.token
         if (rec == null) {
-            rows.child(Components.label(Text.literal("Not hosting this world.")).color(Color.ofArgb(JukzStatusScreen.COLOR_SUBTLE)))
+            rows.child(Components.label(Text.literal("Not hosting this world.")).color(Color.ofArgb(COLOR_SUBTLE)))
         } else {
             listOfNotNull(
                 "Share code" to rec.worldId.shortCode(),
@@ -56,16 +54,17 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
             statusRow.margins(Insets.top(6))
             rows.child(statusRow)
             statusLabel = label
+            shownStatus = null // a rebuilt label starts blank
             showStatus()
         }
 
         // Access toggle (F4-D): open/close the world to guests. Reads the per-world flag for its label.
-        button(root, "access-button", accessLabel()) { toggleAccess() }
-        button(root, "copy-button", Text.literal("Copy code")) {
+        wireButton(root, "access-button", accessLabel()) { toggleAccess() }
+        addButton(root, "buttons", Text.literal("Copy code"), width = 100) {
             record?.let { client?.keyboard?.clipboard = it.worldId.shortCode() }
         }
-        button(root, "refresh-button", Text.literal("Refresh")) { refresh() }
-        button(root, "done-button", Text.literal("Done")) { client?.setScreen(parent) }
+        addButton(root, "buttons", Text.literal("Refresh"), width = 100) { refresh() }
+        addButton(root, "buttons", Text.literal("Done"), width = 100) { client?.setScreen(parent) }
 
         // Self-heal: every jukz world is auto-hosted on open, but if that hasn't taken (or failed),
         // kick it off now so opening this panel always ends with the world online.
@@ -77,15 +76,12 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
 
     /** One "label: value" row from the model's `info-row` template; returns the row and its value label. */
     private fun infoRow(label: String, value: String, id: String): Pair<FlowLayout, LabelComponent> {
-        val row = model.expandTemplate(FlowLayout::class.java, "info-row", mapOf("label" to label, "id" to id))
+        val row = themed(FlowLayout::class.java, "info-row", mapOf("label" to label, "id" to id))
         val valueLabel = row.childById(LabelComponent::class.java, id)
         valueLabel.text(Text.literal(value))
         return row to valueLabel
     }
 
-    private fun button(root: FlowLayout, id: String, text: Text, onPress: () -> Unit) {
-        root.childById(ButtonComponent::class.java, id).apply { message = text }.onPress { onPress() }
-    }
 
     /** "Access: Open" / "Access: Closed", read from the per-world flag at build time. */
     private fun accessLabel(): Text {
@@ -94,12 +90,12 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
         return Text.literal(if (closed) "Access: Closed" else "Access: Open")
     }
 
-    /** Flip access for the loaded world, then rebuild the screen so the label + status refresh. */
+    /** Flip access for the loaded world, then rebuild so the label + status refresh. */
     private fun toggleAccess() {
         val server = client?.server ?: return
         if (HostCoordinator.isAccessDisabled(server)) HostCoordinator.enableAccess(server)
         else HostCoordinator.disableAccess(server)
-        client?.setScreen(HostInfoScreen(parent))
+        rebuild()
     }
 
     /** Re-poll the live status without blocking the render thread. */
@@ -116,7 +112,7 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
     override fun tick() {
         super.tick()
         if (record?.token != builtFor) { // heartbeats replace the record but keep its token
-            client?.setScreen(recreate()) // hosting started/stopped/re-announced since this panel was built
+            rebuild() // hosting started/stopped/re-announced since this panel was built
             return
         }
         showStatus()
@@ -128,9 +124,9 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
     private fun showStatus() {
         val label = statusLabel ?: return
         val current = when {
-            checking -> "checking…" to JukzStatusScreen.COLOR_SUBTLE
+            checking -> "checking…" to COLOR_SUBTLE
             status?.live == true -> "live · heartbeat #${status!!.heartbeatSeq}" to COLOR_LIVE
-            else -> "not announced" to JukzStatusScreen.ACCENT_ERROR
+            else -> "not announced" to ACCENT_ERROR
         }
         if (current == shownStatus) return
         shownStatus = current
@@ -140,7 +136,6 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
     override fun shouldCloseOnEsc(): Boolean = true
 
     companion object {
-        private const val COLOR_LIVE = 0xFF6BCB6B.toInt()
         private const val REPOLL_TICKS = 60 // 3 s
     }
 }

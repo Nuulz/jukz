@@ -1,0 +1,138 @@
+<!--
+  jukz shared look: every screen model builds on these templates (referenced as "name@jukz:theme"), so a
+  change here restyles all of them. Saved during a dev run, it hot-reloads like any screen model.
+
+  Colours are full #AARRGGBB. Per-screen accents (the "jukz" brand and the progress bar) are set from
+  code, since they carry meaning: blue = working, yellow = your call, red = failed.
+-->
+<owo-ui xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/wisp-forest/owo-lib/1.21/owo-ui.xsd">
+    <templates>
+        <!-- The whole screen: one centred panel over vanilla's own backdrop (menu panorama or the blurred
+             world, drawn by JukzUiScreen). JukzUiScreen puts the screen model's
+             own component tree inside "panel" (owo can't pass <child> elements across model files). -->
+        <template name="screen">
+            <flow-layout direction="vertical">
+                <children>
+                    <flow-layout direction="vertical" id="panel">
+                        <children/>
+                        <horizontal-alignment>center</horizontal-alignment>
+                        <padding>
+                            <vertical>12</vertical>
+                            <horizontal>16</horizontal>
+                        </padding>
+                        <surface>
+                            <flat>#AA0B0F1A</flat>
+                            <outline>#FF2A3B5C</outline>
+                        </surface>
+                    </flow-layout>
+                </children>
+                <horizontal-alignment>center</horizontal-alignment>
+                <vertical-alignment>center</vertical-alignment>
+            </flow-layout>
+        </template>
+
+
+        <template name="brand">
+            <label id="brand">
+                <text>jukz</text>
+                <color>#FF7FB2FF</color>
+                <shadow>true</shadow>
+            </label>
+        </template>
+
+        <template name="title">
+            <label id="{{id}}">
+                <color>#FFFFFFFF</color>
+                <shadow>true</shadow>
+            </label>
+        </template>
+
+        <!-- Body text: wraps instead of running off narrow windows. -->
+        <template name="message">
+            <label id="{{id}}">
+                <color>#FFB0B0B0</color>
+                <max-width>300</max-width>
+                <horizontal-text-alignment>center</horizontal-text-alignment>
+            </label>
+        </template>
+
+        <!-- Small print (tips, hints). -->
+        <template name="hint">
+            <label id="{{id}}">
+                <color>#FF808080</color>
+                <max-width>300</max-width>
+                <horizontal-text-alignment>center</horizontal-text-alignment>
+            </label>
+        </template>
+
+        <!-- Progress bar: a track holding a fill; code sizes/moves the fill each frame (indeterminate
+             slide or real progress) and tints it with the screen's accent. -->
+        <template name="bar">
+            <flow-layout direction="horizontal" id="{{id}}">
+                <children>
+                    <box id="{{id}}-fill">
+                        <sizing>
+                            <horizontal method="fixed">0</horizontal>
+                            <vertical method="fill">100</vertical>
+                        </sizing>
+                        <color>#FF7FB2FF</color>
+                        <fill>true</fill>
+                        <positioning type="absolute">0,0</positioning>
+                    </box>
+                </children>
+                <sizing>
+                    <horizontal method="fixed">{{width}}</horizontal>
+                    <vertical method="fixed">{{height}}</vertical>
+                </sizing>
+                <surface>
+                    <flat>#FF2B2B2B</flat>
+                </surface>
+                <margins>
+                    <vertical>4</vertical>
+                </margins>
+            </flow-layout>
+        </template>
+
+        <!-- A row of buttons, filled from code with "button" expansions. -->
+        <template name="button-row">
+            <flow-layout direction="horizontal" id="{{id}}">
+                <children/>
+                <gap>4</gap>
+                <margins>
+                    <top>4</top>
+                </margins>
+            </flow-layout>
+        </template>
+
+        <!-- Text comes from code (it often depends on state, e.g. "Access: Open"). -->
+        <template name="button">
+            <button id="{{id}}">
+                <sizing>
+                    <horizontal method="fixed">{{width}}</horizontal>
+                    <vertical method="fixed">20</vertical>
+                </sizing>
+            </button>
+        </template>
+
+        <!-- "Label:   value" — fixed-width right-aligned label column so values line up. -->
+        <template name="info-row">
+            <flow-layout direction="horizontal">
+                <children>
+                    <label>
+                        <text>{{label}}:</text>
+                        <color>#FFA0A0A0</color>
+                        <horizontal-text-alignment>right</horizontal-text-alignment>
+                        <sizing>
+                            <horizontal method="fixed">80</horizontal>
+                        </sizing>
+                    </label>
+                    <label id="{{id}}">
+                        <color>#FFFFFFFF</color>
+                    </label>
+                </children>
+                <gap>8</gap>
+            </flow-layout>
+        </template>
+    </templates>
+</owo-ui>

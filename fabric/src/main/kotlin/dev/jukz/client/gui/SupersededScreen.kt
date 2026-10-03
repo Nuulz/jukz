@@ -1,6 +1,5 @@
 package dev.jukz.client.gui
 
-import net.minecraft.client.gui.widget.ButtonWidget
 import net.minecraft.text.Text
 
 /**
@@ -18,18 +17,10 @@ class SupersededScreen(
     accentColor = ACCENT_ACTION,
     showSpinner = false,
 ) {
-    override fun init() {
-        val cx = width / 2
-        val y = height / 2 + 8
-        addDrawableChild(
-            ButtonWidget.builder(Text.literal("Join the live host")) { onJoinInstead() }
-                .dimensions(cx - 154, y, 150, 20).build(),
-        )
-        addDrawableChild(
-            ButtonWidget.builder(Text.literal("Keep playing locally")) { onKeepPlaying() }
-                .dimensions(cx + 4, y, 150, 20).build(),
-        )
-    }
+    override fun buttons() = listOf(
+        StatusButton("Join the live host") { onJoinInstead() },
+        StatusButton("Keep playing locally") { onKeepPlaying() },
+    )
 
     override fun shouldCloseOnEsc(): Boolean = true
 
