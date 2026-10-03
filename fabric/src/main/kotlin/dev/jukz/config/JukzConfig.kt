@@ -21,6 +21,7 @@ object JukzConfig {
     private const val KEY_RENDEZVOUS_URL = "rendezvous.url"
     private const val KEY_RENDEZVOUS_AUTH_TOKEN = "rendezvous.auth-token"
     private const val KEY_FORCE_RELAY = "jukz.force-relay"
+    private const val KEY_OFFLINE_GUESTS = "jukz.offline-guests"
 
     /** Public rendezvous server used when no override is configured. */
     const val DEFAULT_RENDEZVOUS_URL = "https://jukz.nuulm.com"
@@ -42,9 +43,17 @@ object JukzConfig {
         #   (the host always registers a relay session; a guest skips direct endpoints). Leave false
         #   in normal use. Requires a configured rendezvous.
         #
+        # jukz.offline-guests
+        #   Let guests without a Microsoft account join (offline mode). Only for groups that trust each
+        #   other: in offline mode the game can't check who anyone is, so a guest could join under the
+        #   name of a player who isn't online and take their inventory (jukz refuses names already in
+        #   the world, so nobody gets kicked out of their own character).
+        #   Off by default: guests are verified by Mojang, like on a normal server.
+        #
         rendezvous.url=
         rendezvous.auth-token=
         jukz.force-relay=false
+        jukz.offline-guests=false
     """.trimIndent() + "\n"
 
     private val properties: Properties by lazy { load() }
@@ -79,6 +88,13 @@ object JukzConfig {
             System.getProperty("jukz.forceRelay")?.let { return it.equals("true", ignoreCase = true) }
             return properties.getProperty(KEY_FORCE_RELAY)?.trim().equals("true", ignoreCase = true)
         }
+
+    /**
+     * Opt-in offline mode for guests (see the template). Hosts without a Microsoft account (dev runs,
+     * offline launchers) are offline regardless — see [dev.jukz.client.GuestAdmission].
+     */
+    val offlineGuests: Boolean
+        get() = properties.getProperty(KEY_OFFLINE_GUESTS)?.trim().equals("true", ignoreCase = true)
 
     internal fun configFile(): Path = FabricLoader.getInstance().configDir.resolve(FILE_NAME)
 

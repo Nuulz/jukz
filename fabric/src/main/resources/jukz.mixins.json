@@ -3,6 +3,9 @@
   "minVersion": "0.8",
   "package": "dev.jukz.mixin",
   "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "PlayerManagerJoinMixin"
+  ],
   "client": [
     "IntegratedServerLoaderMixin",
     "MinecraftClientDisconnectMixin",

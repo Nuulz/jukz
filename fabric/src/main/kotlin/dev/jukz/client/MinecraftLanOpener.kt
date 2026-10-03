@@ -1,7 +1,10 @@
 package dev.jukz.client
 
+import dev.jukz.JukzMod
+import dev.jukz.config.JukzConfig
 import dev.jukz.core.host.LanOpener
 import net.minecraft.client.MinecraftClient
+import net.minecraft.client.session.Session
 import net.minecraft.server.integrated.IntegratedServer
 import net.minecraft.world.GameMode
 import java.net.ServerSocket
@@ -40,10 +43,16 @@ class MinecraftLanOpener(
         val gameMode = client.interactionManager?.currentGameMode ?: GameMode.SURVIVAL
         val port = ServerSocket(0).use { it.localPort }
         if (!server.openToLan(gameMode, allowCheats, port)) return null
-        // jukz authorizes guests via the world code, not Mojang. Online-mode auth only gets in the
-        // way: a guest reaching the integrated server through the jukz relay would be kicked during
-        // login for an "invalid session" (offline/dev accounts have none). Drop it so login is direct.
-        server.isOnlineMode = false
+        // Guests are verified by Mojang like on any server (the jukz relay only moves bytes), unless the
+        // host has no real account (dev runs, offline launchers) or opted into offline guests. See
+        // GuestAdmission for why offline mode used to be a hole.
+        val premium = client.session.accountType.let {
+            it == Session.AccountType.MSA || it == Session.AccountType.MOJANG
+        }
+        server.isOnlineMode = GuestAdmission.onlineMode(premium, JukzConfig.offlineGuests)
+        if (!server.isOnlineMode) {
+            JukzMod.logger.info("jukz: guests join in offline mode (host account: {}, offline-guests: {})", client.session.accountType, JukzConfig.offlineGuests)
+        }
         return port
     }
 }
