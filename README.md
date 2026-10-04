@@ -31,11 +31,7 @@ Install, next to Minecraft **1.21.1** with Fabric Loader ≥ 0.16.5:
 - **Your worlds on every PC (Microsoft accounts):** worlds you back up while signed in are remembered on
   your account; start the game on another PC and they come over on their own (Singleplayer → **My cloud**
   lists them, brings one on purpose or forgets it). Offline accounts don't have this.
-- **Accounts are optional.** Without signing in, cloud backups are up to 40 MB per world, kept 30 days
-  after the last one, 10 a day per IP. Playing signed in with a Microsoft account: up to 95 MB, kept 180
-  days, 60 a day, plus cloud worlds and cosmetics. **[nuulm.com/jukz/cuenta](https://nuulm.com/jukz/cuenta)**
-  (Cosmetics or My cloud → **My account**, already signed in) shows the plan, usage and cloud worlds, sets
-  a password and deletes your data.
+- **Accounts are optional** — see [Plans](#plans) below.
 - **Make your own:** design one in [Blockbench](https://www.blockbench.net/) and send it at
   **[nuulm.com/jukz/crear](https://nuulm.com/jukz/crear)** (Cosmetics → **Make your own** opens it and
   verifies your account). Accepted models join jukz for free with your name on them; when the shop starts
@@ -47,6 +43,29 @@ from that tag. After an update, the mod shows what changed (from [`CHANGELOG.md`
 Settings live in `config/jukz.properties`: `rendezvous.url` (empty = the public server, `none` =
 LAN-only, or your own), `rendezvous.auth-token`, `jukz.offline-guests` (see below) and
 `jukz.force-relay` (testing).
+
+### Plans
+
+Signing in is optional: jukz works the same without an account, with smaller cloud limits.
+
+| | Without an account | With a Microsoft account |
+|---|---|---|
+| Cloud backup of a world | up to 40 MB | up to 95 MB |
+| Kept in the cloud after the last backup | 30 days | 180 days |
+| Cloud backups per day | 10 (per IP) | 60 |
+| Your worlds on every PC | — | up to 50 worlds |
+| Cosmetics (hats, badges…) | — | yes, free |
+| Playing with friends, handoff, relay | yes | yes |
+
+- **"With an account"** means the game is signed in with a Microsoft (premium) account: that is what the
+  server can check when a world is backed up. Offline / non-premium players use the left column.
+- The limits are only about the **copy in the cloud**. Worlds on your PC never expire, and a world that
+  is over the limit still plays and hands off normally; it just isn't backed up (the game says so).
+- A fresh world is ~4.6 MB compressed, so 40 MB covers well-played worlds.
+- Your account page, **[nuulm.com/jukz/cuenta](https://nuulm.com/jukz/cuenta)** (in game: Cosmetics or My
+  cloud → **My account**, already signed in), shows your plan and usage, your cloud worlds, sets a
+  password and **deletes your data**. World backups aren't deleted with it, since friends may be playing
+  them; they expire on their own.
 
 ### Who can do what
 
