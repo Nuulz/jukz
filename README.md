@@ -278,6 +278,11 @@ client A stays on the normal one, so they meet through the public rendezvous lik
 (router without UPnP) against Claro mobile data (CGNAT): joining by code, handoff both ways, auto-join from
 the world list and cloud backups up and down all went through the relay.
 
+![Two real networks: B hosts from mobile data, A joins from home](docs/screenshots/two-networks-relay.png)
+![A sees the world live; B gets the world when A leaves](docs/screenshots/two-networks-handoff.png)
+
+*Real screenshots and log lines from that run; the public IPs are partly blacked out.*
+
 To verify the **handoff**: A opens a world, B joins, A does **Save and Quit**, then B clicks **Host
 now** on the prompt — B pulls A's snapshot and takes over (the A↔B generation keeps climbing). The log
 lines `handing off — notifying N guest(s)` (host) and `taking over … (snapshot applied)` (guest)
