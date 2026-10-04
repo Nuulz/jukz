@@ -85,7 +85,10 @@ class CosmeticsScreen(private val parent: Screen?) : JukzUiScreen("cosmetics") {
             // Signed in: the link also verifies the creator account, so rewards reach this Minecraft account.
             Cosmetics.creatorPageUrl { url -> client?.execute { ConfirmLinkScreen.open(this, url, true) } }
         }.tooltip(Text.literal("Design a cosmetic in Blockbench and send it in. If it gets in, it's yours to keep."))
-        addButton(root, "buttons", Text.literal("Support jukz (Ko-fi)"), width = 120) {
+        addButton(root, "buttons", Text.literal("My account"), width = 80) {
+            Cosmetics.accountPageUrl { url -> client?.execute { ConfirmLinkScreen.open(this, url, true) } }
+        }
+        addButton(root, "buttons", Text.literal("Ko-fi"), width = 50) {
             ConfirmLinkScreen.open(this, KOFI_URL)
         }
         addButton(root, "buttons", Text.literal("Done"), width = 80) { client?.setScreen(parent) }

@@ -16,6 +16,7 @@ import { CosmeticsStore, cosmeticsStore, handleCosmetics, sessionPlayer } from "
 import { corsHeaders, handleCreators } from "./creators.ts";
 import { CLIENT_IP_HEADER, type Env, RendezvousHub } from "./hub.ts";
 import { BadRequest, parseWorldId, relayShard, shardOfNonce } from "./logic.ts";
+import { LIMITS, checkUpload, dayKey, expired, parseTier, tierOf, usageSubject } from "./limits.ts";
 import { signBlobUrl, verifyBlobUrl, URL_TTL_SECS } from "./signing.ts";
 
 export { CosmeticsStore, RendezvousHub };
@@ -87,7 +88,33 @@ export default {
       throw e;
     }
   },
+
+  /** Daily (wrangler.jsonc "crons"): delete cloud backups past their tier's keeping time, prune counters. */
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(cleanup(env));
+  },
 } satisfies ExportedHandler<Env>;
+
+async function cleanup(env: Env): Promise<void> {
+  const now = Date.now();
+  let cursor: string | undefined;
+  let checked = 0;
+  let removed = 0;
+  do {
+    const page = await env.SNAPSHOTS.list({ cursor, limit: 1000, include: ["customMetadata"] });
+    for (const object of page.objects) {
+      if (!object.key.endsWith("/head")) continue; // the head is written last: its age is the backup's age
+      checked++;
+      if (!expired(object.customMetadata?.tier, object.uploaded.getTime(), now)) continue;
+      const worldId = object.key.slice(0, -"/head".length);
+      await env.SNAPSHOTS.delete([`${worldId}/head`, `${worldId}/pack`]);
+      removed++;
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  await cosmeticsStore(env).pruneUsage(dayKey(now - 7 * 24 * 60 * 60_000));
+  console.log(`cleanup: ${checked} cloud backups checked, ${removed} expired and deleted`);
+}
 
 function hub(env: Env, name: string) {
   return env.HUB.get(env.HUB.idFromName(name));
@@ -199,11 +226,23 @@ async function snapshotUploadUrl(request: Request, env: Env, url: URL): Promise<
     body: text,
   });
   if (fence.status !== 200) return fence;
+  // Limits: signing in is optional, and raises them (limits.ts).
+  const player = await sessionPlayer(request, env);
+  const tier = tierOf(player);
+  const store = cosmeticsStore(env);
+  const subject = usageSubject(player, request.headers.get("cf-connecting-ip") ?? "unknown");
+  const day = dayKey(Date.now());
+  const declared = Number.isSafeInteger(body.size) ? (body.size as number) : undefined;
+  const allowed = checkUpload(tier, declared, await store.uploadsToday(subject, day));
+  if (!allowed.ok) {
+    console.log(`snapshot upload refused world=${worldId} tier=${tier} (${allowed.message})`);
+    return json(allowed.status, { status: "limit", message: allowed.message });
+  }
+  await store.countUpload(subject, day);
   const key = env.SNAPSHOT_SIGNING_KEY;
-  console.log(`snapshot upload signed world=${worldId} generation=${body.generation}`);
+  console.log(`snapshot upload signed world=${worldId} generation=${body.generation} tier=${tier}`);
   // A signed-in premium player backing up: remember the world on their account, so their other PCs can
   // bring it over (/v1/account/worlds). The upload itself was just proven with the world's key.
-  const player = await sessionPlayer(request, env);
   if (player) {
     const rawName = request.headers.get(LEVEL_NAME_HEADER);
     let name = "World";
@@ -212,12 +251,13 @@ async function snapshotUploadUrl(request: Request, env: Env, url: URL): Promise<
     } catch {
       // keep the default
     }
-    await cosmeticsStore(env).rememberWorld(player, worldId, name, Number(body.generation) || 0);
+    await store.rememberWorld(player, worldId, name, Number(body.generation) || 0);
   }
   return json(200, {
-    packUrl: await signBlobUrl(publicOrigin(env, url), key, "put", worldId, "pack"),
-    headUrl: await signBlobUrl(publicOrigin(env, url), key, "put", worldId, "head"),
+    packUrl: await signBlobUrl(publicOrigin(env, url), key, "put", worldId, "pack", Date.now(), tier),
+    headUrl: await signBlobUrl(publicOrigin(env, url), key, "put", worldId, "head", Date.now(), tier),
     expiresInSec: URL_TTL_SECS,
+    maxBytes: LIMITS[tier].maxSnapshotBytes,
   });
 }
 
@@ -255,7 +295,12 @@ async function serveBlob(request: Request, env: Env, url: URL, rawId: string, pa
   const objectKey = `${worldId}/${part}`;
   if (op === "put") {
     if (!request.body || request.headers.get("content-length") == null) return error(411, "content-length required");
-    await env.SNAPSHOTS.put(objectKey, request.body);
+    const tier = parseTier(url.searchParams.get("t"));
+    if (Number(request.headers.get("content-length")) > LIMITS[tier].maxSnapshotBytes) {
+      return error(413, `cloud backups are up to ${Math.round(LIMITS[tier].maxSnapshotBytes / 1048576)} MB`);
+    }
+    // The tier rides along so the daily cleanup knows how long to keep it.
+    await env.SNAPSHOTS.put(objectKey, request.body, { customMetadata: { tier } });
     return new Response(null, { status: 200 });
   }
   const object = await env.SNAPSHOTS.get(objectKey);

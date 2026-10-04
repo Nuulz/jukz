@@ -39,9 +39,19 @@ object R2SnapshotStore {
     /** True if a rendezvous is configured at all (else there is nowhere to sign URLs). */
     fun isConfigured(): Boolean = JukzConfig.rendezvousUrl != null
 
+    /** How a cloud upload ended: done, worth retrying (network), or refused by a limit (don't retry). */
+    sealed interface UploadResult {
+        data object Done : UploadResult
+        data object Retry : UploadResult
+        data class Refused(val message: String) : UploadResult
+    }
+
+    /** Thrown inside [uploadGhost] when the rendezvous refuses the upload for a limit. */
+    private class Refusal(message: String) : Exception(message)
+
     /**
      * Upload the world [pack] and [head] for [worldId] at [generation]. [onProgress] is called with
-     * (bytesSent, totalBytes) as the pack uploads. Returns true only when both objects PUT with a 2xx.
+     * (bytesSent, totalBytes) as the pack uploads.
      */
     fun uploadGhost(
         worldId: WorldId,
@@ -49,20 +59,24 @@ object R2SnapshotStore {
         pack: ByteArray,
         head: String,
         onProgress: (Long, Long) -> Unit,
-    ): Boolean {
-        val base = JukzConfig.rendezvousUrl ?: return false
+    ): UploadResult {
+        val base = JukzConfig.rendezvousUrl ?: return UploadResult.Refused("no rendezvous server configured")
         return runCatching {
             // Signing is inside the catch too: a rendezvous blip (connection refused) must fail this
             // attempt so the caller retries, not kill the upload thread mid-"retrying" screen.
-            val urls = signUpload(base, worldId, generation) ?: return false
+            val urls = signUpload(base, worldId, generation, pack.size) ?: return UploadResult.Retry
             putBytes(urls.packUrl, pack, onProgress)
             // The head object carries the fencing generation alongside the commit id ("<gen> <commit>"),
             // so a direct-open can compare it to the local copy without downloading the whole pack.
             putBytes(urls.headUrl, "$generation $head".toByteArray(Charsets.UTF_8)) { _, _ -> }
-            true
+            UploadResult.Done
         }.getOrElse {
+            if (it is Refusal) {
+                JukzMod.logger.warn("jukz: cloud backup refused: {}", it.message)
+                return UploadResult.Refused(it.message ?: "refused")
+            }
             JukzMod.logger.warn("jukz: ghost snapshot upload failed ({})", it.message)
-            false
+            UploadResult.Retry
         }
     }
 
@@ -143,8 +157,9 @@ object R2SnapshotStore {
 
     // ---- helpers -------------------------------------------------------------------------
 
-    private fun signUpload(base: String, worldId: WorldId, generation: Long): GhostUrls? {
-        val body = """{"worldId":"${worldId.uuid}","generation":$generation}"""
+    private fun signUpload(base: String, worldId: WorldId, generation: Long, size: Int): GhostUrls? {
+        // The size lets the rendezvous refuse a backup over the limit before any byte is sent.
+        val body = """{"worldId":"${worldId.uuid}","generation":$generation,"size":$size}"""
         val builder = signed(URI.create("$base/v1/snapshot/upload-url"))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -158,6 +173,10 @@ object R2SnapshotStore {
         CloudWorlds.uploadHeaders(worldId).forEach { (name, value) -> builder.header(name, value) }
         val request = builder.build()
         val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() == 413 || response.statusCode() == 429) {
+            val message = runCatching { JsonParser.parseString(response.body()).asJsonObject.get("message").asString }.getOrNull()
+            throw Refusal(message ?: "over the cloud backup limit")
+        }
         if (response.statusCode() != 200) {
             JukzMod.logger.info("jukz: snapshot upload-url returned HTTP {}", response.statusCode())
             return null
@@ -170,6 +189,7 @@ object R2SnapshotStore {
         val publisher = CountingBodyPublisher(bytes, onProgress)
         val request = HttpRequest.newBuilder(URI.create(url)).PUT(publisher).timeout(uploadTimeout).build()
         val response = http.send(request, HttpResponse.BodyHandlers.discarding())
+        if (response.statusCode() == 413) throw Refusal("this world is over the cloud backup size limit")
         require(response.statusCode() in 200..299) { "R2 PUT returned HTTP ${response.statusCode()}" }
     }
 

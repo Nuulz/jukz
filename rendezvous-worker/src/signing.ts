@@ -11,8 +11,9 @@ async function hmacHex(key: string, message: string): Promise<string> {
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function payload(op: string, worldId: string, part: string, exp: number): string {
-  return `${op}:${worldId}/${part}:${exp}`;
+function payload(op: string, worldId: string, part: string, exp: number, tier: string): string {
+  // Upload URLs also carry the uploader's tier (its size cap and how long the backup is kept).
+  return tier ? `${op}:${worldId}/${part}:${exp}:${tier}` : `${op}:${worldId}/${part}:${exp}`;
 }
 
 export async function signBlobUrl(
@@ -22,10 +23,11 @@ export async function signBlobUrl(
   worldId: string,
   part: "pack" | "head",
   nowMs: number = Date.now(),
+  tier = "",
 ): Promise<string> {
   const exp = Math.floor(nowMs / 1000) + URL_TTL_SECS;
-  const sig = await hmacHex(key, payload(op, worldId, part, exp));
-  return `${origin}/v1/snapshot/blob/${worldId}/${part}?op=${op}&exp=${exp}&sig=${sig}`;
+  const sig = await hmacHex(key, payload(op, worldId, part, exp, tier));
+  return `${origin}/v1/snapshot/blob/${worldId}/${part}?op=${op}&exp=${exp}${tier ? `&t=${tier}` : ""}&sig=${sig}`;
 }
 
 /** Constant-time check of the signature, the operation and the expiry. */
@@ -40,7 +42,7 @@ export async function verifyBlobUrl(
   const exp = Number(url.searchParams.get("exp"));
   const sig = url.searchParams.get("sig") ?? "";
   if (url.searchParams.get("op") !== op || !Number.isSafeInteger(exp) || exp < Math.floor(nowMs / 1000)) return false;
-  const expected = await hmacHex(key, payload(op, worldId, part, exp));
+  const expected = await hmacHex(key, payload(op, worldId, part, exp, url.searchParams.get("t") ?? ""));
   if (expected.length !== sig.length) return false;
   let diff = 0;
   for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);

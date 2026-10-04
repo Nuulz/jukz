@@ -76,7 +76,32 @@ When a cloud upload (`/v1/snapshot/upload-url`, signed with the world key) also 
 `POST …/<id>/download` signs GET URLs for the pack and head (no world key needed: it's inside the pack), and
 `POST …/<id>/forget` drops one from the list. Offline accounts can't get a session, so this is premium-only.
 
+## Limits (`src/limits.ts`)
+
+Signing in is optional; it raises the limits. "Account" = the upload carries a cosmetics session (a game
+signed in with a Microsoft account); anything else is "guest".
+
+| | guest | account |
+|---|---|---|
+| Cloud backup per world | 40 MB | 95 MB (the Worker body limit is 100 MB) |
+| Kept after the last backup | 30 days | 180 days |
+| Backups per day | 10 per IP | 60 per player |
+| Cloud worlds on the account | — | 50 |
+
+`/v1/snapshot/upload-url` checks the declared `size` and the day's count (`usage` table) and answers 413/429
+with a message the mod shows. The signed PUT URL carries the tier (`t=`, inside the HMAC), so the blob PUT
+enforces the size cap even for older mods, and the object keeps `customMetadata.tier`. A daily cron
+(`0 8 * * *`) deletes backups past their tier's keeping time (backups from before tiers keep 180 days) and
+prunes old counters. `GET /v1/creators/limits` serves the table to the account page.
+
 ## Creators page (`/v1/creators`, behind nuulm.com/jukz/crear)
+
+The same accounts back the account page (nuulm.com/jukz/cuenta): `POST /link-login {link}` logs a premium
+player in from the game with no password (creating the account, or taking over an unverified one with
+that name), `GET /account` summarises plan, usage, cloud worlds and cosmetics, `POST /account/password`
+sets a password, `POST /account/worlds/<id>/forget`, and `POST /account/delete {confirm: name}` removes the
+account, its uploads (R2 files included), the cosmetics profile, entitlements, cloud world list and
+counters — world backups stay until they expire, since friends may be playing them.
 
 Accounts are a Minecraft name + password (PBKDF2-SHA256, 100k iterations; 5 wrong passwords lock the
 account for 15 min; 12 attempts/min per IP). Nothing proves the name on its own, which the page says;

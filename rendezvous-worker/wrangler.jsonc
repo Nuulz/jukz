@@ -29,5 +29,7 @@
     "RELAY_MAX_STREAMS_PER_SESSION": "16",
     "RELAY_WORKCONN_TIMEOUT_MS": "8000"
   },
+  // Daily cleanup of expired cloud backups (see limits.ts and cleanup() in index.ts), 08:00 UTC.
+  "triggers": { "crons": ["0 8 * * *"] },
   "observability": { "enabled": true }
 }

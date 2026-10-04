@@ -92,6 +92,9 @@ export class CosmeticsStore extends DurableObject<Env> {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS account_worlds (
       player_id TEXT NOT NULL, world_id TEXT NOT NULL, name TEXT NOT NULL, generation INTEGER NOT NULL,
       updated INTEGER NOT NULL, PRIMARY KEY (player_id, world_id))`);
+    // Cloud backups per day and subject (limits.ts): an IP without an account, a player with one.
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS usage (
+      subject TEXT NOT NULL, day TEXT NOT NULL, uploads INTEGER NOT NULL, PRIMARY KEY (subject, day))`);
     // Creators page (creators.ts): accounts and the models they upload.
     this.sql.exec(`CREATE TABLE IF NOT EXISTS creators (
       account TEXT PRIMARY KEY, name TEXT NOT NULL, salt TEXT NOT NULL, hash TEXT NOT NULL,
@@ -163,6 +166,24 @@ export class CosmeticsStore extends DurableObject<Env> {
 
   revoke(id: string, item: string): void {
     this.sql.exec("DELETE FROM entitlements WHERE id = ? AND item = ?", id, item);
+  }
+
+  // ---- limits --------------------------------------------------------------------------------------
+
+  uploadsToday(subject: string, day: string): number {
+    return this.sql.exec<{ uploads: number }>("SELECT uploads FROM usage WHERE subject = ? AND day = ?", subject, day)
+      .toArray()[0]?.uploads ?? 0;
+  }
+
+  countUpload(subject: string, day: string): void {
+    this.sql.exec(
+      `INSERT INTO usage (subject, day, uploads) VALUES (?, ?, 1)
+       ON CONFLICT (subject, day) DO UPDATE SET uploads = uploads + 1`, subject, day);
+  }
+
+  /** Daily housekeeping: drop counters older than a week. */
+  pruneUsage(beforeDay: string): void {
+    this.sql.exec("DELETE FROM usage WHERE day < ?", beforeDay);
   }
 
   // ---- cloud worlds --------------------------------------------------------------------------------
@@ -241,6 +262,82 @@ export class CosmeticsStore extends DurableObject<Env> {
     }
     this.sql.exec("UPDATE creators SET failures = 0, locked_until = 0 WHERE account = ?", account);
     return account;
+  }
+
+  /**
+   * Log in with a game link alone (premium players, no password): the account tied to that Minecraft
+   * account, created if there is none — taking over an unverified one with the same name.
+   */
+  async linkLogin(link: GameLink): Promise<string> {
+    const tied = this.sql.exec<{ account: string }>("SELECT account FROM creators WHERE player_id = ?", link.id).toArray()[0];
+    if (tied) {
+      if (tied.account !== link.name.toLowerCase()) {
+        // Renamed in Minecraft: move the account to the new name if it's free.
+        const target = link.name.toLowerCase();
+        if (!this.creator(target)) {
+          this.sql.exec("UPDATE creators SET account = ?, name = ? WHERE account = ?", target, link.name, tied.account);
+          this.sql.exec("UPDATE submissions SET account = ? WHERE account = ?", target, tied.account);
+          return target;
+        }
+      }
+      return tied.account;
+    }
+    // No password yet: a random one nobody knows; the player can set a real one from the account page.
+    const random = [...crypto.getRandomValues(new Uint8Array(24))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    return await this.register(link.name, random, link);
+  }
+
+  creatorPlayer(account: string): string | null {
+    return this.creator(account)?.player_id ?? null;
+  }
+
+  async setPassword(account: string, password: string): Promise<void> {
+    const pw = await hashPassword(checkPassword(password));
+    this.sql.exec("UPDATE creators SET salt = ?, hash = ?, iterations = ?, failures = 0, locked_until = 0 WHERE account = ?",
+      pw.salt, pw.hash, pw.iterations, account);
+  }
+
+  /** Everything the account page shows. */
+  accountSummary(account: string, day: string) {
+    const row = this.creator(account);
+    if (!row) throw new BadRequest("no such account");
+    const player = row.player_id;
+    const submissions = this.submissionRows("WHERE account = ? ORDER BY created DESC", account);
+    return {
+      name: row.name,
+      verified: player !== null,
+      tier: player ? "account" : "guest",
+      uploadsToday: player ? this.uploadsToday(`player:${player}`, day) : null,
+      worlds: player ? this.accountWorlds(player) : [],
+      loadout: player ? this.stored(player) : {},
+      owned: player ? ownedItems(catalog, this.grants(player)).length : 0,
+      granted: player ? this.grants(player) : [],
+      submissions: {
+        total: submissions.length,
+        published: submissions.filter((s) => s.status === "published").length,
+        pending: submissions.filter((s) => s.status === "pending").length,
+      },
+    };
+  }
+
+  /**
+   * Delete everything jukz keeps about this account: the page account, its uploads (whose files the
+   * caller removes from R2), and — if it is tied to a Minecraft account — the cosmetics profile, picks,
+   * entitlements, cloud world list and counters. Cloud backups of worlds stay: they belong to everyone
+   * who plays them, and expire on their own. Returns the submission ids whose files to delete.
+   */
+  deleteAccount(account: string): string[] {
+    const row = this.creator(account);
+    if (!row) throw new BadRequest("no such account");
+    const ids = this.sql.exec<{ id: string }>("SELECT id FROM submissions WHERE account = ?", account).toArray().map((r) => r.id);
+    this.sql.exec("DELETE FROM submissions WHERE account = ?", account);
+    this.sql.exec("DELETE FROM creators WHERE account = ?", account);
+    if (row.player_id) {
+      for (const table of ["profiles", "entitlements"]) this.sql.exec(`DELETE FROM ${table} WHERE id = ?`, row.player_id);
+      this.sql.exec("DELETE FROM account_worlds WHERE player_id = ?", row.player_id);
+      this.sql.exec("DELETE FROM usage WHERE subject = ?", `player:${row.player_id}`);
+    }
+    return ids;
   }
 
   /** Tie a logged-in account to the game account in [link] (same name). */
@@ -383,7 +480,10 @@ export async function handleCosmetics(request: Request, env: Env, url: URL): Pro
         const name = await store(env).nameOf(id);
         if (!name) return error(401, "sign in first");
         const token = await issueLinkToken(env.SNAPSHOT_SIGNING_KEY, { id, name }, Date.now());
-        const page = env.CREATORS_PAGE_URL || "https://nuulm.com/jukz/crear";
+        const base = env.CREATORS_PAGE_URL || "https://nuulm.com/jukz/crear";
+        // {page: "account"} links the account page instead of the creators page (same site, same login).
+        const wanted = (await request.json().catch(() => ({}))) as { page?: string };
+        const page = wanted.page === "account" ? base.replace(/\/crear$/, "/cuenta") : base;
         return json(200, { url: `${page}#link=${token}` });
       }
       case "POST /equip": {

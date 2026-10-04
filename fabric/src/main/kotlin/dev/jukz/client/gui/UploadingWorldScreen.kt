@@ -72,12 +72,18 @@ class UploadingWorldScreen : JukzUiScreen("upload") {
                 attempts++
                 sent.set(0)
                 total.set(pending.pack.size.toLong())
-                val ok = R2SnapshotStore.uploadGhost(
+                val result = R2SnapshotStore.uploadGhost(
                     pending.worldId, pending.generation, pending.pack, pending.head,
                 ) { s, t -> sent.set(s); if (t > 0) total.set(t) }
-                if (ok) {
+                if (result == R2SnapshotStore.UploadResult.Done) {
                     JukzMod.logger.info("jukz: ghost snapshot uploaded")
                     done.set(true)
+                    return@Thread
+                }
+                if (result is R2SnapshotStore.UploadResult.Refused) {
+                    // A limit, not a network hiccup: retrying won't help. Say why and let the player go.
+                    refused = result.message
+                    escapeOffered = true
                     return@Thread
                 }
                 failed.set(true)
@@ -91,16 +97,18 @@ class UploadingWorldScreen : JukzUiScreen("upload") {
     private fun showEscape() {
         val r = root ?: return
         escapeShown = true
-        addButton(r, "buttons", Text.literal("Exit anyway (no cloud backup)"), width = 220) {
+        addButton(r, "buttons", Text.literal(if (refused != null) "Continue" else "Exit anyway (no cloud backup)"), width = 220) {
             JukzMod.logger.warn("jukz: player skipped the ghost upload — world has no cloud backup")
             done.set(true) // unblocks tick() -> returns to the title screen; the upload thread stops
         }
     }
 
     private var shownStatus = ""
+    @Volatile private var refused: String? = null
 
     private fun refreshText(force: Boolean) {
         val line = when {
+            refused != null -> "No cloud backup this time: $refused. The world is safe on this PC."
             failed.get() && escapeOffered -> "Upload failed — retrying. You can exit without a backup."
             failed.get() -> "Upload hiccup — retrying…"
             !started -> "Preparing your world…"

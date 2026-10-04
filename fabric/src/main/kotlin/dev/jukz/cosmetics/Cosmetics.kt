@@ -146,10 +146,18 @@ object Cosmetics {
     const val CREATORS_PAGE = "https://nuulm.com/jukz/crear"
 
     /** [done] gets the creators page URL — with a 15-minute verification link when signed in — on the worker thread. */
-    fun creatorPageUrl(done: (String) -> Unit) {
-        val me = account as? Account.SignedIn ?: return done(CREATORS_PAGE)
+    fun creatorPageUrl(done: (String) -> Unit) = pageUrl(null, CREATORS_PAGE, done)
+
+    /** The account page, signed in already when the game is (premium accounts). */
+    const val ACCOUNT_PAGE = "https://nuulm.com/jukz/cuenta"
+
+    fun accountPageUrl(done: (String) -> Unit) = pageUrl("account", ACCOUNT_PAGE, done)
+
+    private fun pageUrl(page: String?, fallback: String, done: (String) -> Unit) {
+        val me = account as? Account.SignedIn ?: return done(fallback)
         worker.execute {
-            done(runCatching { call("/creator-link", JsonObject(), me.token).get("url").asString }.getOrDefault(CREATORS_PAGE))
+            val body = JsonObject().apply { page?.let { addProperty("page", it) } }
+            done(runCatching { call("/creator-link", body, me.token).get("url").asString }.getOrDefault(fallback))
         }
     }
 

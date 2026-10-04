@@ -77,6 +77,9 @@ class CloudWorldsScreen(private val parent: Screen?) : JukzUiScreen("cloud") {
         }
 
         label(root, "hint").text(Text.literal("Only you can see this list. Offline (non-premium) accounts don't have a cloud."))
+        addButton(root, "buttons", Text.literal("My account"), width = 90) {
+            Cosmetics.accountPageUrl { url -> client?.execute { net.minecraft.client.gui.screen.ConfirmLinkScreen.open(this, url, true) } }
+        }
         addButton(root, "buttons", Text.literal("Refresh"), width = 80) { if (Cosmetics.sessionToken() != null) refresh() }
         addButton(root, "buttons", Text.literal("Done"), width = 80) { close() }
     }

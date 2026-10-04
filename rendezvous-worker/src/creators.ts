@@ -2,6 +2,9 @@
 // cross-origin, so every answer carries CORS headers for the allowed origins.
 //  - POST /register {name, password, link?}     → {token}      (link: from the game, verifies the name)
 //  - POST /login {name, password}               → {token}
+//  - POST /link-login {link}                    → {token}      (from the game, no password needed)
+//  - GET  /account, POST /account/password, /account/worlds/<id>/forget, /account/delete {confirm}
+//                                               the account page (nuulm.com/jukz/cuenta)
 //  - GET  /me                                   → profile, submissions, reward choices
 //  - POST /verify {link}                        tie the account to the game account in the link
 //  - POST /submissions (multipart: title, slot, notes, model=.bbmodel, preview=data:image/png)
@@ -26,7 +29,8 @@ import {
   verifyLinkToken,
 } from "./creators-logic.ts";
 import { CLIENT_IP_HEADER, type Env } from "./hub.ts";
-import { BadRequest } from "./logic.ts";
+import { LIMITS, dayKey } from "./limits.ts";
+import { BadRequest, parseWorldId } from "./logic.ts";
 
 const TOKEN_HEADER = "x-jukz-creator-token";
 const ADMIN_HEADER = "x-jukz-admin";
@@ -70,6 +74,15 @@ export async function handleCreators(request: Request, env: Env, url: URL): Prom
       return json(200, await issueCreatorToken(key, account, Date.now()));
     }
 
+    if (request.method === "GET" && path === "/limits") return json(200, LIMITS); // public: the plans table
+
+    if (request.method === "POST" && path === "/link-login") {
+      if (!(await store.allowAuth(ip))) return error(429, "too many attempts; wait a minute");
+      const link = await verifyLinkToken(key, (await body()).link, Date.now());
+      if (!link) return error(400, "that game link expired; open the page again from the game");
+      return json(200, await issueCreatorToken(key, await store.linkLogin(link), Date.now()));
+    }
+
     if (path.startsWith("/admin/")) {
       if (!isAdmin()) return error(404, "not found");
       if (request.method === "GET" && path === "/admin/submissions") {
@@ -107,6 +120,30 @@ export async function handleCreators(request: Request, env: Env, url: URL): Prom
     if (!account) return error(401, "log in first");
 
     if (request.method === "GET" && path === "/me") return json(200, await store.creatorProfile(account));
+
+    // ---- the account page (nuulm.com/jukz/cuenta) ----
+    if (request.method === "GET" && path === "/account") {
+      return json(200, { ...(await store.accountSummary(account, dayKey(Date.now()))), limits: LIMITS });
+    }
+    if (request.method === "POST" && path === "/account/password") {
+      await store.setPassword(account, String((await body()).password ?? ""));
+      return json(200, { status: "ok" });
+    }
+    const forget = path.match(/^\/account\/worlds\/([^/]+)\/forget$/);
+    if (request.method === "POST" && forget) {
+      const playerId = await store.creatorPlayer(account);
+      if (!playerId) return error(400, "only Microsoft accounts have cloud worlds");
+      await store.forgetWorld(playerId, parseWorldId(forget[1]));
+      return json(200, { status: "ok" });
+    }
+    if (request.method === "POST" && path === "/account/delete") {
+      const b = await body();
+      if (String(b.confirm ?? "").toLowerCase() !== account) throw new BadRequest("type your Minecraft name to confirm");
+      const files = await store.deleteAccount(account);
+      if (files.length) await env.CREATIONS.delete(files.flatMap((id) => [`submissions/${id}.bbmodel`, `submissions/${id}.png`]));
+      console.log(`account deleted: ${account} (${files.length} submissions)`);
+      return json(200, { status: "deleted" });
+    }
 
     if (request.method === "POST" && path === "/verify") {
       const link = await verifyLinkToken(key, (await body()).link, Date.now());

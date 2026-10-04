@@ -31,6 +31,11 @@ Install, next to Minecraft **1.21.1** with Fabric Loader ≥ 0.16.5:
 - **Your worlds on every PC (Microsoft accounts):** worlds you back up while signed in are remembered on
   your account; start the game on another PC and they come over on their own (Singleplayer → **My cloud**
   lists them, brings one on purpose or forgets it). Offline accounts don't have this.
+- **Accounts are optional.** Without signing in, cloud backups are up to 40 MB per world, kept 30 days
+  after the last one, 10 a day per IP. Playing signed in with a Microsoft account: up to 95 MB, kept 180
+  days, 60 a day, plus cloud worlds and cosmetics. **[nuulm.com/jukz/cuenta](https://nuulm.com/jukz/cuenta)**
+  (Cosmetics or My cloud → **My account**, already signed in) shows the plan, usage and cloud worlds, sets
+  a password and deletes your data.
 - **Make your own:** design one in [Blockbench](https://www.blockbench.net/) and send it at
   **[nuulm.com/jukz/crear](https://nuulm.com/jukz/crear)** (Cosmetics → **Make your own** opens it and
   verifies your account). Accepted models join jukz for free with your name on them; when the shop starts
@@ -208,7 +213,7 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
   - **Ko-fi** — an icon button on the title screen and in the cosmetics screen. `SupportScreen` welcomes a
     fresh install once; `UpdateScreen` shows the `CHANGELOG.md` sections since the last version played,
     once per update (`JukzState` keeps the version in `config/jukz-state.properties`).
-- **`rendezvous-worker`** — 44 tests (the rules ported from the Rust unit tests, URL signing, and the
+- **`rendezvous-worker`** — 48 tests (the rules ported from the Rust unit tests, URL signing, and the
   ownership checks, including a signature made by the JDK, and the cosmetics rules); validated in
   production. **`rendezvous`**
   (Rust) — 20 `cargo test`s; it does not check world keys (see its README).
