@@ -10,12 +10,12 @@ import net.minecraft.client.gui.screen.Screen
 import net.minecraft.text.Text
 
 /**
- * The Ko-fi note: shown once on the first launch with jukz and once after each update (see
- * [JukzState]), never again until the next version. It asks, explains why, and says plainly that
+ * The welcome + Ko-fi note: shown once, on the first launch of a fresh install (updates get
+ * [UpdateScreen] instead; see [JukzState]). It asks, explains why, and says plainly that
  * supporting unlocks nothing.
  */
-class SupportScreen(private val parent: Screen?, firstRun: Boolean) : JukzStatusScreen(
-    heading = Text.literal(if (firstRun) "Thanks for installing jukz!" else "jukz was updated to ${JukzState.modVersion}"),
+class SupportScreen(private val parent: Screen?) : JukzStatusScreen(
+    heading = Text.literal("Thanks for installing jukz!"),
     statusLine = Text.literal(
         "jukz is free, and it stays free. Finding worlds, the relay and the cloud backups run on a " +
             "server I pay for myself. If jukz kept your world alive, a coffee on Ko-fi keeps it running " +
@@ -25,7 +25,7 @@ class SupportScreen(private val parent: Screen?, firstRun: Boolean) : JukzStatus
     showSpinner = false,
 ) {
     init {
-        JukzState.markSupportNoteSeen() // once per version, even if the game is closed on this screen
+        JukzState.markVersionSeen() // once per version, even if the game is closed on this screen
     }
 
     override fun buttons() = listOf(

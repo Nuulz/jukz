@@ -1,5 +1,6 @@
 package dev.jukz
 
+import dev.jukz.config.JukzState
 import dev.jukz.core.model.WorldId
 import dev.jukz.net.WorldAccessPayload
 import dev.jukz.runtime.HostSession
@@ -32,6 +33,7 @@ object JukzMod : ModInitializer {
     val logger = LoggerFactory.getLogger(MOD_ID)
 
     override fun onInitialize() {
+        JukzState.captureStartup() // before anything writes jukz's config files
         PayloadTypeRegistry.playS2C().register(WorldAccessPayload.ID, WorldAccessPayload.CODEC)
 
         // A player the server let in gets the world key + handoff gate, over the game connection.

@@ -7,29 +7,45 @@ import java.util.Properties
 
 /**
  * Small things the mod remembers between launches (not settings): `config/jukz-state.properties`.
- * Today only the last version the Ko-fi note was shown for, so it appears once per install and once
- * per update, never on every launch.
+ * Today the last jukz version that ran, so a fresh install gets the welcome / Ko-fi note once and an
+ * update gets the "what's new" screen once — never on every launch.
  */
 object JukzState {
     private const val FILE_NAME = "jukz-state.properties"
-    private const val KEY_SUPPORT_SEEN = "support.seen-version"
+    private const val KEY_LAST_VERSION = "last-version"
+    private const val KEY_LEGACY = "support.seen-version" // 0.2.0 dev builds wrote this
 
-    private val file get() = FabricLoader.getInstance().configDir.resolve(FILE_NAME)
+    private val configDir get() = FabricLoader.getInstance().configDir
+    private val file get() = configDir.resolve(FILE_NAME)
 
     /** This jar's version, from fabric.mod.json. */
     val modVersion: String by lazy {
         FabricLoader.getInstance().getModContainer("jukz").map { it.metadata.version.friendlyString }.orElse("dev")
     }
 
-    /** True on the first launch and on the first launch after an update. */
-    fun supportNoteDue(): Boolean = read().getProperty(KEY_SUPPORT_SEEN) != modVersion
+    /**
+     * Whether jukz ran here before this launch, captured at mod init — before anything creates its
+     * config files — so players coming from 0.1.0 (which kept no state file) count as updating.
+     */
+    private var installedBefore = false
 
-    /** No version recorded at all: a fresh install, rather than an update. */
-    fun firstRun(): Boolean = read().getProperty(KEY_SUPPORT_SEEN) == null
+    fun captureStartup() {
+        installedBefore = listOf(FILE_NAME, "jukz.properties", "jukz.nodeid").any { Files.exists(configDir.resolve(it)) }
+    }
 
-    fun markSupportNoteSeen() {
+    /** The version that ran last, or null (fresh install, or a pre-0.2 install that kept no state). */
+    fun lastVersion(): String? = read().let { it.getProperty(KEY_LAST_VERSION) ?: it.getProperty(KEY_LEGACY) }
+
+    /** True on the first launch of a new install, or of a new version. */
+    fun versionChanged(): Boolean = lastVersion() != modVersion
+
+    /** A brand-new install (rather than an update). */
+    fun firstRun(): Boolean = lastVersion() == null && !installedBefore
+
+    fun markVersionSeen() {
         val props = read()
-        props.setProperty(KEY_SUPPORT_SEEN, modVersion)
+        props.setProperty(KEY_LAST_VERSION, modVersion)
+        props.remove(KEY_LEGACY)
         runCatching {
             Files.createDirectories(file.parent)
             Files.newBufferedWriter(file).use { props.store(it, "jukz state (not settings; safe to delete)") }

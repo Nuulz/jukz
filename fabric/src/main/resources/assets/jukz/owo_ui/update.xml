@@ -1,0 +1,66 @@
+<!--
+  "jukz was updated" (once per update; see JukzState). UpdateScreen.kt adds one "change" row per bullet of
+  the changelog sections since the version that ran last, and the buttons.
+-->
+<owo-ui xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/wisp-forest/owo-lib/1.21/owo-ui.xsd">
+    <components>
+        <flow-layout direction="vertical">
+            <children>
+                <template name="brand@jukz:theme"/>
+                <template name="title@jukz:theme">
+                    <id>title</id>
+                </template>
+                <template name="message@jukz:theme">
+                    <id>subtitle</id>
+                </template>
+
+                <scroll direction="vertical">
+                    <flow-layout direction="vertical" id="changes">
+                        <children/>
+                        <gap>5</gap>
+                        <padding>
+                            <right>6</right>
+                        </padding>
+                    </flow-layout>
+                    <sizing>
+                        <horizontal method="content"/>
+                        <vertical method="fixed">120</vertical>
+                    </sizing>
+                    <scrollbar-thiccness>3</scrollbar-thiccness>
+                    <margins>
+                        <vertical>4</vertical>
+                    </margins>
+                </scroll>
+
+                <template name="hint@jukz:theme">
+                    <id>hint</id>
+                </template>
+                <template name="button-row@jukz:theme">
+                    <id>buttons</id>
+                </template>
+            </children>
+            <horizontal-alignment>center</horizontal-alignment>
+            <gap>4</gap>
+        </flow-layout>
+    </components>
+
+    <templates>
+        <!-- One change: a coloured marker and the wrapped text. -->
+        <template name="change">
+            <flow-layout direction="horizontal">
+                <children>
+                    <label>
+                        <text>+</text>
+                        <color>#FF6BCB6B</color>
+                    </label>
+                    <label id="{{id}}">
+                        <color>#FFD8D8D8</color>
+                        <max-width>290</max-width>
+                    </label>
+                </children>
+                <gap>5</gap>
+            </flow-layout>
+        </template>
+    </templates>
+</owo-ui>
