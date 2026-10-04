@@ -1,0 +1,69 @@
+# Publishing a GitHub release (tag vX.Y.Z) builds the mod at that version, runs the tests and attaches
+# jukz-X.Y.Z.jar to the release, ready to drop into a Fabric 1.21.1 mods folder. If the release notes are
+# empty, they are filled from CHANGELOG.md. "Run workflow" builds the current branch as a test, keeping
+# the jar as a workflow artifact without touching any release.
+name: release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  jar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Version
+        id: v
+        run: |
+          if [ "${{ github.event_name }}" = release ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(sed -n 's/^mod_version=//p' gradle.properties)-dev.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "jukz $version"
+
+      - name: Build and test
+        run: bash gradlew build -Pmod_version=${{ steps.v.outputs.version }}
+
+      - name: Jar
+        id: jar
+        run: |
+          jar="fabric/build/libs/jukz-${{ steps.v.outputs.version }}.jar"
+          test -f "$jar"
+          unzip -l "$jar" | grep -q 'META-INF/jars/org.eclipse.jgit' # the jar must carry its dependencies
+          echo "path=$jar" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jukz-${{ steps.v.outputs.version }}
+          path: ${{ steps.jar.outputs.path }}
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          gh release upload "$TAG" "${{ steps.jar.outputs.path }}" --clobber
+          if [ -z "$(gh release view "$TAG" --json body -q .body)" ]; then
+            awk -v v="## $VERSION" '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+            if [ -s notes.md ]; then
+              printf '\nInstall: drop `jukz-%s.jar` into `mods/` next to Fabric API, Fabric Language Kotlin and owo-lib (Minecraft 1.21.1).\n' "$VERSION" >> notes.md
+              gh release edit "$TAG" --notes-file notes.md
+            fi
+          fi

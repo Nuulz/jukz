@@ -119,4 +119,6 @@ processResources {
     }
     // One catalog for the Worker and the mod (the live copy replaces this one once fetched).
     from(rootProject.file("cosmetics/catalog.json")) { into "assets/jukz/cosmetics" }
+    // What's new, for the "jukz was updated" screen.
+    from(rootProject.file("CHANGELOG.md")) { into "assets/jukz" }
 }
