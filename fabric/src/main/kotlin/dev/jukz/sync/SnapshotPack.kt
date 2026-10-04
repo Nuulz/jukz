@@ -11,7 +11,8 @@ import org.eclipse.jgit.lib.NullProgressMonitor
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.lib.PersonIdent
 import org.eclipse.jgit.revwalk.RevWalk
-import java.io.ByteArrayOutputStream
+import org.eclipse.jgit.storage.pack.PackConfig
+import java.nio.file.Files
 import java.nio.file.Path
 
 /**
@@ -31,10 +32,12 @@ object SnapshotPack {
      * Returns null when there is nothing to serve (commit failed, or the repo has no commit), so the
      * caller can just withdraw without offering a handoff.
      */
-    fun build(saveDir: Path, sync: WorldSync): Pack? =
+    fun build(saveDir: Path, sync: WorldSync, level: SnapshotCodec.Level = SnapshotCodec.Level.SMALL): Pack? =
         runCatching {
+            val started = System.nanoTime()
             val generation = sync.currentGeneration(saveDir)
             runBlocking { sync.commit(saveDir, generation) }
+            val committed = System.nanoTime()
             Git.open(saveDir.toFile()).use { git ->
                 val repo = git.repository
                 val head = repo.resolve("HEAD") ?: return null
@@ -68,12 +71,33 @@ object SnapshotPack {
                     setForceUpdate(true)
                     update()
                 }
-                val out = ByteArrayOutputStream()
-                PackWriter(repo).use { pw ->
-                    pw.preparePack(NullProgressMonitor.INSTANCE, setOf(rootId), emptySet<ObjectId>())
-                    pw.writePack(NullProgressMonitor.INSTANCE, NullProgressMonitor.INSTANCE, out)
+                // The pack itself is left uncompressed (objects re-deflated at level 0, no deltas) and then
+                // compressed as one xz stream, which beats per-object zlib by far on open regions.
+                val config = PackConfig(repo).apply {
+                    compressionLevel = 0
+                    isReuseObjects = false
+                    isDeltaCompress = false
                 }
-                Pack(out.toByteArray(), rootId.name)
+                val packFile = Files.createTempFile("jukz-pack", ".pack")
+                try {
+                    Files.newOutputStream(packFile).use { out ->
+                        PackWriter(config, repo.newObjectReader()).use { pw ->
+                            pw.preparePack(NullProgressMonitor.INSTANCE, setOf(rootId), emptySet<ObjectId>())
+                            pw.writePack(NullProgressMonitor.INSTANCE, NullProgressMonitor.INSTANCE, out)
+                        }
+                    }
+                    val packed = System.nanoTime()
+                    val bytes = SnapshotCodec.compress(packFile, level)
+                    val done = System.nanoTime()
+                    JukzMod.logger.info(
+                        "jukz: snapshot {} KB in {} ms (commit {} ms, pack {} ms, xz {} ms)",
+                        bytes.size / 1024, (done - started) / 1_000_000, (committed - started) / 1_000_000,
+                        (packed - committed) / 1_000_000, (done - packed) / 1_000_000,
+                    )
+                    Pack(bytes, rootId.name)
+                } finally {
+                    Files.deleteIfExists(packFile)
+                }
             }
         }.getOrElse {
             JukzMod.logger.warn("jukz: snapshot pack build failed ({} / cause: {}); no handoff offer", it.message, it.cause?.message)

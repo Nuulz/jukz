@@ -42,6 +42,10 @@ dependencies {
     include "org.eclipse.jgit:org.eclipse.jgit:7.1.0.202411261347-r"
     include "com.googlecode.javaewah:JavaEWAH:1.2.3"
 
+    // xz (pure Java, no natives): world snapshots are compressed as one stream, see SnapshotCodec.
+    implementation "org.tukaani:xz:1.10"
+    include "org.tukaani:xz:1.10"
+
     // ---- FLAGGED network libs (NAT traversal — requires live-network testing + shading) ----
     // MC ships its own Netty; ice4j + netty-codec-native-quic MUST be shaded/relocated to
     // avoid classpath clashes. Left out of the active build so the scaffold compiles offline;

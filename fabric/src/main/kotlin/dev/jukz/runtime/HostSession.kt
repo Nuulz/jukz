@@ -8,6 +8,7 @@ import dev.jukz.core.model.WorldId
 import dev.jukz.sync.JGitWorldSync
 import dev.jukz.net.WorldAccessPayload
 import dev.jukz.world.WorldKeyStore
+import dev.jukz.sync.SnapshotCodec
 import dev.jukz.sync.SnapshotPack
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
@@ -160,7 +161,7 @@ object HostSession {
      * backup rather than strand the world.
      */
     private fun offerSnapshotForHandoff(controller: HostController, saveDir: Path): Boolean {
-        val pack = SnapshotPack.build(saveDir, JGitWorldSync()) ?: return false
+        val pack = SnapshotPack.build(saveDir, JGitWorldSync(), SnapshotCodec.Level.FAST) ?: return false // the next host is waiting
         scheduleCompaction(saveDir)
         val (offer, latch) = controller.offerSnapshot(pack.bytes, pack.head) ?: return false
         JukzMod.logger.info("jukz: handing off — notifying {} guest(s) over the live connection", controller.connectedGuestCount())
@@ -178,7 +179,7 @@ object HostSession {
      */
     private fun armGhostUpload(saveDir: Path, worldId: WorldId, generation: Long) {
         WorldKeyStore.loadOrCreate(saveDir, worldId) // the upload is signed (auto-host may not have run)
-        val pack = SnapshotPack.build(saveDir, JGitWorldSync()) ?: run { GhostUpload.clear(); return }
+        val pack = SnapshotPack.build(saveDir, JGitWorldSync(), SnapshotCodec.Level.SMALL) ?: run { GhostUpload.clear(); return }
         GhostUpload.arm(GhostUpload.Pending(worldId, generation, pack.bytes, pack.head))
         JukzMod.logger.info("jukz: armed ghost snapshot ({} bytes) for upload", pack.bytes.size)
         scheduleCompaction(saveDir)

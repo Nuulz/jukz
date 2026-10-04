@@ -133,7 +133,7 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     game uses. End-to-end loopback tests run a real host against a real guest (discovery → handshake →
     byte relay → handoff / close). `ForwardingEndpointResolver` + `PortForwarder` keep router
     port-opening best-effort: it never fails the host.
-- **`fabric` (51 tests, plus the in-game runs above):**
+- **`fabric` (55 tests, plus the in-game runs above):**
   - World identity: `WorldIdState` (1.21.1 `PersistentState`) + `WorldIdSidecar` (pre-start
     `jukz.dat`), and `WorldSaveLocator` to find a world's save by UUID.
   - **Auto-host on open** — `HostCoordinator` (on `ClientPlayConnectionEvents.JOIN`) bumps the fence
@@ -187,6 +187,13 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     (`availability: "paid"` + `price`, locked/price in the screen, entitlements on the Worker), so
     selling one is a catalog edit plus a grant per purchase. Validated in-game with two clients,
     including a granted item.
+  - **Snapshot format** — `RegionCodec` stores region files "open" in the world repo (every chunk
+    decompressed, deterministic JKZR1) and writes them back as normal Anvil files on apply;
+    `SnapshotPack` writes the pack with no compression of its own and `SnapshotCodec` xz-compresses it
+    as a whole, in parallel 8 MiB blocks (pure Java, `org.tukaani:xz`). Nothing is dropped. Measured on
+    a fresh world: 9.5 MB → 4.6 MB for cloud backups (preset 6, ~8 s) and 5.4 MB for live handoffs
+    (preset 1, ~3 s, since the next host is waiting). Plain packs from older snapshots still apply.
+    Validated in-game: an old-format cloud copy, a handoff and a new cloud backup, with marker blocks.
   - **Cloud worlds** — `R2SnapshotStore` sends the cosmetics session and the level name with each cloud
     upload; the Worker remembers the world on that account (`/v1/account/worlds`, max 50). `CloudWorlds`
     signs in at the title screen, brings worlds this PC never had into `saves/` (the world key is inside

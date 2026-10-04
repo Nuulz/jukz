@@ -17,12 +17,15 @@ import kotlinx.coroutines.withContext
 import net.minecraft.nbt.NbtIo
 import net.minecraft.nbt.NbtSizeTracker
 import org.eclipse.jgit.api.Git
-import org.eclipse.jgit.api.ResetCommand
+import org.eclipse.jgit.dircache.DirCacheEntry
 import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription
 import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository
+import org.eclipse.jgit.lib.Constants
+import org.eclipse.jgit.lib.FileMode
 import org.eclipse.jgit.lib.NullProgressMonitor
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.treewalk.FileTreeIterator
 import org.eclipse.jgit.treewalk.TreeWalk
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -63,8 +66,7 @@ class JGitWorldSync(
             // plain `git add .` throws trying to read it. Exclude it (and untrack it if it ever slipped
             // in) so the snapshot can be built while the world is still open.
             ensureGitignore(saveDir)
-            runCatching { git.rm().addFilepattern(IGNORED_LOCK).setCached(true).call() }
-            git.add().addFilepattern(".").call()
+            stageWorkingTree(git) // like `git add -A`, with region files stored open (RegionCodec)
             val rev = git.commit()
                 .setMessage("$COMMIT_PREFIX$generation")
                 .setAuthor("jukz", "noreply@jukz.dev")
@@ -158,7 +160,7 @@ class JGitWorldSync(
     fun readFileAtHead(downloaded: Downloaded, path: String): ByteArray? = runCatching {
         val repo = InMemoryRepository(DfsRepositoryDescription("jukz-snapshot"))
         repo.newObjectInserter().use { inserter ->
-            Files.newInputStream(downloaded.packPath).use { input ->
+            SnapshotCodec.open(downloaded.packPath).use { input ->
                 inserter.newPackParser(input).parse(NullProgressMonitor.INSTANCE)
             }
             inserter.flush()
@@ -246,13 +248,96 @@ class JGitWorldSync(
     /** Index the pack into the local repo and hard-reset the working tree to [head]. */
     private fun applyPack(saveDir: Path, packFile: Path, head: ObjectId) {
         openOrInit(saveDir).use { git ->
-            Files.newInputStream(packFile).use { input ->
+            SnapshotCodec.open(packFile).use { input ->
                 git.repository.newObjectInserter().use { inserter ->
                     inserter.newPackParser(input).parse(NullProgressMonitor.INSTANCE)
                     inserter.flush()
                 }
             }
-            git.reset().setMode(ResetCommand.ResetType.HARD).setRef(head.name).call()
+            checkout(git, saveDir, head)
+        }
+    }
+
+    /**
+     * Stage every non-ignored file of the working tree (new, changed and deleted ones), like
+     * `git add -A`, except that region files are stored open ([RegionCodec.open]) so the snapshot
+     * compresses as a whole.
+     */
+    private fun stageWorkingTree(git: Git) {
+        val repo = git.repository
+        val dirCache = repo.lockDirCache()
+        try {
+            val builder = dirCache.builder()
+            repo.newObjectInserter().use { inserter ->
+                TreeWalk(repo).use { walk ->
+                    walk.addTree(FileTreeIterator(repo))
+                    walk.isRecursive = false
+                    while (walk.next()) {
+                        val file = walk.getTree(0, FileTreeIterator::class.java)
+                        if (file.isEntryIgnored) continue
+                        if (walk.isSubtree) {
+                            walk.enterSubtree()
+                            continue
+                        }
+                        val path = walk.pathString
+                        val mode = file.entryFileMode
+                        if (mode != FileMode.REGULAR_FILE && mode != FileMode.EXECUTABLE_FILE) continue
+                        val bytes = runCatching { Files.readAllBytes(repo.workTree.toPath().resolve(path)) }.getOrNull() ?: continue
+                        val stored = if (RegionCodec.isRegionPath(path)) RegionCodec.open(bytes) ?: bytes else bytes
+                        builder.add(DirCacheEntry(path).apply {
+                            fileMode = mode
+                            setObjectId(inserter.insert(Constants.OBJ_BLOB, stored))
+                            setLength(stored.size)
+                        })
+                    }
+                }
+                inserter.flush()
+            }
+            builder.commit()
+        } finally {
+            dirCache.unlock()
+        }
+    }
+
+    /**
+     * Point HEAD at [head] and make the working tree match it, like `git reset --hard`: files tracked
+     * before but absent from [head] are deleted, region files are written back in Minecraft's own format
+     * ([RegionCodec.close]); untracked files are left alone.
+     */
+    private fun checkout(git: Git, saveDir: Path, head: ObjectId) {
+        val repo = git.repository
+        val tree = RevWalk(repo).use { it.parseCommit(head).tree }
+        val before = runCatching { repo.readDirCache().let { dc -> (0 until dc.entryCount).map { dc.getEntry(it).pathString }.toSet() } }
+            .getOrDefault(emptySet())
+        val after = mutableSetOf<String>()
+        repo.newObjectReader().use { reader ->
+            TreeWalk(repo, reader).use { walk ->
+                walk.addTree(tree)
+                walk.isRecursive = true
+                while (walk.next()) {
+                    val path = walk.pathString
+                    after += path
+                    val bytes = reader.open(walk.getObjectId(0)).bytes
+                    val target = saveDir.resolve(path)
+                    Files.createDirectories(target.parent)
+                    Files.write(target, if (RegionCodec.isRegionPath(path)) RegionCodec.close(bytes) else bytes)
+                }
+            }
+            (before - after).forEach { runCatching { Files.deleteIfExists(saveDir.resolve(it)) } }
+            val dirCache = repo.lockDirCache()
+            try {
+                dirCache.builder().apply {
+                    addTree(ByteArray(0), 0, reader, tree)
+                    commit()
+                }
+            } finally {
+                dirCache.unlock()
+            }
+        }
+        repo.updateRef(Constants.HEAD).apply {
+            setNewObjectId(head)
+            setForceUpdate(true)
+            update()
         }
     }
 
@@ -325,7 +410,7 @@ class JGitWorldSync(
         val COMMIT_GENERATION = Regex("""jukz generation (\d+)""")
 
         /** Only compact once the local `.git` grows past this (the reachable world is far smaller). */
-        const val GC_THRESHOLD_BYTES = 256L * 1024 * 1024 // 256 MiB
+        const val GC_THRESHOLD_BYTES = 64L * 1024 * 1024 // 64 MiB: open regions pile up fast, a gc packs them back to ~the world size
         /** Never prune objects newer than this — protects a concurrent commit/apply from the gc. */
         const val GC_GRACE_MS = 10L * 60 * 1000 // 10 minutes
     }
