@@ -271,6 +271,13 @@ other directly, so set `jukz.force-relay=true` in both to exercise the relay pat
 changes, run the Worker locally (`npx wrangler dev --port 18791 --local` in `rendezvous-worker`, see
 its README) and point `rendezvous.url` at `http://127.0.0.1:18791`.
 
+**Across two real networks, on one PC** (Linux): [`tools/two-networks.sh`](tools/two-networks.sh) puts
+client B on a second connection only it can use — e.g. a phone's mobile data over USB tethering — while
+client A stays on the normal one, so they meet through the public rendezvous like two homes would
+(`up` asks for sudo once; then `play`, `stop`, `status`, `down`). Validated 2026-10-04 with home internet
+(router without UPnP) against Claro mobile data (CGNAT): joining by code, handoff both ways, auto-join from
+the world list and cloud backups up and down all went through the relay.
+
 To verify the **handoff**: A opens a world, B joins, A does **Save and Quit**, then B clicks **Host
 now** on the prompt — B pulls A's snapshot and takes over (the A↔B generation keeps climbing). The log
 lines `handing off — notifying N guest(s)` (host) and `taking over … (snapshot applied)` (guest)
