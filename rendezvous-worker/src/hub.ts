@@ -23,9 +23,14 @@ import {
 
 export interface Env {
   HUB: DurableObjectNamespace<RendezvousHub>;
+  COSMETICS: DurableObjectNamespace<import("./cosmetics.ts").CosmeticsStore>;
   SNAPSHOTS: R2Bucket;
   SNAPSHOT_SIGNING_KEY?: string;
   RENDEZVOUS_AUTH_TOKEN?: string;
+  /** Grants/revokes cosmetics entitlements (secret); the admin routes 404 while it is unset. */
+  COSMETICS_ADMIN_TOKEN?: string;
+  /** Local dev only: let offline accounts sign in to cosmetics without Mojang. Never set in production. */
+  COSMETICS_DEV_UNVERIFIED?: string;
   /** Optional base URL for signed snapshot URLs (wrangler dev rewrites the request host to the route). */
   PUBLIC_BASE_URL?: string;
   RENDEZVOUS_TTL_MS: string;

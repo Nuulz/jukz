@@ -3,17 +3,19 @@
 //  - POST /v1/announce, POST /v1/heartbeat, GET /v1/worlds/{id}, POST /v1/withdraw   (discovery)
 //  - GET  /v1/relay/{host,connect,work}                                             (WebSocket relay)
 //  - POST /v1/snapshot/upload-url, GET /v1/snapshot/{id}                            (ghost snapshots)
+//  - /v1/cosmetics/*                                                               (badges, see cosmetics.ts)
 //  - GET  /healthz
 // State lives in Durable Objects sharded by world (`world:<id>`: record + snapshot fence) and by relay
 // session (`relay:<shard>`), so one world's traffic never queues another's. Snapshot bytes never touch
 // a Durable Object: the Worker signs short-lived URLs pointing back at itself and streams them to/from
 // R2 via the binding, so no S3 credentials exist anywhere.
 
+import { CosmeticsStore, handleCosmetics } from "./cosmetics.ts";
 import { CLIENT_IP_HEADER, type Env, RendezvousHub } from "./hub.ts";
 import { BadRequest, parseWorldId, relayShard, shardOfNonce } from "./logic.ts";
 import { signBlobUrl, verifyBlobUrl, URL_TTL_SECS } from "./signing.ts";
 
-export { RendezvousHub };
+export { CosmeticsStore, RendezvousHub };
 
 const MAX_BODY_BYTES = 4 * 1024;
 
@@ -47,6 +49,8 @@ export default {
     if (path === "/v1/snapshot/fence" || path.startsWith("/v1/snapshot/may-download/")) {
       return error(404, "not found"); // hub-internal, never public
     }
+
+    if (path.startsWith("/v1/cosmetics/")) return handleCosmetics(request, env, url);
 
     try {
       if (path === "/v1/snapshot/upload-url" && request.method === "POST") return await snapshotUploadUrl(request, env, url);

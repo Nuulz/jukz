@@ -105,4 +105,6 @@ processResources {
     filesMatching("fabric.mod.json") {
         expand "version": project.version
     }
+    // One catalog for the Worker and the mod (the live copy replaces this one once fetched).
+    from(rootProject.file("cosmetics/catalog.json")) { into "assets/jukz/cosmetics" }
 }

@@ -1,0 +1,85 @@
+<!--
+  Cosmetics (Multiplayer → "Cosmetics"). CosmeticsScreen.kt fills the grid with one "badge-card" per
+  catalog item (the badge itself is drawn from its ASCII art by BadgeComponent) and wires the buttons.
+-->
+<owo-ui xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/wisp-forest/owo-lib/1.21/owo-ui.xsd">
+    <components>
+        <flow-layout direction="vertical">
+            <children>
+                <template name="brand@jukz:theme"/>
+                <template name="title@jukz:theme">
+                    <id>title</id>
+                </template>
+                <template name="message@jukz:theme">
+                    <id>account</id>
+                </template>
+
+                <!-- How your name looks in the tab list: filled from code. -->
+                <flow-layout direction="horizontal" id="preview">
+                    <children/>
+                    <gap>4</gap>
+                    <vertical-alignment>center</vertical-alignment>
+                    <padding>
+                        <vertical>2</vertical>
+                        <horizontal>4</horizontal>
+                    </padding>
+                    <surface>
+                        <flat>#80000000</flat>
+                    </surface>
+                </flow-layout>
+
+                <!-- Rows of badge cards, added from code. -->
+                <flow-layout direction="vertical" id="grid">
+                    <children/>
+                    <gap>4</gap>
+                    <horizontal-alignment>center</horizontal-alignment>
+                    <margins>
+                        <vertical>4</vertical>
+                    </margins>
+                </flow-layout>
+
+                <template name="hint@jukz:theme">
+                    <id>hint</id>
+                </template>
+                <template name="button-row@jukz:theme">
+                    <id>buttons</id>
+                </template>
+            </children>
+            <horizontal-alignment>center</horizontal-alignment>
+            <gap>4</gap>
+        </flow-layout>
+    </components>
+
+    <templates>
+        <!-- One item. The badge goes into "art-{{id}}"; the outline is recoloured from code (equipped / hover). -->
+        <template name="badge-card">
+            <flow-layout direction="vertical" id="card-{{id}}">
+                <children>
+                    <flow-layout direction="horizontal" id="art-{{id}}">
+                        <children/>
+                    </flow-layout>
+                    <label id="name-{{id}}">
+                        <text>{{name}}</text>
+                        <color>#FFFFFFFF</color>
+                        <shadow>true</shadow>
+                    </label>
+                    <label id="state-{{id}}">
+                        <color>#FF808080</color>
+                    </label>
+                </children>
+                <sizing>
+                    <horizontal method="fixed">64</horizontal>
+                    <vertical method="fixed">64</vertical>
+                </sizing>
+                <horizontal-alignment>center</horizontal-alignment>
+                <vertical-alignment>center</vertical-alignment>
+                <gap>3</gap>
+                <surface>
+                    <flat>#66101828</flat>
+                    <outline>#FF2A3B5C</outline>
+                </surface>
+            </flow-layout>
+        </template>
+    </templates>
+</owo-ui>

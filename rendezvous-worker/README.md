@@ -8,6 +8,7 @@ contract as the Rust server in [`../rendezvous`](../rendezvous), so the mod talk
 | HTTP API + routing | Worker (`src/index.ts`) |
 | World records, snapshot fence, WebSocket relay | Durable Object `RendezvousHub` (`src/hub.ts`), SQLite-backed |
 | Ghost snapshots (`<worldId>/pack`, `<worldId>/head`) | R2 bucket `jukz-snapshots` |
+| Cosmetics: profiles + entitlements (`src/cosmetics.ts`) | Durable Object `CosmeticsStore`, SQLite-backed |
 
 ## How it differs from the Rust server
 
@@ -31,11 +32,36 @@ contract as the Rust server in [`../rendezvous`](../rendezvous), so the mod talk
   the key looks like "no backup" (404). Worlds that never bound a key keep working unsigned (older mods).
   `checkOwner` in `src/logic.ts` mirrors `dev.jukz.core.model.WorldKey`.
 
+## Cosmetics (`/v1/cosmetics`, not in the Rust server)
+
+Badges shown left of names in the tab list. The catalog is [`../cosmetics/catalog.json`](../cosmetics/catalog.json)
+(validated at load, so a broken edit fails `npm test` and the deploy).
+
+| Route | Auth | What |
+|---|---|---|
+| `GET /catalog` | — | the items and their ASCII art |
+| `GET /players?ids=a,b,…` | — (60/min per IP) | the badge each listed player shows; absent = none |
+| `POST /challenge`, `POST /session` | Mojang | sign in: the client joins server id `sha1("jukz-cosmetics:" + challenge)` with Mojang, the Worker checks `hasJoined` and returns a 24 h token |
+| `GET /me`, `POST /equip {item}` | `x-jukz-cosmetics-token` | owned items; pick one (or `"none"`) |
+| `POST /admin/grant`, `/admin/revoke {id, item, source}` | `x-jukz-admin` | entitlements for `paid` / `grant` items (404 while `COSMETICS_ADMIN_TOKEN` is unset) |
+
+Challenges and tokens are HMACs under `SNAPSHOT_SIGNING_KEY`, so nothing is stored for them (rotating that
+key also signs everyone out of cosmetics, harmlessly: the mod signs in again). Signing in is what creates
+a profile, which is what makes a player's badge visible.
+
+Selling an item later: set `"availability": "paid"` and a `price` (cents) in the catalog, deploy, and
+grant it per purchase — e.g. from a Ko-fi webhook, or by hand:
+
+```bash
+curl -X POST https://jukz.nuulm.com/v1/cosmetics/admin/grant -H "x-jukz-admin: $TOKEN" \
+  -d '{"id":"<player uuid>","item":"founder","source":"manual"}'
+```
+
 ## Develop, test, deploy
 
 ```bash
 npm install
-npm run typecheck && npm test          # pure rules (ported from the Rust unit tests), URL signing, ownership
+npm run typecheck && npm test          # pure rules (ported from the Rust unit tests), URL signing, ownership, cosmetics
 npx wrangler dev --port 18791 --local  # needs .dev.vars, see below
 npx wrangler deploy
 openssl rand -hex 32 | tr -d '\n' | npx wrangler secret put SNAPSHOT_SIGNING_KEY
@@ -47,14 +73,16 @@ the signed snapshot URLs):
 ```
 SNAPSHOT_SIGNING_KEY=local-dev-key
 PUBLIC_BASE_URL=http://127.0.0.1:18791
+COSMETICS_DEV_UNVERIFIED=true   # dev clients have offline accounts; never set this in production
+COSMETICS_ADMIN_TOKEN=dev-admin
 ```
 
 Point the dev clients at it with `rendezvous.url=http://127.0.0.1:18791` in
 `fabric/run/client{A,B}/config/jukz.properties` (add `jukz.force-relay=true` to exercise the relay).
 
-Secrets: `SNAPSHOT_SIGNING_KEY` (required for snapshots; rotating it only invalidates URLs signed in the
-last 5 minutes) and optionally `RENDEZVOUS_AUTH_TOKEN` (bearer auth on `/v1`, matching the mod's
-`rendezvous.auth-token`).
+Secrets: `SNAPSHOT_SIGNING_KEY` (required for snapshots and cosmetics sign-in; rotating it only
+invalidates URLs signed in the last 5 minutes and cosmetics sessions), optionally `RENDEZVOUS_AUTH_TOKEN`
+(bearer auth on `/v1`, matching the mod's `rendezvous.auth-token`) and `COSMETICS_ADMIN_TOKEN` (grants).
 
 ## Limits worth knowing
 

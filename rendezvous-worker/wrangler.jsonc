@@ -1,6 +1,7 @@
 // jukz rendezvous on Cloudflare: one Worker + one Durable Object (the hub) + the R2 bucket for ghost
 // snapshots. Deploy: `npx wrangler deploy`. Secrets: `npx wrangler secret put SNAPSHOT_SIGNING_KEY`
-// (required for snapshots) and, optionally, RENDEZVOUS_AUTH_TOKEN (bearer auth for /v1).
+// (required for snapshots and cosmetics sign-in), optionally RENDEZVOUS_AUTH_TOKEN (bearer auth for /v1)
+// and COSMETICS_ADMIN_TOKEN (grants cosmetics; see src/cosmetics.ts).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "jukz-rendezvous",
@@ -8,9 +9,15 @@
   "compatibility_date": "2026-09-01",
   "routes": [{ "pattern": "jukz.nuulm.com", "custom_domain": true }],
   "durable_objects": {
-    "bindings": [{ "name": "HUB", "class_name": "RendezvousHub" }]
+    "bindings": [
+      { "name": "HUB", "class_name": "RendezvousHub" },
+      { "name": "COSMETICS", "class_name": "CosmeticsStore" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RendezvousHub"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["RendezvousHub"] },
+    { "tag": "v2", "new_sqlite_classes": ["CosmeticsStore"] }
+  ],
   "r2_buckets": [{ "binding": "SNAPSHOTS", "bucket_name": "jukz-snapshots" }],
   "vars": {
     "RENDEZVOUS_TTL_MS": "90000",

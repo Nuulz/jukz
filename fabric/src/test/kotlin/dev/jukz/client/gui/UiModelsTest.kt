@@ -47,6 +47,7 @@ class UiModelsTest {
             "host_info" to setOf("title", "rows", "access-button", "buttons"),
             "join_prompt" to setOf("title", "message", "code", "error", "buttons"),
             "upload" to setOf("title", "message", "bar", "tip", "buttons"),
+            "cosmetics" to setOf("title", "account", "preview", "grid", "hint", "buttons"),
         )
         for ((name, wanted) in expected) {
             val missing = wanted - ids(parse(name))

@@ -2,7 +2,9 @@ package dev.jukz
 
 import dev.jukz.client.GuestSession
 import dev.jukz.client.HostCoordinator
+import dev.jukz.client.gui.CosmeticsScreen
 import dev.jukz.client.gui.HostInfoScreen
+import dev.jukz.cosmetics.Cosmetics
 import dev.jukz.client.gui.HostLeavingScreen
 import dev.jukz.client.gui.UiHotReload
 import dev.jukz.net.WorldAccessPayload
@@ -33,7 +35,7 @@ import org.lwjgl.glfw.GLFWWindowCloseCallbackI
 /**
  * Client entrypoint. No mixins here (both UI hooks ride `ScreenEvents.AFTER_INIT`); the auto-join
  * mixin lives separately.
- *  - Multiplayer screen: inject a "Play together" button (join-by-code flow).
+ *  - Multiplayer screen: inject a "Play together" button (join-by-code flow) and "Cosmetics" (badges).
  *  - Every integrated world auto-hosts once the local player has joined (so others can join), via
  *    `ClientPlayConnectionEvents.JOIN`.
  *  - Pause menu (singleplayer host): replace vanilla "Open to LAN" with "World info (jukz)", which
@@ -56,6 +58,10 @@ object JukzClient : ClientModInitializer {
                         client.setScreen(JoinPromptScreen(screen))
                     }.dimensions(scaledWidth - 160, 6, 150, 20).build()
                     Screens.getButtons(screen).add(button)
+                    val cosmetics = ButtonWidget.builder(Text.literal("Cosmetics")) {
+                        client.setScreen(CosmeticsScreen(screen))
+                    }.dimensions(10, 6, 90, 20).build()
+                    Screens.getButtons(screen).add(cosmetics)
                 }
 
                 is GameMenuScreen ->
@@ -73,6 +79,7 @@ object JukzClient : ClientModInitializer {
         // only for locally-opened worlds.
         ClientPlayConnectionEvents.JOIN.register { _, _, client ->
             client.server?.let { HostCoordinator.autoHost(it) }
+            Cosmetics.ensureSignedIn() // registers us, so others see our tab-list badge
         }
 
         // When a guest's game connection drops, just timestamp it — do NOT close the controller, or its

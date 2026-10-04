@@ -25,6 +25,8 @@ Install, next to Minecraft **1.21.1** with Fabric Loader ≥ 0.16.5:
   of shows a green dot in the world list while someone hosts it; opening it joins them.
 - **Leaving:** quitting with guests online hands the world to one of them (**Host now**); quitting
   alone backs it up to the cloud, and whoever opens it next continues from there.
+- **Badges:** everyone running jukz gets a pixel badge left of their name in the tab list. Multiplayer →
+  **Cosmetics** picks yours (or hides it). They are free.
 
 Settings live in `config/jukz.properties`: `rendezvous.url` (empty = the public server, `none` =
 LAN-only, or your own), `rendezvous.auth-token`, `jukz.offline-guests` (see below) and
@@ -105,7 +107,7 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     game uses. End-to-end loopback tests run a real host against a real guest (discovery → handshake →
     byte relay → handoff / close). `ForwardingEndpointResolver` + `PortForwarder` keep router
     port-opening best-effort: it never fails the host.
-- **`fabric` (42 tests, plus the in-game runs above):**
+- **`fabric` (46 tests, plus the in-game runs above):**
   - World identity: `WorldIdState` (1.21.1 `PersistentState`) + `WorldIdSidecar` (pre-start
     `jukz.dat`), and `WorldSaveLocator` to find a world's save by UUID.
   - **Auto-host on open** — `HostCoordinator` (on `ClientPlayConnectionEvents.JOIN`) bumps the fence
@@ -143,8 +145,19 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
   - **World list** — `WorldEntryMixin` + `WorldListLiveBadge` draw a green "live · N" dot on hosted
     saves (10 s per-world lookup cache, clicking it joins), and a **Copy jukz code** button.
   - **UI** — every screen is an owo-ui model on one shared theme (see *Editing screens* below).
-- **`rendezvous-worker`** — 18 tests (the rules ported from the Rust unit tests, URL signing, and the
-  ownership checks, including a signature made by the JDK); validated in production. **`rendezvous`**
+  - **Cosmetics** — badges are ASCII art in [`cosmetics/catalog.json`](cosmetics/catalog.json) (one
+    character per pixel, keyed to a palette; 16×16 draws crisp in the 8 px tab row at GUI scale 2).
+    The Worker serves the same file and Gradle bundles it as the offline copy, so a new badge needs no
+    mod update. `PlayerListHudMixin` + `TabBadge` reserve a marked gap in front of the name and paint the
+    badge into it; `Cosmetics` signs in like joining a server (Worker challenge → Mojang `joinServer` →
+    the Worker asks `hasJoined`), and looks up other players in batches cached for 5 min.
+    `CosmeticsScreen` (Multiplayer → **Cosmetics**) picks the badge and links Ko-fi. Every badge is free;
+    paid ones are already modelled (`availability: "paid"` + `price`, locked/price in the screen,
+    entitlements on the Worker), so selling one is a catalog edit plus a grant per purchase. Validated
+    in-game with two clients, including a granted badge.
+- **`rendezvous-worker`** — 28 tests (the rules ported from the Rust unit tests, URL signing, and the
+  ownership checks, including a signature made by the JDK, and the cosmetics rules); validated in
+  production. **`rendezvous`**
   (Rust) — 20 `cargo test`s; it does not check world keys (see its README).
 
 ## What is flagged (`// requires live-network testing`)
