@@ -35,9 +35,12 @@ dependencies {
     // same artifact at runtime; declaring it keeps it on the compile classpath.
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:${coroutines_version}"
 
-    // JGit world-sync (Maven Central, EDL-1.0, Java 17+). Real adapter compiles against this.
-    // NOTE: for a shippable mod the JGit transitive deps must also be JIJ-bundled (flagged).
+    // JGit world-sync (Maven Central, EDL-1.0, Java 17+), jar-in-jar'd so a normal install has it. Of
+    // its dependencies only JavaEWAH is missing from the game: Minecraft already ships slf4j and
+    // commons-codec.
     implementation "org.eclipse.jgit:org.eclipse.jgit:7.1.0.202411261347-r"
+    include "org.eclipse.jgit:org.eclipse.jgit:7.1.0.202411261347-r"
+    include "com.googlecode.javaewah:JavaEWAH:1.2.3"
 
     // ---- FLAGGED network libs (NAT traversal — requires live-network testing + shading) ----
     // MC ships its own Netty; ice4j + netty-codec-native-quic MUST be shaded/relocated to
@@ -78,6 +81,15 @@ loom {
             name "Client B (jukz guest)"
             runDir "run/clientB"
             programArgs "--username", "GuestB"
+        }
+        // For playing from a checkout (see ../jugar): game folder, name and memory come from -P flags.
+        //   gradlew runPlay -Pjukz.runDir=run/nob -Pjukz.username=Nob -Pjukz.ram=4G
+        play {
+            inherit client
+            name "Play (jukz)"
+            runDir(project.findProperty("jukz.runDir") ?: "run/play")
+            programArgs "--username", (project.findProperty("jukz.username") ?: "Player")
+            vmArg "-Xmx${project.findProperty("jukz.ram") ?: "4G"}"
         }
     }
 }
