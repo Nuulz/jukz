@@ -49,6 +49,7 @@ class UiModelsTest {
             "upload" to setOf("title", "message", "bar", "tip", "buttons"),
             "cosmetics" to setOf("title", "account", "preview", "grid", "hint", "buttons"),
             "update" to setOf("title", "subtitle", "changes", "hint", "buttons"),
+            "cloud" to setOf("title", "message", "rows", "hint", "buttons"),
         )
         for ((name, wanted) in expected) {
             val missing = wanted - ids(parse(name))

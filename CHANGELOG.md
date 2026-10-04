@@ -10,6 +10,7 @@ gets its section as notes. Write them for players, not developers.
 - Pick them from the cube button on the title screen, in the pause menu or in Multiplayer → Cosmetics, with a 3D preview of yourself.
 - Make your own: upload a Blockbench model at nuulm.com/jukz/crear. If it gets in, it's yours to keep.
 - Guests are now verified by Mojang like on a normal server, and every world has an owner key: someone with only the code can't take it over.
+- Your worlds follow your account (Microsoft accounts): worlds you back up to the cloud come over on their own when you start the game on another PC. Singleplayer → My cloud lists them.
 - This screen: after an update, jukz tells you what changed.
 - Ko-fi button on the title screen, for anyone who wants to help pay for the servers. Nothing is locked behind it.
 

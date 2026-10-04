@@ -28,6 +28,9 @@ Install, next to Minecraft **1.21.1** with Fabric Loader ≥ 0.16.5:
 - **Cosmetics:** a pixel badge left of your name in the tab list, and 3D pieces worn on your character
   — hats, face (glasses, mustache) and back (backpack, wings). Pick them from the jukz cube on the title
   screen, in the pause menu or in Multiplayer → **Cosmetics**. Everyone running jukz sees them. Free.
+- **Your worlds on every PC (Microsoft accounts):** worlds you back up while signed in are remembered on
+  your account; start the game on another PC and they come over on their own (Singleplayer → **My cloud**
+  lists them, brings one on purpose or forgets it). Offline accounts don't have this.
 - **Make your own:** design one in [Blockbench](https://www.blockbench.net/) and send it at
   **[nuulm.com/jukz/crear](https://nuulm.com/jukz/crear)** (Cosmetics → **Make your own** opens it and
   verifies your account). Accepted models join jukz for free with your name on them; when the shop starts
@@ -184,6 +187,12 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     (`availability: "paid"` + `price`, locked/price in the screen, entitlements on the Worker), so
     selling one is a catalog edit plus a grant per purchase. Validated in-game with two clients,
     including a granted item.
+  - **Cloud worlds** — `R2SnapshotStore` sends the cosmetics session and the level name with each cloud
+    upload; the Worker remembers the world on that account (`/v1/account/worlds`, max 50). `CloudWorlds`
+    signs in at the title screen, brings worlds this PC never had into `saves/` (the world key is inside
+    the pack, so this PC hosts them like the first) and won't bring back one deleted here
+    (`config/jukz-cloud-worlds.properties`); `CloudWorldsScreen` is Singleplayer → **My cloud**. Validated
+    with two run folders on one account: PC 2 brought the world and hosted it live at the next generation.
   - **Community cosmetics** — `CosmeticsScreen`'s **Make your own** opens nuulm.com/jukz/crear with a
     15-minute link signed by the Worker for the signed-in account, which verifies the page account (that's
     where creator rewards go). Items with an `author` show "by …" in their tooltip.

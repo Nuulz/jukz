@@ -2,6 +2,8 @@ package dev.jukz
 
 import dev.jukz.client.GuestSession
 import dev.jukz.client.HostCoordinator
+import dev.jukz.client.CloudWorlds
+import dev.jukz.client.gui.CloudWorldsScreen
 import dev.jukz.client.gui.CosmeticsScreen
 import dev.jukz.client.gui.IconButton
 import dev.jukz.client.gui.SupportScreen
@@ -88,7 +90,13 @@ object JukzClient : ClientModInitializer {
                     })
                 }
 
-                is SelectWorldScreen -> addCopyCodeButton(screen, scaledWidth, scaledHeight)
+                is SelectWorldScreen -> {
+                    addCopyCodeButton(screen, scaledWidth, scaledHeight)
+                    // Your worlds from other PCs (premium accounts): top-right, clear of the search box.
+                    Screens.getButtons(screen).add(ButtonWidget.builder(Text.literal("My cloud")) {
+                        client.setScreen(CloudWorldsScreen(screen))
+                    }.dimensions(scaledWidth - 84, 4, 80, 20).build())
+                }
 
                 is TitleScreen -> addTitleButtons(screen)
             }
@@ -101,8 +109,15 @@ object JukzClient : ClientModInitializer {
             val title = client.currentScreen as? TitleScreen ?: return@EndTick
             if (versionChecked || client.overlay != null) return@EndTick
             versionChecked = true
+            Cosmetics.ensureSignedIn() // on the menu already: your cloud worlds and cosmetics are ready sooner
             if (!JukzState.versionChanged()) return@EndTick
             client.setScreen(if (JukzState.firstRun()) SupportScreen(title) else UpdateScreen(title, JukzState.lastVersion()))
+        })
+
+        // Worlds from your other PCs (premium accounts): brought over once you're signed in, while you're in
+        // the menus — never in the middle of a world.
+        ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { client ->
+            if (client.world == null && client.currentScreen is TitleScreen) CloudWorlds.bringNewOnce()
         })
 
         // Every jukz world is permanently shareable: opening it (when nobody else hosts it) puts it

@@ -68,6 +68,14 @@ curl -X POST https://jukz.nuulm.com/v1/cosmetics/admin/grant -H "x-jukz-admin: $
   -d '{"id":"<player uuid>","item":"founder","source":"manual"}'
 ```
 
+## Cloud worlds per account (`/v1/account/worlds`)
+
+When a cloud upload (`/v1/snapshot/upload-url`, signed with the world key) also carries a cosmetics session
+(`x-jukz-cosmetics-token`) and `x-jukz-level-name`, the world is remembered on that player's account
+(`account_worlds` in `CosmeticsStore`, newest 50). With the same session, `GET /v1/account/worlds` lists them,
+`POST …/<id>/download` signs GET URLs for the pack and head (no world key needed: it's inside the pack), and
+`POST …/<id>/forget` drops one from the list. Offline accounts can't get a session, so this is premium-only.
+
 ## Creators page (`/v1/creators`, behind nuulm.com/jukz/crear)
 
 Accounts are a Minecraft name + password (PBKDF2-SHA256, 100k iterations; 5 wrong passwords lock the

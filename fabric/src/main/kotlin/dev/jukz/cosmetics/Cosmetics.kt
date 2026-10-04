@@ -102,6 +102,10 @@ object Cosmetics {
         }
     }.toMap()
 
+    /** The session token of a signed-in (Microsoft) account that is still good for a minute, or null. */
+    fun sessionToken(): String? =
+        (account as? Account.SignedIn)?.takeIf { it.expiresAt - System.currentTimeMillis() > 60_000 }?.token
+
     @Volatile private var lastAttempt = 0L
 
     /**

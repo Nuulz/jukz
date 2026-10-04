@@ -57,7 +57,9 @@ import { MOJANG_CERTIFICATE_KEYS } from "./mojang-keys.ts";
 // Validated at load: a broken catalog edit fails the Worker (and its tests) instead of reaching players.
 export const catalog: Catalog = validateCatalog(rawCatalog as unknown as Catalog);
 
-const SESSION_HEADER = "x-jukz-cosmetics-token";
+export const SESSION_HEADER = "x-jukz-cosmetics-token";
+/** Cloud worlds remembered per account (the newest ones win). */
+export const MAX_ACCOUNT_WORLDS = 50;
 const ADMIN_HEADER = "x-jukz-admin";
 const MOJANG_HAS_JOINED = "https://sessionserver.mojang.com/session/minecraft/hasJoined";
 
@@ -85,6 +87,11 @@ export class CosmeticsStore extends DurableObject<Env> {
     // v2: one pick per slot (JSON), replacing the single `equipped` badge (still read for older rows).
     const columns = this.sql.exec<{ name: string }>("PRAGMA table_info(profiles)").toArray().map((c) => c.name);
     if (!columns.includes("loadout")) this.sql.exec("ALTER TABLE profiles ADD COLUMN loadout TEXT");
+    // Cloud worlds (index.ts /v1/account/worlds): which worlds each premium player backed up, so their
+    // other PCs can bring them over.
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS account_worlds (
+      player_id TEXT NOT NULL, world_id TEXT NOT NULL, name TEXT NOT NULL, generation INTEGER NOT NULL,
+      updated INTEGER NOT NULL, PRIMARY KEY (player_id, world_id))`);
     // Creators page (creators.ts): accounts and the models they upload.
     this.sql.exec(`CREATE TABLE IF NOT EXISTS creators (
       account TEXT PRIMARY KEY, name TEXT NOT NULL, salt TEXT NOT NULL, hash TEXT NOT NULL,
@@ -156,6 +163,37 @@ export class CosmeticsStore extends DurableObject<Env> {
 
   revoke(id: string, item: string): void {
     this.sql.exec("DELETE FROM entitlements WHERE id = ? AND item = ?", id, item);
+  }
+
+  // ---- cloud worlds --------------------------------------------------------------------------------
+
+  /** [playerId] just backed up [worldId] (with the world's key): remember it on their account. */
+  rememberWorld(playerId: string, worldId: string, name: string, generation: number): void {
+    this.sql.exec(
+      `INSERT INTO account_worlds (player_id, world_id, name, generation, updated) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (player_id, world_id) DO UPDATE SET name = excluded.name, generation = excluded.generation, updated = excluded.updated`,
+      playerId, worldId, name, generation, Date.now(),
+    );
+    // Keep the newest MAX_ACCOUNT_WORLDS per player.
+    this.sql.exec(
+      `DELETE FROM account_worlds WHERE player_id = ? AND world_id NOT IN (
+         SELECT world_id FROM account_worlds WHERE player_id = ? ORDER BY updated DESC LIMIT ?)`,
+      playerId, playerId, MAX_ACCOUNT_WORLDS,
+    );
+  }
+
+  accountWorlds(playerId: string): { worldId: string; name: string; generation: number; updated: number }[] {
+    return this.sql.exec<{ world_id: string; name: string; generation: number; updated: number }>(
+      "SELECT world_id, name, generation, updated FROM account_worlds WHERE player_id = ? ORDER BY updated DESC", playerId)
+      .toArray().map((r) => ({ worldId: r.world_id, name: r.name, generation: r.generation, updated: r.updated }));
+  }
+
+  ownsWorld(playerId: string, worldId: string): boolean {
+    return this.sql.exec("SELECT 1 FROM account_worlds WHERE player_id = ? AND world_id = ?", playerId, worldId).toArray().length > 0;
+  }
+
+  forgetWorld(playerId: string, worldId: string): void {
+    this.sql.exec("DELETE FROM account_worlds WHERE player_id = ? AND world_id = ?", playerId, worldId);
   }
 
   // ---- creators (see creators.ts for the routes and creators-logic.ts for the rules) ----------------
@@ -429,7 +467,7 @@ async function mojangKeys(): Promise<string[]> {
   return keys;
 }
 
-async function sessionPlayer(request: Request, env: Env): Promise<string | null> {
+export async function sessionPlayer(request: Request, env: Env): Promise<string | null> {
   const key = env.SNAPSHOT_SIGNING_KEY;
   return key ? verifySession(key, request.headers.get(SESSION_HEADER), Date.now()) : null;
 }

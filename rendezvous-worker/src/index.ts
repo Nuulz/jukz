@@ -5,13 +5,14 @@
 //  - POST /v1/snapshot/upload-url, GET /v1/snapshot/{id}                            (ghost snapshots)
 //  - /v1/cosmetics/*                                                               (badges, see cosmetics.ts)
 //  - /v1/creators/*                                                                (creators page, creators.ts)
+//  - /v1/account/worlds                                                           (a player's cloud worlds)
 //  - GET  /healthz
 // State lives in Durable Objects sharded by world (`world:<id>`: record + snapshot fence) and by relay
 // session (`relay:<shard>`), so one world's traffic never queues another's. Snapshot bytes never touch
 // a Durable Object: the Worker signs short-lived URLs pointing back at itself and streams them to/from
 // R2 via the binding, so no S3 credentials exist anywhere.
 
-import { CosmeticsStore, handleCosmetics } from "./cosmetics.ts";
+import { CosmeticsStore, cosmeticsStore, handleCosmetics, sessionPlayer } from "./cosmetics.ts";
 import { corsHeaders, handleCreators } from "./creators.ts";
 import { CLIENT_IP_HEADER, type Env, RendezvousHub } from "./hub.ts";
 import { BadRequest, parseWorldId, relayShard, shardOfNonce } from "./logic.ts";
@@ -64,6 +65,15 @@ export default {
       const headers = new Headers(response.headers);
       for (const [k, v] of Object.entries(cors)) headers.set(k, v);
       return new Response(response.body, { status: response.status, headers });
+    }
+
+    if (path.startsWith("/v1/account/")) {
+      try {
+        return await handleAccount(request, env, url);
+      } catch (e) {
+        if (e instanceof BadRequest) return error(400, e.message);
+        throw e;
+      }
     }
 
     try {
@@ -128,6 +138,47 @@ function checkAuth(request: Request, env: Env): Response | null {
   return provided === expected ? null : error(401, "missing or invalid bearer token");
 }
 
+// ---- cloud worlds per account ----------------------------------------------------------------------
+// A premium player's backed-up worlds (recorded at upload, above) follow their account: another PC
+// signed in as them lists them and downloads them without the world key — the key is inside the pack.
+//  - GET  /v1/account/worlds                    → {worlds: [{worldId, name, generation, updated}]}
+//  - POST /v1/account/worlds/<id>/download      → {packUrl, headUrl} (signed GET URLs)
+//  - POST /v1/account/worlds/<id>/forget        drop it from the account (the backup stays)
+// All with the cosmetics session (x-jukz-cosmetics-token); offline accounts can't get one.
+
+const LEVEL_NAME_HEADER = "x-jukz-level-name";
+
+function cleanLevelName(raw: string): string {
+  const name = raw.replace(/[\u0000-\u001f]/g, "").trim().slice(0, 64);
+  return name || "World";
+}
+
+async function handleAccount(request: Request, env: Env, url: URL): Promise<Response> {
+  const player = await sessionPlayer(request, env);
+  if (!player) return error(401, "sign in with a Microsoft account first");
+  const store = cosmeticsStore(env);
+  if (request.method === "GET" && url.pathname === "/v1/account/worlds") {
+    return json(200, { worlds: await store.accountWorlds(player) });
+  }
+  const m = url.pathname.match(/^\/v1\/account\/worlds\/([^/]+)\/(download|forget)$/);
+  if (request.method === "POST" && m) {
+    const worldId = parseWorldId(m[1]);
+    if (!(await store.ownsWorld(player, worldId))) return error(404, "not one of your worlds");
+    if (m[2] === "forget") {
+      await store.forgetWorld(player, worldId);
+      return json(200, { status: "ok" });
+    }
+    const key = env.SNAPSHOT_SIGNING_KEY;
+    if (!key) return error(503, "snapshot store disabled");
+    console.log(`account world download world=${worldId}`);
+    return json(200, {
+      packUrl: await signBlobUrl(publicOrigin(env, url), key, "get", worldId, "pack"),
+      headUrl: await signBlobUrl(publicOrigin(env, url), key, "get", worldId, "head"),
+    });
+  }
+  return error(404, "not found");
+}
+
 // ---- ghost snapshots ------------------------------------------------------------------------------
 
 /** Origin the signed blob URLs point at: the request's own, unless PUBLIC_BASE_URL pins one (local dev). */
@@ -150,6 +201,19 @@ async function snapshotUploadUrl(request: Request, env: Env, url: URL): Promise<
   if (fence.status !== 200) return fence;
   const key = env.SNAPSHOT_SIGNING_KEY;
   console.log(`snapshot upload signed world=${worldId} generation=${body.generation}`);
+  // A signed-in premium player backing up: remember the world on their account, so their other PCs can
+  // bring it over (/v1/account/worlds). The upload itself was just proven with the world's key.
+  const player = await sessionPlayer(request, env);
+  if (player) {
+    const rawName = request.headers.get(LEVEL_NAME_HEADER);
+    let name = "World";
+    try {
+      name = cleanLevelName(rawName ? decodeURIComponent(rawName.replace(/\+/g, "%20")) : "");
+    } catch {
+      // keep the default
+    }
+    await cosmeticsStore(env).rememberWorld(player, worldId, name, Number(body.generation) || 0);
+  }
   return json(200, {
     packUrl: await signBlobUrl(publicOrigin(env, url), key, "put", worldId, "pack"),
     headUrl: await signBlobUrl(publicOrigin(env, url), key, "put", worldId, "head"),

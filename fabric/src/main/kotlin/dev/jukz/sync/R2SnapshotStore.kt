@@ -2,6 +2,7 @@ package dev.jukz.sync
 
 import com.google.gson.JsonParser
 import dev.jukz.JukzMod
+import dev.jukz.client.CloudWorlds
 import dev.jukz.config.JukzConfig
 import dev.jukz.core.model.WorldId
 import dev.jukz.core.model.WorldKey
@@ -152,6 +153,9 @@ object R2SnapshotStore {
         WorldKeyStore.keyFor(worldId)
             ?.headers(WorldKey.OP_SNAPSHOT_UPLOAD, worldId, body, System.currentTimeMillis())
             ?.forEach { (name, value) -> builder.header(name, value) }
+        // Signed in with a Microsoft account: the backup is also remembered on that account, so the
+        // player's other PCs bring the world over (see CloudWorlds).
+        CloudWorlds.uploadHeaders(worldId).forEach { (name, value) -> builder.header(name, value) }
         val request = builder.build()
         val response = http.send(request, HttpResponse.BodyHandlers.ofString())
         if (response.statusCode() != 200) {

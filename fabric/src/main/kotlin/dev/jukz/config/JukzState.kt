@@ -30,7 +30,8 @@ object JukzState {
     private var installedBefore = false
 
     fun captureStartup() {
-        installedBefore = listOf(FILE_NAME, "jukz.properties", "jukz.nodeid").any { Files.exists(configDir.resolve(it)) }
+        // Only files jukz writes while playing: jukz.properties can be pre-made by launchers and scripts.
+        installedBefore = listOf(FILE_NAME, "jukz.nodeid", "jukz-keys").any { Files.exists(configDir.resolve(it)) }
     }
 
     /** The version that ran last, or null (fresh install, or a pre-0.2 install that kept no state). */

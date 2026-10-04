@@ -1,0 +1,83 @@
+<!--
+  My cloud (Singleplayer → "My cloud"): the worlds on your Minecraft account. CloudWorldsScreen.kt adds
+  one "world-row" per world.
+-->
+<owo-ui xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/wisp-forest/owo-lib/1.21/owo-ui.xsd">
+    <components>
+        <flow-layout direction="vertical">
+            <children>
+                <template name="brand@jukz:theme"/>
+                <template name="title@jukz:theme">
+                    <id>title</id>
+                </template>
+                <template name="message@jukz:theme">
+                    <id>message</id>
+                </template>
+                <scroll direction="vertical">
+                    <flow-layout direction="vertical" id="rows">
+                        <children/>
+                        <gap>4</gap>
+                        <padding>
+                            <right>5</right>
+                        </padding>
+                    </flow-layout>
+                    <sizing>
+                        <horizontal method="content"/>
+                        <vertical method="fixed">120</vertical>
+                    </sizing>
+                    <scrollbar-thiccness>3</scrollbar-thiccness>
+                    <margins>
+                        <vertical>4</vertical>
+                    </margins>
+                </scroll>
+                <template name="hint@jukz:theme">
+                    <id>hint</id>
+                </template>
+                <template name="button-row@jukz:theme">
+                    <id>buttons</id>
+                </template>
+            </children>
+            <horizontal-alignment>center</horizontal-alignment>
+            <gap>4</gap>
+        </flow-layout>
+    </components>
+
+    <templates>
+        <!-- One world: its name and when it was saved, its state here, and buttons added from code. -->
+        <template name="world-row">
+            <flow-layout direction="horizontal" id="row-{{id}}">
+                <children>
+                    <flow-layout direction="vertical">
+                        <children>
+                            <label id="name-{{id}}">
+                                <color>#FFFFFFFF</color>
+                                <shadow>true</shadow>
+                            </label>
+                            <label id="info-{{id}}">
+                                <color>#FF808080</color>
+                            </label>
+                        </children>
+                        <sizing>
+                            <horizontal method="fixed">170</horizontal>
+                        </sizing>
+                        <gap>2</gap>
+                    </flow-layout>
+                    <flow-layout direction="horizontal" id="actions-{{id}}">
+                        <children/>
+                        <gap>3</gap>
+                        <vertical-alignment>center</vertical-alignment>
+                    </flow-layout>
+                </children>
+                <padding>
+                    <all>4</all>
+                </padding>
+                <vertical-alignment>center</vertical-alignment>
+                <surface>
+                    <flat>#66101828</flat>
+                    <outline>#FF2A3B5C</outline>
+                </surface>
+            </flow-layout>
+        </template>
+    </templates>
+</owo-ui>
