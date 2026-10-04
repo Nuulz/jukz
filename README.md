@@ -226,6 +226,12 @@ confirm each step.
 - **Polish:** World info briefly shows "not announced" right after a world opens, until the first
   announce lands (it re-polls on its own).
 
+## Support
+
+jukz is free, and its public rendezvous (discovery, relay and cloud backups on Cloudflare) is paid for
+out of pocket. If it saved your world, you can chip in on **[Ko-fi](https://ko-fi.com/nobmz)** — it
+keeps the servers on for everyone. Donations unlock nothing: every feature stays free.
+
 ## License
 
 MIT.

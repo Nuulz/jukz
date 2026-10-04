@@ -5,7 +5,11 @@
   "name": "Joining Every Known Zone (JUKZ)",
   "description": "Per-world UUID with serverless P2P discovery: each world lives in one place at a time, with rotating host ownership.",
   "authors": ["Nobz"],
-  "contact": {},
+  "contact": {
+    "homepage": "https://nuulm.com/jukz",
+    "sources": "https://github.com/Nuulz/jukz",
+    "issues": "https://github.com/Nuulz/jukz/issues"
+  },
   "license": "MIT",
   "environment": "*",
   "entrypoints": {
@@ -19,6 +23,11 @@
   "mixins": [
     "jukz.mixins.json"
   ],
+  "custom": {
+    "modmenu": {
+      "links": { "modmenu.kofi": "https://ko-fi.com/nobmz" }
+    }
+  },
   "depends": {
     "fabricloader": ">=0.16.5",
     "minecraft": "~1.21.1",
