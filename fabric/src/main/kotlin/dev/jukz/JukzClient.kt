@@ -5,6 +5,7 @@ import dev.jukz.client.HostCoordinator
 import dev.jukz.client.gui.CosmeticsScreen
 import dev.jukz.client.gui.IconButton
 import dev.jukz.client.gui.SupportScreen
+import dev.jukz.client.gui.UpdateScreen
 import dev.jukz.client.gui.UiIcons
 import dev.jukz.config.JukzState
 import net.minecraft.client.gui.screen.ConfirmLinkScreen
@@ -93,13 +94,15 @@ object JukzClient : ClientModInitializer {
             }
         }
 
-        // The Ko-fi note, once per install / update: on the title screen, once the loading overlay is gone.
-        var supportChecked = false
+        // Once per version, on the title screen after the loading overlay: a fresh install gets the welcome
+        // (with Ko-fi), an update gets what's new.
+        var versionChecked = false
         ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { client ->
             val title = client.currentScreen as? TitleScreen ?: return@EndTick
-            if (supportChecked || client.overlay != null) return@EndTick
-            supportChecked = true
-            if (JukzState.supportNoteDue()) client.setScreen(SupportScreen(title, JukzState.firstRun()))
+            if (versionChecked || client.overlay != null) return@EndTick
+            versionChecked = true
+            if (!JukzState.versionChanged()) return@EndTick
+            client.setScreen(if (JukzState.firstRun()) SupportScreen(title) else UpdateScreen(title, JukzState.lastVersion()))
         })
 
         // Every jukz world is permanently shareable: opening it (when nobody else hosts it) puts it

@@ -62,6 +62,8 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
         val price: Price?,
         val art: Art?,
         val model: Model?,
+        /** Minecraft name of the community member who designed it (from the creators page), or null. */
+        val author: String? = null,
     )
 
     companion object {
@@ -104,6 +106,7 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
                 price = price,
                 art = art,
                 model = model,
+                author = json.get("author")?.asString,
             )
         }
 

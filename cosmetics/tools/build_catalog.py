@@ -4,6 +4,7 @@ pieces). Edit the art there, then:
     python3 build_catalog.py            # writes ../catalog.json
     python3 badges.py                   # previews: ./badges1.png, ./badges2.png
     python3 models.py models.png        # isometric previews of the 3D pieces on a reference head/body
+    python3 creations.py --help         # community models from nuulm.com/jukz/crear → ../creations/*.json
 
 The catalog is what ships: the Worker serves it and the mod bundles it. `npm test` in rendezvous-worker
 and the fabric tests validate it.
@@ -18,6 +19,13 @@ import badges  # noqa: E402
 import models  # noqa: E402
 
 items = badges.build() + [{k: v for k, v in it.items() if k != "_vox"} for it in models.build()]
+# Community items from the creators page (creations.py pull writes them), in a stable order.
+creations = os.path.join(HERE, "..", "creations")
+if os.path.isdir(creations):
+    for name in sorted(os.listdir(creations)):
+        if name.endswith(".json"):
+            with open(os.path.join(creations, name)) as f:
+                items.append(json.load(f))
 catalog = {"version": 2, "defaultBadge": "jukz", "items": items}
 with open(os.path.join(HERE, "..", "catalog.json"), "w") as f:
     f.write(json.dumps(catalog, indent=2) + "\n")

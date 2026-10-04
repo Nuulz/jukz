@@ -18,7 +18,10 @@
     { "tag": "v1", "new_sqlite_classes": ["RendezvousHub"] },
     { "tag": "v2", "new_sqlite_classes": ["CosmeticsStore"] }
   ],
-  "r2_buckets": [{ "binding": "SNAPSHOTS", "bucket_name": "jukz-snapshots" }],
+  "r2_buckets": [
+    { "binding": "SNAPSHOTS", "bucket_name": "jukz-snapshots" },
+    { "binding": "CREATIONS", "bucket_name": "jukz-creations" }
+  ],
   "vars": {
     "RENDEZVOUS_TTL_MS": "90000",
     "RENDEZVOUS_RATE_LIMIT_PER_MIN": "120",

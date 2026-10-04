@@ -8,7 +8,8 @@ contract as the Rust server in [`../rendezvous`](../rendezvous), so the mod talk
 | HTTP API + routing | Worker (`src/index.ts`) |
 | World records, snapshot fence, WebSocket relay | Durable Object `RendezvousHub` (`src/hub.ts`), SQLite-backed |
 | Ghost snapshots (`<worldId>/pack`, `<worldId>/head`) | R2 bucket `jukz-snapshots` |
-| Cosmetics: profiles + entitlements (`src/cosmetics.ts`) | Durable Object `CosmeticsStore`, SQLite-backed |
+| Cosmetics: profiles + entitlements, creators + submissions | Durable Object `CosmeticsStore`, SQLite-backed |
+| Uploaded creator models (`submissions/<id>.bbmodel`, `.png`) | R2 bucket `jukz-creations` |
 
 ## How it differs from the Rust server
 
@@ -67,11 +68,28 @@ curl -X POST https://jukz.nuulm.com/v1/cosmetics/admin/grant -H "x-jukz-admin: $
   -d '{"id":"<player uuid>","item":"founder","source":"manual"}'
 ```
 
+## Creators page (`/v1/creators`, behind nuulm.com/jukz/crear)
+
+Accounts are a Minecraft name + password (PBKDF2-SHA256, 100k iterations; 5 wrong passwords lock the
+account for 15 min; 12 attempts/min per IP). Nothing proves the name on its own, which the page says;
+a premium player verifies it from the game: the mod calls `POST /v1/cosmetics/creator-link` (cosmetics
+session) and opens the page with `#link=<token>` — an HMAC over `{id, name, exp: +15 min}`. Registering
+or logging in with that link ties the account to the player's UUID, and lets the real owner take back a
+name someone else registered first.
+
+Uploads are `.bbmodel` files (≤ 1 MB, ≤ 48 px per axis, ≤ 1024 cubes, no capes) plus a PNG thumbnail the
+page renders, stored in R2 `jukz-creations` under `submissions/<id>.{bbmodel,png}`; at most 5 pending per
+creator. Review happens on the page with `#admin` (the `COSMETICS_ADMIN_TOKEN`) or with
+`cosmetics/tools/creations.py`. Publishing ties a submission to the catalog item it became and grants that
+item to the creator (`creator:<id>`) and their extra pick (`reward:<id>`) as entitlements — free items
+need none today, so it only matters once items become paid. Unverified creators get theirs when they
+verify. Routes are listed at the top of `src/creators.ts`; CORS allows nuulm.com and localhost.
+
 ## Develop, test, deploy
 
 ```bash
 npm install
-npm run typecheck && npm test          # pure rules (ported from the Rust unit tests), URL signing, ownership, cosmetics, certificates
+npm run typecheck && npm test          # pure rules (ported from the Rust unit tests), URL signing, ownership, cosmetics, certificates, creators
 npx wrangler dev --port 18791 --local  # needs .dev.vars, see below
 npx wrangler deploy
 openssl rand -hex 32 | tr -d '\n' | npx wrangler secret put SNAPSHOT_SIGNING_KEY

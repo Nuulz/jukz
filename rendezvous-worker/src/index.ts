@@ -4,6 +4,7 @@
 //  - GET  /v1/relay/{host,connect,work}                                             (WebSocket relay)
 //  - POST /v1/snapshot/upload-url, GET /v1/snapshot/{id}                            (ghost snapshots)
 //  - /v1/cosmetics/*                                                               (badges, see cosmetics.ts)
+//  - /v1/creators/*                                                                (creators page, creators.ts)
 //  - GET  /healthz
 // State lives in Durable Objects sharded by world (`world:<id>`: record + snapshot fence) and by relay
 // session (`relay:<shard>`), so one world's traffic never queues another's. Snapshot bytes never touch
@@ -11,6 +12,7 @@
 // R2 via the binding, so no S3 credentials exist anywhere.
 
 import { CosmeticsStore, handleCosmetics } from "./cosmetics.ts";
+import { corsHeaders, handleCreators } from "./creators.ts";
 import { CLIENT_IP_HEADER, type Env, RendezvousHub } from "./hub.ts";
 import { BadRequest, parseWorldId, relayShard, shardOfNonce } from "./logic.ts";
 import { signBlobUrl, verifyBlobUrl, URL_TTL_SECS } from "./signing.ts";
@@ -32,6 +34,9 @@ export default {
     const blob = path.match(/^\/v1\/snapshot\/blob\/([^/]+)\/(pack|head)$/);
     if (blob) return serveBlob(request, env, url, blob[1], blob[2] as "pack" | "head");
 
+    // The creators page (nuulm.com, cross-origin, uploads up to ~1.5 MB): its own size limit and auth.
+    if (path.startsWith("/v1/creators/")) return handleCreators(request, env, url);
+
     const isRelay = path.startsWith("/v1/relay/");
     if (path.startsWith("/v1/") && !isRelay) {
       const denied = checkAuth(request, env);
@@ -50,7 +55,16 @@ export default {
       return error(404, "not found"); // hub-internal, never public
     }
 
-    if (path.startsWith("/v1/cosmetics/")) return handleCosmetics(request, env, url);
+    if (path.startsWith("/v1/cosmetics/")) {
+      // The creators page also reads the catalog (reward picker), cross-origin.
+      if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request) });
+      const response = await handleCosmetics(request, env, url);
+      const cors = corsHeaders(request);
+      if (Object.keys(cors).length === 0) return response;
+      const headers = new Headers(response.headers);
+      for (const [k, v] of Object.entries(cors)) headers.set(k, v);
+      return new Response(response.body, { status: response.status, headers });
+    }
 
     try {
       if (path === "/v1/snapshot/upload-url" && request.method === "POST") return await snapshotUploadUrl(request, env, url);

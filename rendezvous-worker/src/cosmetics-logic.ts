@@ -43,6 +43,8 @@ export interface CatalogItem {
   art?: string[];
   /** hat / face / back: the 3D model. */
   model?: VoxelModel;
+  /** Minecraft name of the player who designed it (community items, from the creators page). */
+  author?: string;
 }
 
 export interface Catalog {
@@ -69,6 +71,7 @@ export function validateCatalog(catalog: Catalog): Catalog {
     ids.add(item.id);
     if (!SLOTS.includes(item.kind)) throw new Error(`${where}: unknown kind ${item.kind}`);
     if (!["free", "paid", "grant"].includes(item.availability)) throw new Error(`${where}: bad availability`);
+    if (item.author !== undefined && !/^[A-Za-z0-9_]{1,16}$/.test(item.author)) throw new Error(`${where}: author is a Minecraft name`);
     if (item.availability === "paid" && !(item.price && Number.isSafeInteger(item.price.amount) && item.price.amount > 0)) {
       throw new Error(`${where}: paid items need a price`);
     }
@@ -198,7 +201,7 @@ export const SESSION_TTL_MS = 24 * 60 * 60_000;
 
 const encoder = new TextEncoder();
 
-async function hmacHex(key: string, message: string): Promise<string> {
+export async function hmacHex(key: string, message: string): Promise<string> {
   const cryptoKey = await crypto.subtle.importKey("raw", encoder.encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const sig = await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(message));
   return hex(new Uint8Array(sig));
@@ -208,7 +211,7 @@ function hex(bytes: Uint8Array): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function sameString(a: string, b: string): boolean {
+export function sameString(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);

@@ -28,6 +28,13 @@ Install, next to Minecraft **1.21.1** with Fabric Loader ≥ 0.16.5:
 - **Cosmetics:** a pixel badge left of your name in the tab list, and 3D pieces worn on your character
   — hats, face (glasses, mustache) and back (backpack, wings). Pick them from the jukz cube on the title
   screen, in the pause menu or in Multiplayer → **Cosmetics**. Everyone running jukz sees them. Free.
+- **Make your own:** design one in [Blockbench](https://www.blockbench.net/) and send it at
+  **[nuulm.com/jukz/crear](https://nuulm.com/jukz/crear)** (Cosmetics → **Make your own** opens it and
+  verifies your account). Accepted models join jukz for free with your name on them; when the shop starts
+  charging, their creator keeps them, plus one more item of their choice.
+
+**Install:** each [GitHub release](https://github.com/Nuulz/jukz/releases) has `jukz-X.Y.Z.jar`, built by CI
+from that tag. After an update, the mod shows what changed (from [`CHANGELOG.md`](CHANGELOG.md)) once.
 
 Settings live in `config/jukz.properties`: `rendezvous.url` (empty = the public server, `none` =
 LAN-only, or your own), `rendezvous.auth-token`, `jukz.offline-guests` (see below) and
@@ -78,8 +85,10 @@ Both players are drawn by jukz; nothing here is a resource pack.
 | A crown and sunglasses next to a party hat and 3D glasses | From behind: wings, and the jukz pack with its J |
 | ![The cosmetics screen: tabs per slot, item cards and a 3D preview](docs/screenshots/cosmetics-screen.png) | ![The tab list: each player's badge left of their name](docs/screenshots/cosmetics-tab.png) |
 | The cosmetics screen: one tab per slot and a live 3D preview (drag to turn it) | The tab list: everyone's badge, left of their name |
-| ![The title screen with the jukz cosmetics and Ko-fi buttons](docs/screenshots/kofi-title.png) | ![The Ko-fi note shown once per install or update](docs/screenshots/kofi-note.png) |
-| Title screen: jukz cosmetics (cube) and Ko-fi (cup) beside vanilla's buttons | The Ko-fi note, shown once on install and once per update |
+| ![The title screen with the jukz cosmetics and Ko-fi buttons](docs/screenshots/kofi-title.png) | ![The welcome note shown once on a fresh install](docs/screenshots/kofi-note.png) |
+| Title screen: jukz cosmetics (cube) and Ko-fi (cup) beside vanilla's buttons | The welcome note, shown once on a fresh install |
+| ![What's new after an update](docs/screenshots/update-screen.png) | |
+| After an update: what changed since the version you last played, once | |
 
 See [`docs/superpowers/specs/2026-06-08-jukz-design.md`](docs/superpowers/specs/2026-06-08-jukz-design.md)
 for the full design rationale (verified against primary sources) and
@@ -121,7 +130,7 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     game uses. End-to-end loopback tests run a real host against a real guest (discovery → handshake →
     byte relay → handoff / close). `ForwardingEndpointResolver` + `PortForwarder` keep router
     port-opening best-effort: it never fails the host.
-- **`fabric` (48 tests, plus the in-game runs above):**
+- **`fabric` (51 tests, plus the in-game runs above):**
   - World identity: `WorldIdState` (1.21.1 `PersistentState`) + `WorldIdSidecar` (pre-start
     `jukz.dat`), and `WorldSaveLocator` to find a world's save by UUID.
   - **Auto-host on open** — `HostCoordinator` (on `ClientPlayConnectionEvents.JOIN`) bumps the fence
@@ -175,10 +184,15 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     (`availability: "paid"` + `price`, locked/price in the screen, entitlements on the Worker), so
     selling one is a catalog edit plus a grant per purchase. Validated in-game with two clients,
     including a granted item.
-  - **Ko-fi** — an icon button on the title screen, a button in the cosmetics screen, and
-    `SupportScreen`, shown once on the first launch and once per update (`JukzState` remembers the
-    version in `config/jukz-state.properties`).
-- **`rendezvous-worker`** — 35 tests (the rules ported from the Rust unit tests, URL signing, and the
+  - **Community cosmetics** — `CosmeticsScreen`'s **Make your own** opens nuulm.com/jukz/crear with a
+    15-minute link signed by the Worker for the signed-in account, which verifies the page account (that's
+    where creator rewards go). Items with an `author` show "by …" in their tooltip.
+    [`cosmetics/tools/creations.py`](cosmetics/tools/creations.py) turns an approved upload into a
+    catalog item (`list`, `pull` = download + voxelize the `.bbmodel` + preview, `publish`).
+  - **Ko-fi** — an icon button on the title screen and in the cosmetics screen. `SupportScreen` welcomes a
+    fresh install once; `UpdateScreen` shows the `CHANGELOG.md` sections since the last version played,
+    once per update (`JukzState` keeps the version in `config/jukz-state.properties`).
+- **`rendezvous-worker`** — 44 tests (the rules ported from the Rust unit tests, URL signing, and the
   ownership checks, including a signature made by the JDK, and the cosmetics rules); validated in
   production. **`rendezvous`**
   (Rust) — 20 `cargo test`s; it does not check world keys (see its README).
@@ -252,6 +266,14 @@ To verify the **handoff**: A opens a world, B joins, A does **Save and Quit**, t
 now** on the prompt — B pulls A's snapshot and takes over (the A↔B generation keeps climbing). The log
 lines `handing off — notifying N guest(s)` (host) and `taking over … (snapshot applied)` (guest)
 confirm each step.
+
+### Releasing
+
+1. Add a `## X.Y.Z` section to [`CHANGELOG.md`](CHANGELOG.md) (player-facing bullets) and set
+   `mod_version` in `gradle.properties`.
+2. Publish a GitHub release tagged `vX.Y.Z`. The `release` workflow builds that version, runs the tests,
+   attaches `jukz-X.Y.Z.jar` and, if the notes are empty, fills them from the changelog. **Run workflow**
+   on the Actions tab builds a test jar without a release.
 
 ## Follow-ups
 

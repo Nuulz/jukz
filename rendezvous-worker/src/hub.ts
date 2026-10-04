@@ -29,6 +29,10 @@ export interface Env {
   RENDEZVOUS_AUTH_TOKEN?: string;
   /** Grants/revokes cosmetics entitlements (secret); the admin routes 404 while it is unset. */
   COSMETICS_ADMIN_TOKEN?: string;
+  /** Uploaded creator models (submissions/<id>.bbmodel and .png). */
+  CREATIONS: R2Bucket;
+  /** Where the creators page lives (the mod's link points there); defaults to nuulm.com/jukz/crear. */
+  CREATORS_PAGE_URL?: string;
   /** Local dev only: let offline accounts sign in to cosmetics without Mojang. Never set in production. */
   COSMETICS_DEV_UNVERIFIED?: string;
   /** Optional base URL for signed snapshot URLs (wrangler dev rewrites the request host to the route). */

@@ -138,6 +138,17 @@ object Cosmetics {
         }
     }
 
+    /** The creators page, as a link that proves this Minecraft account there (verifies the creator account). */
+    const val CREATORS_PAGE = "https://nuulm.com/jukz/crear"
+
+    /** [done] gets the creators page URL — with a 15-minute verification link when signed in — on the worker thread. */
+    fun creatorPageUrl(done: (String) -> Unit) {
+        val me = account as? Account.SignedIn ?: return done(CREATORS_PAGE)
+        worker.execute {
+            done(runCatching { call("/creator-link", JsonObject(), me.token).get("url").asString }.getOrDefault(CREATORS_PAGE))
+        }
+    }
+
     // ---- network ------------------------------------------------------------------------------
 
     private fun signIn(): Account {

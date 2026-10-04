@@ -81,6 +81,10 @@ class CosmeticsScreen(private val parent: Screen?) : JukzUiScreen("cosmetics") {
                 rebuild()
             }
         }
+        addButton(root, "buttons", Text.literal("Make your own"), width = 100) {
+            // Signed in: the link also verifies the creator account, so rewards reach this Minecraft account.
+            Cosmetics.creatorPageUrl { url -> client?.execute { ConfirmLinkScreen.open(this, url, true) } }
+        }.tooltip(Text.literal("Design a cosmetic in Blockbench and send it in. If it gets in, it's yours to keep."))
         addButton(root, "buttons", Text.literal("Support jukz (Ko-fi)"), width = 120) {
             ConfirmLinkScreen.open(this, KOFI_URL)
         }
@@ -146,7 +150,11 @@ class CosmeticsScreen(private val parent: Screen?) : JukzUiScreen("cosmetics") {
             else -> "Free" to COLOR_SUBTLE
         }
         card.childById(LabelComponent::class.java, "state-${item.id}").text(Text.literal(state)).color(Color.ofArgb(stateColor))
-        card.tooltip(listOf(Text.literal(item.name), Text.literal(item.description).withColor(COLOR_SUBTLE)))
+        card.tooltip(listOfNotNull(
+            Text.literal(item.name),
+            Text.literal(item.description).withColor(COLOR_SUBTLE),
+            item.author?.let { Text.literal("by $it").withColor(COLOR_LIVE) },
+        ))
         wire(card, if (wearing) COLOR_LIVE else OUTLINE, clickable = owned && !wearing) { save(item.id) }
         return card
     }
