@@ -1,8 +1,10 @@
-// Cosmetics (badges next to names in the tab list). Routes, all under /v1/cosmetics:
-//  - GET  /catalog                         the items, with their ASCII art (cosmetics/catalog.json)
-//  - GET  /players?ids=<uuid>,<uuid>...    the badge each listed jukz player shows (absent = none)
+// Cosmetics: tab-list badges and 3D pieces worn on the player (hat, face, back). Routes, all under
+// /v1/cosmetics:
+//  - GET  /catalog                         the items, with their ASCII art / voxel slices (cosmetics/catalog.json)
+//  - GET  /players?ids=<uuid>,<uuid>...    what each listed jukz player wears: `loadouts` (every slot) and
+//                                          `players` (badge only, the original shape); absent = nothing
 //  - POST /challenge, POST /session        sign in with the Minecraft account (see cosmetics-logic.ts)
-//  - GET  /me, POST /equip                 your items and your pick (x-jukz-cosmetics-token header)
+//  - GET  /me, POST /equip {slot, item}    your items and picks (x-jukz-cosmetics-token header)
 //  - POST /admin/grant, /admin/revoke      entitlements, for paid or granted items (x-jukz-admin)
 // Profiles and entitlements live in one SQLite Durable Object (CosmeticsStore): tiny rows, and lookups
 // are batched and cached by the mod, so one instance carries a lot of players.
@@ -12,6 +14,7 @@ import rawCatalog from "../../cosmetics/catalog.json" with { type: "json" };
 import { CLIENT_IP_HEADER, type Env } from "./hub.ts";
 import {
   type Catalog,
+  type Loadout,
   adminTokenMatches,
   checkEquip,
   issueChallenge,
@@ -20,13 +23,18 @@ import {
   parseLookup,
   parsePlayerId,
   parsePlayerName,
+  parseSlot,
+  readLoadout,
   serverIdFor,
   verifyChallenge,
+  verifyChallengeSignature,
+  verifyPlayerCertificate,
   verifySession,
   validateCatalog,
-  visibleBadge,
+  visibleLoadout,
 } from "./cosmetics-logic.ts";
 import { BadRequest, RateLimiter } from "./logic.ts";
+import { MOJANG_CERTIFICATE_KEYS } from "./mojang-keys.ts";
 
 // Validated at load: a broken catalog edit fails the Worker (and its tests) instead of reaching players.
 export const catalog: Catalog = validateCatalog(rawCatalog as unknown as Catalog);
@@ -52,6 +60,9 @@ export class CosmeticsStore extends DurableObject<Env> {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS entitlements (
       id TEXT NOT NULL, item TEXT NOT NULL, source TEXT NOT NULL, granted INTEGER NOT NULL,
       PRIMARY KEY (id, item))`);
+    // v2: one pick per slot (JSON), replacing the single `equipped` badge (still read for older rows).
+    const columns = this.sql.exec<{ name: string }>("PRAGMA table_info(profiles)").toArray().map((c) => c.name);
+    if (!columns.includes("loadout")) this.sql.exec("ALTER TABLE profiles ADD COLUMN loadout TEXT");
   }
 
   allow(ip: string): boolean {
@@ -67,33 +78,37 @@ export class CosmeticsStore extends DurableObject<Env> {
     );
   }
 
-  me(id: string): { equipped: string | null; owned: string[] } {
-    const row = this.sql.exec<{ equipped: string | null }>("SELECT equipped FROM profiles WHERE id = ?", id).toArray()[0];
-    return { equipped: row?.equipped ?? null, owned: ownedItems(catalog, this.grants(id)) };
+  me(id: string): { equipped: string | null; loadout: Loadout; owned: string[] } {
+    const loadout = this.stored(id);
+    return { equipped: loadout.badge ?? null, loadout, owned: ownedItems(catalog, this.grants(id)) };
   }
 
-  equip(id: string, item: unknown): string {
-    const value = checkEquip(catalog, item, this.grants(id));
-    this.sql.exec("UPDATE profiles SET equipped = ? WHERE id = ?", value, id);
-    return value;
+  equip(id: string, slot: unknown, item: unknown): { equipped: string; loadout: Loadout } {
+    const where = parseSlot(slot);
+    const value = checkEquip(catalog, item, this.grants(id), where);
+    const loadout = { ...this.stored(id), [where]: value };
+    this.sql.exec("UPDATE profiles SET loadout = ? WHERE id = ?", JSON.stringify(loadout), id);
+    return { equipped: value, loadout };
   }
 
-  lookup(ids: string[]): Record<string, string> {
-    const out: Record<string, string> = {};
+  lookup(ids: string[]): { players: Record<string, string>; loadouts: Record<string, Loadout> } {
+    const players: Record<string, string> = {};
+    const loadouts: Record<string, Loadout> = {};
     const marks = ids.map(() => "?").join(",");
-    const profiles = this.sql.exec<{ id: string; equipped: string | null }>(
-      `SELECT id, equipped FROM profiles WHERE id IN (${marks})`, ...ids).toArray();
-    if (profiles.length === 0) return out;
+    const profiles = this.sql.exec<{ id: string; equipped: string | null; loadout: string | null }>(
+      `SELECT id, equipped, loadout FROM profiles WHERE id IN (${marks})`, ...ids).toArray();
+    if (profiles.length === 0) return { players, loadouts };
     const grants = new Map<string, string[]>();
     for (const g of this.sql.exec<{ id: string; item: string }>(
       `SELECT id, item FROM entitlements WHERE id IN (${marks})`, ...ids)) {
       grants.set(g.id, [...(grants.get(g.id) ?? []), g.item]);
     }
     for (const p of profiles) {
-      const badge = visibleBadge(catalog, p.equipped, grants.get(p.id) ?? []);
-      if (badge) out[p.id] = badge;
+      const visible = visibleLoadout(catalog, readLoadout(p.loadout, p.equipped), grants.get(p.id) ?? []);
+      if (Object.keys(visible).length) loadouts[p.id] = visible;
+      if (visible.badge) players[p.id] = visible.badge;
     }
-    return out;
+    return { players, loadouts };
   }
 
   grant(id: string, item: string, source: string): void {
@@ -106,6 +121,12 @@ export class CosmeticsStore extends DurableObject<Env> {
 
   revoke(id: string, item: string): void {
     this.sql.exec("DELETE FROM entitlements WHERE id = ? AND item = ?", id, item);
+  }
+
+  private stored(id: string): Loadout {
+    const row = this.sql.exec<{ equipped: string | null; loadout: string | null }>(
+      "SELECT equipped, loadout FROM profiles WHERE id = ?", id).toArray()[0];
+    return row ? readLoadout(row.loadout, row.equipped) : {};
   }
 
   private grants(id: string): string[] {
@@ -130,7 +151,7 @@ export async function handleCosmetics(request: Request, env: Env, url: URL): Pro
         if (!(await s.allow(request.headers.get("cf-connecting-ip") ?? request.headers.get(CLIENT_IP_HEADER) ?? "unknown"))) {
           return error(429, "rate limited");
         }
-        return json(200, { players: await s.lookup(ids) });
+        return json(200, await s.lookup(ids));
       }
       case "POST /challenge": {
         const key = env.SNAPSHOT_SIGNING_KEY;
@@ -150,7 +171,7 @@ export async function handleCosmetics(request: Request, env: Env, url: URL): Pro
         const id = await sessionPlayer(request, env);
         if (!id) return error(401, "sign in first");
         const body = (await request.json()) as Record<string, unknown>;
-        return json(200, { equipped: await store(env).equip(id, body.item ?? null) });
+        return json(200, await store(env).equip(id, body.slot, body.item ?? null));
       }
       case "POST /admin/grant":
       case "POST /admin/revoke": {
@@ -170,35 +191,61 @@ export async function handleCosmetics(request: Request, env: Env, url: URL): Pro
     if (e instanceof BadRequest) return error(400, e.message);
     if (e instanceof SyntaxError) return error(400, "malformed JSON body");
     // Errors thrown inside the Durable Object arrive as plain Errors carrying the message.
-    if (e instanceof Error && /unknown item|own that item/.test(e.message)) return error(400, e.message);
+    if (e instanceof Error && /unknown item|unknown slot|own that item|slot$/.test(e.message)) return error(400, e.message);
     throw e;
   }
 }
 
 /**
- * Exchange a challenge the client "joined" with Mojang for a session token. In local dev only
- * (COSMETICS_DEV_UNVERIFIED=true in .dev.vars) offline accounts may claim their id directly.
+ * Exchange a challenge for a session token. Two proofs of the account, in order:
+ *  1. a Mojang player certificate plus the challenge signed with its key (works everywhere — Mojang
+ *     refuses hasJoined calls from Cloudflare, so this is the production path);
+ *  2. the server-style handshake: the client "joined" sha1(challenge) and Mojang's hasJoined confirms
+ *     it (self-hosted Workers / wrangler dev, whose requests Mojang accepts).
+ * In local dev only (COSMETICS_DEV_UNVERIFIED=true in .dev.vars) offline accounts may claim their id.
  */
 async function signIn(request: Request, env: Env): Promise<Response> {
   const key = env.SNAPSHOT_SIGNING_KEY;
   if (!key) return error(503, "cosmetics sign-in disabled");
   const body = (await request.json()) as Record<string, unknown>;
   const name = parsePlayerName(body.name);
-  if (!(await verifyChallenge(key, body.challenge, Date.now()))) return error(401, "challenge expired, try again");
+  const challenge = body.challenge;
+  if (!(await verifyChallenge(key, challenge, Date.now()))) return error(401, "challenge expired, try again");
 
-  let id: string;
-  const serverId = await serverIdFor(body.challenge as string);
-  const answer = await fetch(`${MOJANG_HAS_JOINED}?username=${encodeURIComponent(name)}&serverId=${serverId}`);
-  if (answer.status === 200) {
-    const profile = (await answer.json()) as { id: string; name: string };
-    id = parsePlayerId(profile.id);
-  } else if (env.COSMETICS_DEV_UNVERIFIED === "true" && body.id) {
-    id = parsePlayerId(body.id);
-  } else {
-    return error(401, "Mojang didn't confirm this account (a Microsoft account is needed)");
+  let id: string | null = null;
+  if (body.certificate && body.id) {
+    const claimed = parsePlayerId(body.id);
+    const playerKey = await verifyPlayerCertificate(claimed, body.certificate, await mojangKeys(), Date.now());
+    if (playerKey && (await verifyChallengeSignature(playerKey, challenge as string, body.signature))) id = claimed;
+    console.log(`cosmetics certificate name=${name} ok=${id !== null}`);
   }
+  if (!id) {
+    const serverId = await serverIdFor(challenge as string);
+    const answer = await fetch(`${MOJANG_HAS_JOINED}?username=${encodeURIComponent(name)}&serverId=${serverId}`);
+    if (answer.status === 200) id = parsePlayerId(((await answer.json()) as { id: string }).id);
+    else if (env.COSMETICS_DEV_UNVERIFIED === "true" && body.id) id = parsePlayerId(body.id);
+  }
+  if (!id) return error(401, "Mojang didn't confirm this account (a Microsoft account is needed)");
   await store(env).touch(id, name);
   return json(200, { id, ...(await issueSession(key, id, Date.now())) });
+}
+
+/** Mojang's certificate keys: fetched (cached for a day per isolate), else the embedded copy. */
+let mojangKeyCache: { keys: string[]; at: number } | null = null;
+async function mojangKeys(): Promise<string[]> {
+  if (mojangKeyCache && Date.now() - mojangKeyCache.at < 24 * 60 * 60_000) return mojangKeyCache.keys;
+  let keys = MOJANG_CERTIFICATE_KEYS;
+  try {
+    const answer = await fetch("https://api.minecraftservices.com/publickeys", { signal: AbortSignal.timeout(3000) });
+    if (answer.ok) {
+      const fetched = ((await answer.json()) as { playerCertificateKeys?: { publicKey: string }[] }).playerCertificateKeys?.map((k) => k.publicKey);
+      if (fetched?.length) keys = [...new Set([...fetched, ...MOJANG_CERTIFICATE_KEYS])];
+    }
+  } catch {
+    // keep the embedded keys
+  }
+  mojangKeyCache = { keys, at: Date.now() };
+  return keys;
 }
 
 async function sessionPlayer(request: Request, env: Env): Promise<string | null> {

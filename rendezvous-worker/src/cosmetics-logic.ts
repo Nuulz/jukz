@@ -1,5 +1,8 @@
-// Pure cosmetics rules (catalog, ownership, sign-in tokens), unit-tested with plain `node --test`.
-// The CosmeticsStore Durable Object and the routes in cosmetics.ts only add I/O on top of these.
+// Pure cosmetics rules (catalog, ownership, loadouts, sign-in tokens), unit-tested with plain
+// `node --test`. The CosmeticsStore Durable Object and the routes in cosmetics.ts only add I/O on top.
+//
+// Every item fills one slot (its `kind`): a tab-list `badge` (flat ASCII art), or a 3D piece worn on the
+// player model — `hat`, `face` or `back` — built from voxels written as ASCII slices (see VoxelModel).
 //
 // Who owns what: an item's `availability` is "free" (everyone), "paid" or "grant" (only players with an
 // entitlement row). Everything ships free today; making an item paid later is a catalog edit plus a
@@ -9,18 +12,37 @@ import { BadRequest } from "./logic.ts";
 
 export type Availability = "free" | "paid" | "grant";
 
+export const SLOTS = ["badge", "hat", "face", "back"] as const;
+export type Slot = (typeof SLOTS)[number];
+
+/**
+ * A 3D piece as stacked ASCII slices. `layers[0]` is the bottom slice; in each slice, row 0 is the side
+ * facing forward (the front for hat/face, against the body for back) and characters run left→right as
+ * seen from the front. Each character is one voxel of `voxel` pixels (1 = a skin pixel), "." is empty.
+ * `origin` is where the grid's left-front-bottom corner sits, in the bone's pixel space (the head for
+ * hat/face — its top is y = -8, its face z = -4 — the body for back, whose back is z = 2; y grows down).
+ */
+export interface VoxelModel {
+  voxel: number;
+  origin: [number, number, number];
+  animation?: "none" | "bob" | "spin";
+  layers: string[][];
+}
+
 export interface CatalogItem {
   id: string;
-  kind: "badge";
+  kind: Slot;
   name: string;
   description: string;
   availability: Availability;
   /** Shown for "paid" items; amounts are in the currency's minor unit (cents). */
   price?: { amount: number; currency: string };
-  /** Single-character keys → AARRGGBB; "." in the art is transparent. */
+  /** Single-character keys → AARRGGBB; "." is transparent / empty. */
   palette: Record<string, string>;
-  /** Square ASCII art, one string per row, one character per pixel. */
-  art: string[];
+  /** Badges: square ASCII art, one string per row, one character per pixel. */
+  art?: string[];
+  /** hat / face / back: the 3D model. */
+  model?: VoxelModel;
 }
 
 export interface Catalog {
@@ -29,7 +51,9 @@ export interface Catalog {
   items: CatalogItem[];
 }
 
-/** Sentinel for "show no badge". */
+export type Loadout = Partial<Record<Slot, string>>;
+
+/** Sentinel for "wear nothing in this slot" (for badges: hide the default one too). */
 export const NO_BADGE = "none";
 
 const ITEM_ID_RE = /^[a-z0-9_-]{1,32}$/;
@@ -43,46 +67,105 @@ export function validateCatalog(catalog: Catalog): Catalog {
     if (!ITEM_ID_RE.test(item.id) || item.id === NO_BADGE) throw new Error(`${where}: bad id`);
     if (ids.has(item.id)) throw new Error(`${where}: duplicate id`);
     ids.add(item.id);
-    if (item.kind !== "badge") throw new Error(`${where}: unknown kind ${item.kind}`);
+    if (!SLOTS.includes(item.kind)) throw new Error(`${where}: unknown kind ${item.kind}`);
     if (!["free", "paid", "grant"].includes(item.availability)) throw new Error(`${where}: bad availability`);
     if (item.availability === "paid" && !(item.price && Number.isSafeInteger(item.price.amount) && item.price.amount > 0)) {
       throw new Error(`${where}: paid items need a price`);
     }
-    const size = item.art.length;
-    if (size < 8 || size > 32) throw new Error(`${where}: art must be 8..32 rows`);
     for (const [key, color] of Object.entries(item.palette)) {
       if (key.length !== 1 || key === ".") throw new Error(`${where}: palette keys are single non-'.' characters`);
       if (!COLOR_RE.test(color)) throw new Error(`${where}: palette ${key} must be AARRGGBB`);
     }
-    item.art.forEach((row, y) => {
-      if (row.length !== size) throw new Error(`${where}: row ${y} is ${row.length} wide, art must be square (${size})`);
-      for (const ch of row) if (ch !== "." && !(ch in item.palette)) throw new Error(`${where}: row ${y} uses '${ch}', not in the palette`);
+    const checkRow = (row: string, at: string) => {
+      for (const ch of row) if (ch !== "." && !(ch in item.palette)) throw new Error(`${where}: ${at} uses '${ch}', not in the palette`);
+    };
+    if (item.kind === "badge") {
+      const art = item.art ?? [];
+      const size = art.length;
+      if (size < 8 || size > 32) throw new Error(`${where}: art must be 8..32 rows`);
+      art.forEach((row, y) => {
+        if (row.length !== size) throw new Error(`${where}: row ${y} is ${row.length} wide, art must be square (${size})`);
+        checkRow(row, `row ${y}`);
+      });
+      continue;
+    }
+    const model = item.model;
+    if (!model) throw new Error(`${where}: 3D items need a model`);
+    if (!(model.voxel > 0 && model.voxel <= 2)) throw new Error(`${where}: voxel must be in (0, 2]`);
+    if (model.origin?.length !== 3 || !model.origin.every(Number.isFinite)) throw new Error(`${where}: origin is [x, y, z]`);
+    if (!["none", "bob", "spin", undefined].includes(model.animation)) throw new Error(`${where}: unknown animation`);
+    const layers = model.layers ?? [];
+    if (layers.length < 1 || layers.length > 32) throw new Error(`${where}: 1..32 layers`);
+    const depth = layers[0].length;
+    const width = layers[0][0]?.length ?? 0;
+    if (depth < 1 || depth > 32 || width < 1 || width > 32) throw new Error(`${where}: slices are 1..32 on each side`);
+    layers.forEach((layer, l) => {
+      if (layer.length !== depth) throw new Error(`${where}: layer ${l} has ${layer.length} rows, the model is ${depth} deep`);
+      layer.forEach((row, z) => {
+        if (row.length !== width) throw new Error(`${where}: layer ${l} row ${z} is ${row.length} wide, the model is ${width}`);
+        checkRow(row, `layer ${l} row ${z}`);
+      });
     });
   }
   const def = catalog.items.find((i) => i.id === catalog.defaultBadge);
-  if (!def || def.availability !== "free") throw new Error("defaultBadge must be a free item");
+  if (!def || def.kind !== "badge" || def.availability !== "free") throw new Error("defaultBadge must be a free badge");
   return catalog;
 }
 
-/** Item ids [uuid] may equip: every free item plus whatever it was granted (unknown grants are ignored). */
+/** Item ids a player may wear: every free item plus whatever it was granted (unknown grants are ignored). */
 export function ownedItems(catalog: Catalog, grants: Iterable<string>): string[] {
   const granted = new Set(grants);
   return catalog.items.filter((i) => i.availability === "free" || granted.has(i.id)).map((i) => i.id);
 }
 
-/** The badge others see for a profile: its pick if still owned, else the default; null = hidden. */
-export function visibleBadge(catalog: Catalog, equipped: string | null, grants: Iterable<string>): string | null {
-  if (equipped === NO_BADGE) return null;
-  if (equipped && ownedItems(catalog, grants).includes(equipped)) return equipped;
-  return catalog.defaultBadge;
+/** What others see a profile wearing. The badge falls back to the default; other slots are empty unless set. */
+export function visibleLoadout(catalog: Catalog, stored: Loadout, grants: Iterable<string>): Loadout {
+  const owned = new Set(ownedItems(catalog, grants));
+  const out: Loadout = {};
+  for (const slot of SLOTS) {
+    const pick = stored[slot];
+    if (pick === NO_BADGE) continue;
+    const item = pick ? catalog.items.find((i) => i.id === pick) : undefined;
+    if (item && item.kind === slot && owned.has(item.id)) out[slot] = item.id;
+    else if (slot === "badge") out.badge = catalog.defaultBadge;
+  }
+  return out;
 }
 
-/** What an equip request may set, or a BadRequest. */
-export function checkEquip(catalog: Catalog, item: unknown, grants: Iterable<string>): string {
+/** The badge others see in the tab list (the original single-badge API). */
+export function visibleBadge(catalog: Catalog, equipped: string | null, grants: Iterable<string>): string | null {
+  return visibleLoadout(catalog, equipped ? { badge: equipped } : {}, grants).badge ?? null;
+}
+
+export function parseSlot(raw: unknown): Slot {
+  if (raw === undefined || raw === null) return "badge"; // the original API equipped badges only
+  if (typeof raw !== "string" || !SLOTS.includes(raw as Slot)) throw new BadRequest("unknown slot");
+  return raw as Slot;
+}
+
+/** What an equip request may put in [slot], or a BadRequest. */
+export function checkEquip(catalog: Catalog, item: unknown, grants: Iterable<string>, slot: Slot = "badge"): string {
   if (item === null || item === NO_BADGE) return NO_BADGE;
-  if (typeof item !== "string" || !catalog.items.some((i) => i.id === item)) throw new BadRequest("unknown item");
-  if (!ownedItems(catalog, grants).includes(item)) throw new BadRequest("you don't own that item");
-  return item;
+  const found = typeof item === "string" ? catalog.items.find((i) => i.id === item) : undefined;
+  if (!found) throw new BadRequest("unknown item");
+  if (found.kind !== slot) throw new BadRequest(`that item doesn't go in the ${slot} slot`);
+  if (!ownedItems(catalog, grants).includes(found.id)) throw new BadRequest("you don't own that item");
+  return found.id;
+}
+
+/** A stored loadout: the JSON column, or the original single-badge column for older rows. */
+export function readLoadout(json: string | null, legacyBadge: string | null): Loadout {
+  if (json) {
+    try {
+      const parsed = JSON.parse(json) as Record<string, unknown>;
+      const out: Loadout = {};
+      for (const slot of SLOTS) if (typeof parsed[slot] === "string") out[slot] = parsed[slot] as string;
+      return out;
+    } catch {
+      // a corrupt row behaves like an empty one
+    }
+  }
+  return legacyBadge ? { badge: legacyBadge } : {};
 }
 
 // ---- identities ---------------------------------------------------------------------------------
@@ -166,6 +249,80 @@ export async function verifySession(key: string, token: string | null, nowMs: nu
     return parsePlayerId(id);
   } catch {
     return null;
+  }
+}
+
+// ---- player certificates ----------------------------------------------------------------------
+// Mojang answers hasJoined with 403 to Cloudflare Workers, so production proves the account with the
+// player certificate Minecraft already has for chat signing: Mojang signs (UUID, expiry, the player's
+// public key) with SHA1withRSA, and the client signs our challenge with the matching private key
+// (SHA256withRSA). Both checks are offline: no call to Mojang per sign-in, and no token leaves the game.
+
+export interface PlayerCertificate {
+  /** The player's RSA public key, X.509 (SPKI) DER, base64. */
+  publicKey: string;
+  /** Certificate expiry, epoch ms. */
+  expiresAt: number;
+  /** Mojang's signature over uuid ‖ expiresAt ‖ publicKey, base64. */
+  keySignature: string;
+}
+
+function b64(raw: string): Uint8Array {
+  return Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
+}
+
+/** The bytes Mojang signs: UUID (most, least significant 64 bits), expiry ms, key DER — big-endian. */
+export function certificatePayload(playerId: string, expiresAt: number, keyDer: Uint8Array): Uint8Array {
+  const hexId = playerId.replace(/-/g, "");
+  const out = new Uint8Array(24 + keyDer.length);
+  for (let i = 0; i < 16; i++) out[i] = parseInt(hexId.slice(i * 2, i * 2 + 2), 16);
+  new DataView(out.buffer).setBigInt64(16, BigInt(expiresAt));
+  out.set(keyDer, 24);
+  return out;
+}
+
+/** The player's key if Mojang vouches for it (for [playerId], unexpired), else null. */
+export async function verifyPlayerCertificate(
+  playerId: string, cert: unknown, mojangKeys: string[], nowMs: number,
+): Promise<CryptoKey | null> {
+  const c = cert as Partial<PlayerCertificate> | null;
+  if (!c || typeof c.publicKey !== "string" || typeof c.keySignature !== "string" || !Number.isSafeInteger(c.expiresAt)) return null;
+  if ((c.expiresAt as number) < nowMs) return null;
+  let keyDer: Uint8Array, keySignature: Uint8Array;
+  try {
+    keyDer = b64(c.publicKey);
+    keySignature = b64(c.keySignature);
+  } catch {
+    return null;
+  }
+  const payload = certificatePayload(playerId, c.expiresAt as number, keyDer);
+  let vouched = false;
+  for (const mojang of mojangKeys) {
+    try {
+      const key = await crypto.subtle.importKey("spki", b64(mojang), { name: "RSASSA-PKCS1-v1_5", hash: "SHA-1" }, false, ["verify"]);
+      if (await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, keySignature, payload)) {
+        vouched = true;
+        break;
+      }
+    } catch {
+      // a malformed Mojang key: try the next
+    }
+  }
+  if (!vouched) return null;
+  try {
+    return await crypto.subtle.importKey("spki", keyDer, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+  } catch {
+    return null;
+  }
+}
+
+/** Did the certificate's private key sign [challenge] (UTF-8, SHA256withRSA)? */
+export async function verifyChallengeSignature(playerKey: CryptoKey, challenge: string, signature: unknown): Promise<boolean> {
+  if (typeof signature !== "string") return false;
+  try {
+    return await crypto.subtle.verify("RSASSA-PKCS1-v1_5", playerKey, b64(signature), encoder.encode(challenge));
+  } catch {
+    return false;
   }
 }
 

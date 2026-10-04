@@ -25,8 +25,9 @@ Install, next to Minecraft **1.21.1** with Fabric Loader ≥ 0.16.5:
   of shows a green dot in the world list while someone hosts it; opening it joins them.
 - **Leaving:** quitting with guests online hands the world to one of them (**Host now**); quitting
   alone backs it up to the cloud, and whoever opens it next continues from there.
-- **Badges:** everyone running jukz gets a pixel badge left of their name in the tab list. Multiplayer →
-  **Cosmetics** picks yours (or hides it). They are free.
+- **Cosmetics:** a pixel badge left of your name in the tab list, and 3D pieces worn on your character
+  — hats, face (glasses, mustache) and back (backpack, wings). Pick them from the jukz cube on the title
+  screen, in the pause menu or in Multiplayer → **Cosmetics**. Everyone running jukz sees them. Free.
 
 Settings live in `config/jukz.properties`: `rendezvous.url` (empty = the public server, `none` =
 LAN-only, or your own), `rendezvous.auth-token`, `jukz.offline-guests` (see below) and
@@ -66,6 +67,19 @@ Two dev clients on one machine, against the production rendezvous with the relay
 | World info: share code, generation, relay and a live self-check (endpoints blurred) | Closing with nobody around backs the world up to R2 for the next player |
 | ![The host closed access](docs/screenshots/access-closed.png) | |
 | The host closed access: no takeover is offered, so the world can't split | |
+
+### Cosmetics
+
+Both players are drawn by jukz; nothing here is a resource pack.
+
+| | |
+|---|---|
+| ![Two players wearing jukz cosmetics: a crown with sunglasses, a party hat with 3D glasses](docs/screenshots/cosmetics-front.png) | ![From behind: wings and the jukz pack](docs/screenshots/cosmetics-back.png) |
+| A crown and sunglasses next to a party hat and 3D glasses | From behind: wings, and the jukz pack with its J |
+| ![The cosmetics screen: tabs per slot, item cards and a 3D preview](docs/screenshots/cosmetics-screen.png) | ![The tab list: each player's badge left of their name](docs/screenshots/cosmetics-tab.png) |
+| The cosmetics screen: one tab per slot and a live 3D preview (drag to turn it) | The tab list: everyone's badge, left of their name |
+| ![The title screen with the jukz cosmetics and Ko-fi buttons](docs/screenshots/kofi-title.png) | ![The Ko-fi note shown once per install or update](docs/screenshots/kofi-note.png) |
+| Title screen: jukz cosmetics (cube) and Ko-fi (cup) beside vanilla's buttons | The Ko-fi note, shown once on install and once per update |
 
 See [`docs/superpowers/specs/2026-06-08-jukz-design.md`](docs/superpowers/specs/2026-06-08-jukz-design.md)
 for the full design rationale (verified against primary sources) and
@@ -107,7 +121,7 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     game uses. End-to-end loopback tests run a real host against a real guest (discovery → handshake →
     byte relay → handoff / close). `ForwardingEndpointResolver` + `PortForwarder` keep router
     port-opening best-effort: it never fails the host.
-- **`fabric` (46 tests, plus the in-game runs above):**
+- **`fabric` (48 tests, plus the in-game runs above):**
   - World identity: `WorldIdState` (1.21.1 `PersistentState`) + `WorldIdSidecar` (pre-start
     `jukz.dat`), and `WorldSaveLocator` to find a world's save by UUID.
   - **Auto-host on open** — `HostCoordinator` (on `ClientPlayConnectionEvents.JOIN`) bumps the fence
@@ -145,17 +159,26 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
   - **World list** — `WorldEntryMixin` + `WorldListLiveBadge` draw a green "live · N" dot on hosted
     saves (10 s per-world lookup cache, clicking it joins), and a **Copy jukz code** button.
   - **UI** — every screen is an owo-ui model on one shared theme (see *Editing screens* below).
-  - **Cosmetics** — badges are ASCII art in [`cosmetics/catalog.json`](cosmetics/catalog.json) (one
-    character per pixel, keyed to a palette; 16×16 draws crisp in the 8 px tab row at GUI scale 2).
-    The Worker serves the same file and Gradle bundles it as the offline copy, so a new badge needs no
-    mod update. `PlayerListHudMixin` + `TabBadge` reserve a marked gap in front of the name and paint the
-    badge into it; `Cosmetics` signs in like joining a server (Worker challenge → Mojang `joinServer` →
-    the Worker asks `hasJoined`), and looks up other players in batches cached for 5 min.
-    `CosmeticsScreen` (Multiplayer → **Cosmetics**) picks the badge and links Ko-fi. Every badge is free;
-    paid ones are already modelled (`availability: "paid"` + `price`, locked/price in the screen,
-    entitlements on the Worker), so selling one is a catalog edit plus a grant per purchase. Validated
-    in-game with two clients, including a granted badge.
-- **`rendezvous-worker`** — 28 tests (the rules ported from the Rust unit tests, URL signing, and the
+  - **Cosmetics** — everything is ASCII art in [`cosmetics/catalog.json`](cosmetics/catalog.json),
+    generated from [`cosmetics/tools`](cosmetics/tools) (`badges.py`, `models.py`, with previews;
+    `build_catalog.py` writes the catalog). Badges are 16×16 drawings, one character per pixel (crisp in
+    the 8 px tab row at GUI scale 2). Hats, face and back pieces are voxel models written as stacked
+    ASCII slices: `CosmeticCatalog` meshes them keeping only the faces that touch empty space, and
+    `CosmeticsFeatureRenderer` draws them on the player model's head or body bone (hidden under a helmet,
+    or elytra for back pieces). The Worker serves the same catalog and Gradle bundles it as the offline
+    copy, so new items need no mod update. `PlayerListHudMixin` + `TabBadge` reserve a marked gap in
+    front of the name and paint the badge into it. `Cosmetics` signs in with the player's Mojang chat certificate
+    (it signs the Worker's challenge; the Worker checks Mojang's signature offline) and looks up other players' loadouts
+    (one item per slot) in batches cached for 5 min. `CosmeticsScreen` has a tab per slot, item icons
+    (`ModelIcon` for 3D pieces) and a world-less `PlayerPreview`; it opens from the title screen, the
+    pause menu and Multiplayer. Every item is free; paid ones are already modelled
+    (`availability: "paid"` + `price`, locked/price in the screen, entitlements on the Worker), so
+    selling one is a catalog edit plus a grant per purchase. Validated in-game with two clients,
+    including a granted item.
+  - **Ko-fi** — an icon button on the title screen, a button in the cosmetics screen, and
+    `SupportScreen`, shown once on the first launch and once per update (`JukzState` remembers the
+    version in `config/jukz-state.properties`).
+- **`rendezvous-worker`** — 35 tests (the rules ported from the Rust unit tests, URL signing, and the
   ownership checks, including a signature made by the JDK, and the cosmetics rules); validated in
   production. **`rendezvous`**
   (Rust) — 20 `cargo test`s; it does not check world keys (see its README).
@@ -213,6 +236,8 @@ distinct peers) are wired as Loom run configs:
 ```bash
 ./gradlew runClientA   # instance A (username HostA),  run dir fabric/run/clientA  (Windows: run-client-a.bat)
 ./gradlew runClientB   # instance B (username GuestB), run dir fabric/run/clientB  (Windows: run-client-b.bat)
+# Any other name / folder / memory, e.g. to just play from a checkout:
+./gradlew :fabric:runPlay -Pjukz.username=Steve -Pjukz.runDir=run/steve -Pjukz.ram=4G
 ```
 
 Open a world in A (it auto-hosts; the share code is under pause menu → **World info (jukz)**), then
@@ -243,7 +268,9 @@ confirm each step.
 
 jukz is free, and its public rendezvous (discovery, relay and cloud backups on Cloudflare) is paid for
 out of pocket. If it saved your world, you can chip in on **[Ko-fi](https://ko-fi.com/nobmz)** — it
-keeps the servers on for everyone. Donations unlock nothing: every feature stays free.
+keeps the servers on for everyone. Donations unlock nothing: every feature stays free. In game, the cup
+button on the title screen opens the same page; the mod mentions it once on install and once per
+update, never more.
 
 ## License
 

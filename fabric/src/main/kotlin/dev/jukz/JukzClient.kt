@@ -3,8 +3,17 @@ package dev.jukz
 import dev.jukz.client.GuestSession
 import dev.jukz.client.HostCoordinator
 import dev.jukz.client.gui.CosmeticsScreen
+import dev.jukz.client.gui.IconButton
+import dev.jukz.client.gui.SupportScreen
+import dev.jukz.client.gui.UiIcons
+import dev.jukz.config.JukzState
+import net.minecraft.client.gui.screen.ConfirmLinkScreen
+import net.minecraft.client.gui.screen.TitleScreen
 import dev.jukz.client.gui.HostInfoScreen
 import dev.jukz.cosmetics.Cosmetics
+import dev.jukz.cosmetics.CosmeticsFeatureRenderer
+import net.fabricmc.fabric.api.client.rendering.v1.LivingEntityFeatureRendererRegistrationCallback
+import net.minecraft.client.render.entity.PlayerEntityRenderer
 import dev.jukz.client.gui.HostLeavingScreen
 import dev.jukz.client.gui.UiHotReload
 import dev.jukz.net.WorldAccessPayload
@@ -45,6 +54,11 @@ object JukzClient : ClientModInitializer {
     override fun onInitializeClient() {
         UiHotReload.install() // dev runs only: owo-ui models are read live from src/
 
+        // 3D cosmetics (hats, face and back pieces) on every player model.
+        LivingEntityFeatureRendererRegistrationCallback.EVENT.register { _, renderer, helper, _ ->
+            if (renderer is PlayerEntityRenderer) helper.register(CosmeticsFeatureRenderer(renderer))
+        }
+
         // The host lets us in: keep the world key (to revive it from the cloud later) and the handoff gate.
         ClientPlayNetworking.registerGlobalReceiver(WorldAccessPayload.ID) { payload, _ ->
             WorldKeyStore.rememberFromHost(WorldId.of(payload.worldId), payload.key)
@@ -64,12 +78,29 @@ object JukzClient : ClientModInitializer {
                     Screens.getButtons(screen).add(cosmetics)
                 }
 
-                is GameMenuScreen ->
+                is GameMenuScreen -> {
                     if (client.isIntegratedServerRunning) replaceOpenToLanButton(screen)
+                    // Change cosmetics without leaving the world (host or guest): bottom-left corner, clear
+                    // of World info (top-left) and of toasts (top-right).
+                    Screens.getButtons(screen).add(IconButton(8, scaledHeight - IconButton.SIZE - 8, UiIcons::jukz, Text.literal("jukz cosmetics")) {
+                        client.setScreen(CosmeticsScreen(screen))
+                    })
+                }
 
                 is SelectWorldScreen -> addCopyCodeButton(screen, scaledWidth, scaledHeight)
+
+                is TitleScreen -> addTitleButtons(screen)
             }
         }
+
+        // The Ko-fi note, once per install / update: on the title screen, once the loading overlay is gone.
+        var supportChecked = false
+        ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { client ->
+            val title = client.currentScreen as? TitleScreen ?: return@EndTick
+            if (supportChecked || client.overlay != null) return@EndTick
+            supportChecked = true
+            if (JukzState.supportNoteDue()) client.setScreen(SupportScreen(title, JukzState.firstRun()))
+        })
 
         // Every jukz world is permanently shareable: opening it (when nobody else hosts it) puts it
         // online automatically so others can join. This MUST fire on the *client* JOIN event, not
@@ -190,6 +221,26 @@ object JukzClient : ClientModInitializer {
     }
 
     private const val COPY_BUTTON_WIDTH = 110
+
+    /**
+     * Two icon buttons on the title screen, flanking the Options/Quit row like vanilla's language and
+     * accessibility buttons: jukz cosmetics on the left, Ko-fi on the right. Placed relative to the
+     * Options button, found by its label.
+     */
+    private fun addTitleButtons(screen: TitleScreen) {
+        val buttons = Screens.getButtons(screen)
+        val optionsLabel = Text.translatable("menu.options").string
+        val options = buttons.firstOrNull { it.message.string == optionsLabel } ?: return
+        val y = options.y
+        val left = options.x - 24 - 24 // past vanilla's language button
+        val right = options.x + 200 + 4 + 24 // past vanilla's accessibility button
+        buttons.add(IconButton(left, y, UiIcons::jukz, Text.literal("jukz cosmetics")) {
+            MinecraftClient.getInstance().setScreen(CosmeticsScreen(screen))
+        })
+        buttons.add(IconButton(right, y, { UiIcons.KOFI }, Text.literal("Support jukz on Ko-fi")) {
+            ConfirmLinkScreen.open(screen, CosmeticsScreen.KOFI_URL)
+        })
+    }
 
     /** Vanilla's world-select bottom buttons span 308 px centred; keep 4 px clear of them. */
     internal fun copyButtonY(scaledWidth: Int, scaledHeight: Int): Int {

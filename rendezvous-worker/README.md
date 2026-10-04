@@ -34,16 +34,26 @@ contract as the Rust server in [`../rendezvous`](../rendezvous), so the mod talk
 
 ## Cosmetics (`/v1/cosmetics`, not in the Rust server)
 
-Badges shown left of names in the tab list. The catalog is [`../cosmetics/catalog.json`](../cosmetics/catalog.json)
-(validated at load, so a broken edit fails `npm test` and the deploy).
+Tab-list badges and 3D pieces worn on the player (hat, face, back): one item per slot, a player's
+"loadout". The catalog is [`../cosmetics/catalog.json`](../cosmetics/catalog.json), generated from the
+ASCII sources in [`../cosmetics/tools`](../cosmetics/tools) and validated at load, so a broken edit fails
+`npm test` and the deploy.
 
 | Route | Auth | What |
 |---|---|---|
 | `GET /catalog` | — | the items and their ASCII art |
-| `GET /players?ids=a,b,…` | — (60/min per IP) | the badge each listed player shows; absent = none |
-| `POST /challenge`, `POST /session` | Mojang | sign in: the client joins server id `sha1("jukz-cosmetics:" + challenge)` with Mojang, the Worker checks `hasJoined` and returns a 24 h token |
-| `GET /me`, `POST /equip {item}` | `x-jukz-cosmetics-token` | owned items; pick one (or `"none"`) |
+| `GET /players?ids=a,b,…` | — (60/min per IP) | `loadouts` (slot → item for each listed player) and `players` (badge only); absent = nothing |
+| `POST /challenge`, `POST /session` | Mojang | sign in, returns a 24 h token (see below) |
+| `GET /me`, `POST /equip {slot, item}` | `x-jukz-cosmetics-token` | owned items and picks; put an item (or `"none"`) in a slot (`slot` defaults to `badge`) |
 | `POST /admin/grant`, `/admin/revoke {id, item, source}` | `x-jukz-admin` | entitlements for `paid` / `grant` items (404 while `COSMETICS_ADMIN_TOKEN` is unset) |
+
+**Signing in.** Mojang answers `hasJoined` with 403 to Cloudflare Workers, so production proves the
+account with the certificate Minecraft holds for chat signing: the client sends it (its RSA public key,
+expiry, and Mojang's signature over uuid ‖ expiry ‖ key) and signs the challenge with the matching private
+key. The Worker checks both offline against Mojang's `playerCertificateKeys` (fetched from
+`api.minecraftservices.com/publickeys`, with an embedded copy in `src/mojang-keys.ts`). Accounts without a
+certificate fall back to the server-style handshake (`joinServer` + `hasJoined`), which works on
+self-hosted Workers and `wrangler dev`.
 
 Challenges and tokens are HMACs under `SNAPSHOT_SIGNING_KEY`, so nothing is stored for them (rotating that
 key also signs everyone out of cosmetics, harmlessly: the mod signs in again). Signing in is what creates
@@ -61,7 +71,7 @@ curl -X POST https://jukz.nuulm.com/v1/cosmetics/admin/grant -H "x-jukz-admin: $
 
 ```bash
 npm install
-npm run typecheck && npm test          # pure rules (ported from the Rust unit tests), URL signing, ownership, cosmetics
+npm run typecheck && npm test          # pure rules (ported from the Rust unit tests), URL signing, ownership, cosmetics, certificates
 npx wrangler dev --port 18791 --local  # needs .dev.vars, see below
 npx wrangler deploy
 openssl rand -hex 32 | tr -d '\n' | npx wrangler secret put SNAPSHOT_SIGNING_KEY

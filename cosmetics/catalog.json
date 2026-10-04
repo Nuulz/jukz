@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "defaultBadge": "jukz",
   "items": [
     {
@@ -8,21 +8,30 @@
       "name": "jukz",
       "description": "The world cube. Everyone with jukz gets it.",
       "availability": "free",
-      "palette": { "o": "FF0B1A33", "T": "FFA9CCFF", "L": "FF5B9BFF", "R": "FF2F64C4", "W": "FFFFFFFF" },
+      "palette": {
+        "o": "FF0B1A33",
+        "H": "FFD6E7FF",
+        "T": "FFA9CCFF",
+        "L": "FF5B9BFF",
+        "l": "FF4A87EA",
+        "R": "FF2F64C4",
+        "r": "FF2756AD",
+        "W": "FFFFFFFF"
+      },
       "art": [
         ".......oo.......",
-        ".....ooTToo.....",
-        "...ooTTTTTToo...",
-        ".ooTTTTTTTTTToo.",
-        "oTTTTTTTTTTTTTTo",
-        "oLLTTTTTTTTTTRRo",
-        "oLLLLTTTTTTRRRRo",
-        "oLLLLLLTTRRRRRRo",
-        "oLLLLLLLRRRWWRRo",
-        "oLLLLLLLRRRRWRRo",
-        "oLLLLLLLRRRRWRRo",
-        "oLLLLLLLRWRRWRRo",
-        ".ooLLLLLRRWWRoo.",
+        ".....ooHHoo.....",
+        "...ooHTTTTHoo...",
+        ".ooHTTTTTTTTHoo.",
+        "oHTTTTTTTTTTTTHo",
+        "oLHHTTTTTTTTHHRo",
+        "oLLLHHTTTTHHRRRo",
+        "oLLLLLHHHHRRRRRo",
+        "oLLlLLLLRRRWWWRo",
+        "oLLLLLLLRRRrWrRo",
+        "oLLLLLlLRRRrWrRo",
+        "oLlLLLLLRWRrWRRo",
+        ".ooLLLLLRrWWRoo.",
         "...ooLLLRRRoo...",
         ".....ooLRoo.....",
         ".......oo......."
@@ -34,23 +43,32 @@
       "name": "Handoff",
       "description": "Two arrows passing the world around.",
       "availability": "free",
-      "palette": { "o": "FF0B1A33", "a": "FF6BCB6B", "b": "FF7FB2FF", "c": "FFFFC24A" },
+      "palette": {
+        "o": "FF0B1A33",
+        "G": "FF8BE38B",
+        "g": "FF4CB04C",
+        "B": "FFA9CCFF",
+        "b": "FF4A87EA",
+        "c": "FFFFD54A",
+        "C": "FFE09A00",
+        "w": "FFFFF6C8"
+      },
       "art": [
         "................",
-        ".....aaaaaa.....",
-        "...aaaaaaaaa....",
-        "..aaa.....aaa.a.",
-        ".aaa.......aaaa.",
-        ".aa.........aaa.",
-        ".aa.......aaaaa.",
-        ".aa....cc.......",
-        ".......cc....bb.",
-        "bbbbb........bb.",
-        ".bbb.........bb.",
-        ".bbbb.......bbb.",
-        ".b.bbb.....bbb..",
-        "....bbbbbbbbb...",
-        ".....bbbbbb.....",
+        ".....oooooo.....",
+        "....oGGGGGGo....",
+        "...oGggggggGo...",
+        "..oGggooooggGo..",
+        ".oGggo.oo.oggGoo",
+        "..ooo.occoGGGggg",
+        ".oBboocwcCoGGggo",
+        "oBBbboccCCooGgo.",
+        "BBBbbboCCo.obBo.",
+        "ooBbbo.oo.obbBo.",
+        "..oBbboooobbBo..",
+        "...oBbbbbbbBo...",
+        "....oBBBBBBo....",
+        ".....oooooo.....",
         "................"
       ]
     },
@@ -58,52 +76,66 @@
       "id": "heart",
       "kind": "badge",
       "name": "Heart",
-      "description": "A pixel heart.",
+      "description": "A pixel heart, beating for the server.",
       "availability": "free",
-      "palette": { "o": "FF3A0A1A", "r": "FFFF5C8A", "d": "FFC2185B", "w": "FFFFFFFF" },
+      "palette": {
+        "o": "FF3A0A1A",
+        "w": "FFFFFFFF",
+        "l": "FFFF9EBB",
+        "r": "FFFF5C8A",
+        "d": "FFD12E63",
+        "D": "FF9E1446"
+      },
       "art": [
         "................",
         "..oooo....oooo..",
-        ".orrrro..orrrro.",
-        "orwwrrroorrrrrdo",
-        "orwrrrrrrrrrrrdo",
-        "orrrrrrrrrrrrrdo",
-        "orrrrrrrrrrrrrdo",
-        ".orrrrrrrrrrrdo.",
-        ".orrrrrrrrrrrdo.",
-        "..orrrrrrrrrdo..",
-        "...orrrrrrrdo...",
-        "....orrrrrdo....",
-        ".....orrrdo.....",
-        "......ordo......",
-        ".......oo.......",
-        "................"
+        ".ollrro..orrrro.",
+        "olwwlrroorrrrrdo",
+        "olwlrrrrrrrrrrdo",
+        "olrrrrrrrrrrrddo",
+        "orrrrrrrrrrrrddo",
+        ".orrrrrrrrrrrdDo",
+        ".orrrrrrrrrrddo.",
+        "..orrrrrrrrddDo.",
+        "...orrrrrrddDo..",
+        "....orrrrddDo...",
+        ".....orrddDo....",
+        "......ordDo.....",
+        ".......oDo......",
+        "........o......."
       ]
     },
     {
       "id": "star",
       "kind": "badge",
       "name": "Star",
-      "description": "Gold star.",
+      "description": "Gold star for the best host.",
       "availability": "free",
-      "palette": { "o": "FF3D2600", "y": "FFFFD54A", "d": "FFE09A00", "w": "FFFFF6C8" },
+      "palette": {
+        "o": "FF4A2E00",
+        "w": "FFFFFDE8",
+        "Y": "FFFFF08A",
+        "y": "FFFFD54A",
+        "d": "FFE09A00",
+        "D": "FFB87400"
+      },
       "art": [
         ".......oo.......",
-        "......oyyo......",
-        "......oyyo......",
-        ".....oywyyo.....",
-        ".....oywyyo.....",
-        "ooooooyyyyoooooo",
-        "oyyyyyyyyyyyyydo",
-        ".oyyyyyyyyyyydo.",
-        "..oyyyyyyyyydo..",
-        "...oyyyyyyyydo..",
-        "...oyyyyyyyydo..",
-        "..oyyyydoyyyydo.",
-        "..oyyydo.oyyydo.",
-        ".oyydoo...ooydo.",
-        ".oyoo.......odo.",
-        ".oo..........oo."
+        "......oYyo......",
+        "......oYyo......",
+        ".....oYwyyo.....",
+        ".....oYyyyo.....",
+        "ooooooYyyydooooo",
+        "oYYYYYYyyyyyyddo",
+        ".oYYYwYyyyyyddo.",
+        "..oYYYYyyyyddo..",
+        "...oYYYyyyydo...",
+        "...oYYyyyyddo...",
+        "..oYYyyddyyddo..",
+        "..oYyydoodyyddo.",
+        ".oYydoo..oodydo.",
+        ".oydo......oddo.",
+        ".ooo........ooo."
       ]
     },
     {
@@ -112,22 +144,34 @@
       "name": "Crown",
       "description": "For whoever is hosting right now.",
       "availability": "free",
-      "palette": { "o": "FF3D2600", "y": "FFFFD54A", "d": "FFE09A00", "r": "FFFF5C5C", "b": "FF5B9BFF", "g": "FF6BCB6B" },
+      "palette": {
+        "o": "FF3D2600",
+        "Y": "FFFFF08A",
+        "y": "FFFFD54A",
+        "d": "FFE09A00",
+        "D": "FFB87400",
+        "r": "FFFF5C5C",
+        "R": "FFFFC0C0",
+        "b": "FF5B9BFF",
+        "B": "FFCDE2FF",
+        "g": "FF4DD07A",
+        "G": "FFC9F5D7"
+      },
       "art": [
         "................",
-        "................",
-        ".o.....oo.....o.",
+        ".......oo.......",
+        ".o....oRro....o.",
+        "oBo...orro...oGo",
+        "obo....oo....ogo",
         "oyo...oyyo...oyo",
-        "oyo...oyyo...oyo",
-        "oyyo.oyyyyo.oyyo",
-        "oyyyoyyyyyyoyyyo",
-        "oyyyyyyyyyyyyyyo",
-        "oyyyyyyyyyyyyyyo",
-        "oyyryyybbyyygyyo",
-        "oyrrrybbbbygggyo",
-        "oyyryyybbyyygyyo",
-        "oddddddddddddddo",
-        "oyyyyyyyyyyyyyyo",
+        "oYyo.oyYyyo.oyyo",
+        "oYyyoyYYyyyoyydo",
+        "oYyyyyyyyyyyyydo",
+        "oYyyyyyyyyyyyydo",
+        "oddddddddddddDDo",
+        "oyRryyBbyyGgyydo",
+        "oyrryybbyyggyydo",
+        "oddddddddddddDDo",
         ".oooooooooooooo.",
         "................"
       ]
@@ -138,24 +182,31 @@
       "name": "Flame",
       "description": "Keeps the world warm while you're away.",
       "availability": "free",
-      "palette": { "r": "FFE53935", "o": "FFFF8A1E", "y": "FFFFD54A", "w": "FFFFF6C8" },
+      "palette": {
+        "o": "FF4A0E06",
+        "r": "FFE53935",
+        "R": "FFB71C1C",
+        "O": "FFFF8A1E",
+        "y": "FFFFD54A",
+        "w": "FFFFF6C8"
+      },
       "art": [
-        "........r.......",
-        ".......rr.......",
-        "......rrr...r...",
-        "......rrrr..rr..",
-        ".....rrorr..rr..",
-        "..r..rroorr.rrr.",
-        "..rr.rrooorrrrr.",
-        ".rrr.rroooorrrr.",
-        ".rrrrroooyoorrr.",
-        ".rrroooooyyoorr.",
-        "rrroooyyyyyoorrr",
-        "rroooyyywyyyoorr",
-        "rroooyywwwyyoorr",
-        ".rrooyywwwyyorr.",
-        "..rrooyyyyyorr..",
-        "....rrrrrrrr...."
+        "........o.......",
+        ".......oro......",
+        "......orRo...o..",
+        "......orrro.oro.",
+        ".....orrOrro.oro",
+        "..o..orOOrro.oro",
+        ".oro.orOOOrrorro",
+        ".orroorOOyOrrrro",
+        ".orrrrOOyyOOrrro",
+        "orrrOOOOyyyOOrro",
+        "orrOOOyyywyyOOro",
+        "orrOOyyywwwyOOro",
+        "orROOyywwwwyOORo",
+        ".oRROOyywwyyORo.",
+        "..oRRROOOOOORo..",
+        "....oooooooo...."
       ]
     },
     {
@@ -164,24 +215,31 @@
       "name": "Moon",
       "description": "Night shift host.",
       "availability": "free",
-      "palette": { "o": "FF1A1A3A", "m": "FFE8E4C9", "s": "FFB8B39A", "y": "FFFFD54A" },
+      "palette": {
+        "o": "FF16163A",
+        "m": "FFF2EEDA",
+        "M": "FFFFFFFF",
+        "s": "FFC9C3A5",
+        "S": "FF9E987A",
+        "y": "FFFFE066"
+      },
       "art": [
         ".....oooo.......",
-        "...oommmo.....y.",
-        "..ommmmo.....yyy",
-        ".ommmmo.......y.",
-        ".ommmo..........",
+        "...oommMo....y..",
+        "..ommMMo....yyy.",
+        ".ommmMo......y..",
+        ".ommsmo.........",
+        "ommmmo......y...",
+        "omSmmo.....yyy..",
+        "ommmmo......y...",
         "ommmso..........",
-        "ommmo.......y...",
-        "ommmo...........",
-        "ommmo...........",
-        "ommmso..........",
-        ".ommmso.......oo",
-        ".ommmmsoo...ooso",
-        "..ommmmmsoooosmo",
-        "...oommmmmmmmoo.",
-        ".....ooommmoo...",
-        "........ooo....."
+        "ommmmmo.......oo",
+        ".omsmmmoo...oomo",
+        ".ommmSmmmooommso",
+        "..ommmmmmsmmmSo.",
+        "...oommmmmmmoo..",
+        ".....oooooooo...",
+        "................"
       ]
     },
     {
@@ -190,24 +248,137 @@
       "name": "Cat",
       "description": "Sits on your world so nobody else does.",
       "availability": "free",
-      "palette": { "o": "FF1E1E2E", "c": "FFFFA94D", "d": "FFD9772B", "w": "FFFFFFFF", "g": "FF6BCB6B", "p": "FFFF8FB1" },
+      "palette": {
+        "o": "FF1E1E2E",
+        "c": "FFFFA94D",
+        "C": "FFFFC98A",
+        "d": "FFD9772B",
+        "w": "FFFFFFFF",
+        "g": "FF6BCB6B",
+        "k": "FF14141C",
+        "p": "FFFF8FB1",
+        "W": "FFE8E8F0"
+      },
       "art": [
         "................",
         ".oo..........oo.",
-        ".oco........oco.",
-        ".occo......occo.",
-        ".ocpcoooooocpco.",
-        ".occcccccccccco.",
-        "occcdcccccdcccco",
-        "occcccccccccccco",
-        "occgocccccgoccco",
-        "occggcccccggccco",
-        "owccccccccccccwo",
-        "owwccccppccccwwo",
-        "oowwwccoocccwwoo",
-        ".ocwwwcccccwwco.",
-        "..oocccccccccoo.",
-        "....ooooooooo..."
+        ".odo........odo.",
+        ".opdo......odpo.",
+        ".oppcoooooocppo.",
+        ".occcdcccdcccco.",
+        "occcccdcdcccccco",
+        "occCCccccccCCcco",
+        "occgkccccccgkcco",
+        "ocCggcccccggCcco",
+        ".owwccccccccwwo.",
+        ".owwwccppcccwwo.",
+        ".owwwwcoocwwwwo.",
+        "..owwwwwwwwwwo..",
+        "...oowwwwwwoo...",
+        ".....oooooo....."
+      ]
+    },
+    {
+      "id": "gem",
+      "kind": "badge",
+      "name": "Gem",
+      "description": "Found it at diamond level.",
+      "availability": "free",
+      "palette": {
+        "o": "FF062A33",
+        "w": "FFFFFFFF",
+        "L": "FFB8F6FF",
+        "c": "FF5FE3F5",
+        "C": "FF2BB8D6",
+        "D": "FF16809C"
+      },
+      "art": [
+        "................",
+        "................",
+        "....oooooooo....",
+        "...owLLcccCCo...",
+        "..owLLccccCCCo..",
+        ".owLLccccccCCDo.",
+        "oLLLLLLLccccCCDo",
+        ".oLLcccccccCCDo.",
+        "..oLccccccCCDo..",
+        "...oLccccCCDo...",
+        "....oLcccCDo....",
+        ".....oLcCDo.....",
+        "......oLDo......",
+        ".......oo.......",
+        "................",
+        "................"
+      ]
+    },
+    {
+      "id": "planet",
+      "kind": "badge",
+      "name": "Planet",
+      "description": "A whole world, ringed and orbiting.",
+      "availability": "free",
+      "palette": {
+        "o": "FF141A3A",
+        "b": "FF7FB2FF",
+        "B": "FF4A87EA",
+        "D": "FF2F64C4",
+        "g": "FF6BCB6B",
+        "G": "FF3C9A50",
+        "r": "FFFFD9A0",
+        "R": "FFE0A060",
+        "w": "FFFFFFFF"
+      },
+      "art": [
+        "................",
+        ".....oooooo.....",
+        "...oobbbggbBoo..",
+        "..obwbbgggbBBo..",
+        ".obwbbbbgbBBBBo.",
+        ".obbggbbbbBBDBo.",
+        "rrrrrrrrrrrrrrrR",
+        "RRobgggbbBBDDoRR",
+        "..RRRRRRRRRRRRR.",
+        ".obbbbbbBBBDDDo.",
+        "..obbbbBBBDDDo..",
+        "...ooBBBDDDoo...",
+        ".....oooooo.....",
+        "................",
+        "................",
+        "................"
+      ]
+    },
+    {
+      "id": "mushroom",
+      "kind": "badge",
+      "name": "Mushroom",
+      "description": "Red cap, white spots, good vibes.",
+      "availability": "free",
+      "palette": {
+        "o": "FF3A0C0C",
+        "r": "FFE53935",
+        "R": "FFFF6F5E",
+        "d": "FFB71C1C",
+        "w": "FFFFF8EC",
+        "s": "FFF2D7B0",
+        "S": "FFD9B88A"
+      },
+      "art": [
+        "................",
+        ".....oooooo.....",
+        "...ooRRrrrroo...",
+        "..oRRwwrrrwwdo..",
+        ".oRRwwwrrrwwddo.",
+        ".oRrwwrrrrrrddo.",
+        "oRrrrrrrwwrrrddo",
+        "orwwrrrwwwwrrwdo",
+        "orwwrrrrwwrrwwdo",
+        ".odddddddddddddo",
+        "..ooooossssooooo",
+        "......osssSo....",
+        "......ossSSo....",
+        "......osssSo....",
+        ".....oossSSoo...",
+        "......oooooo...."
       ]
     },
     {
@@ -216,25 +387,981 @@
       "name": "Founder",
       "description": "The person who made jukz.",
       "availability": "grant",
-      "palette": { "o": "FF2A1A00", "T": "FFFFE58A", "L": "FFFFC24A", "R": "FFD99100", "W": "FFFFFFFF", "b": "FF5B9BFF" },
+      "palette": {
+        "o": "FF2A1A00",
+        "H": "FFFFF6C8",
+        "T": "FFFFE58A",
+        "L": "FFFFC24A",
+        "l": "FFF0B030",
+        "R": "FFD99100",
+        "r": "FFB87400",
+        "b": "FF5B9BFF",
+        "w": "FFFFFFFF"
+      },
       "art": [
         ".......oo.......",
-        ".....ooTToo.....",
-        "...ooTTWWTToo...",
-        ".ooTTTTWWTTTToo.",
-        "oTTTTWWWWWWTTTTo",
-        "oLLTTTTWWTTTTRRo",
-        "oLLLLTTWWTTRRRRo",
-        "oLLLLLLTTRRRRRRo",
-        "oLLLLLLLRRRbbRRo",
-        "oLLLLLLLRRRRbRRo",
-        "oLLLLLLLRRRRbRRo",
-        "oLLLLLLLRbRRbRRo",
-        ".ooLLLLLRRbbRoo.",
+        ".....ooHHoo.....",
+        "...ooHTwwTHoo...",
+        ".ooHTTTwwTTTHoo.",
+        "oHTTwwwwwwwwTTHo",
+        "oLHHTTTwwTTTHHRo",
+        "oLLLHHTwwTHHRRRo",
+        "oLLLLLHHHHRRRRRo",
+        "oLLlLLLLRRRbbbRo",
+        "oLLLLLLLRRRrbrRo",
+        "oLLLLLlLRRRrbrRo",
+        "oLlLLLLLRbRrbRRo",
+        ".ooLLLLLRrbbRoo.",
         "...ooLLLRRRoo...",
         ".....ooLRoo.....",
         ".......oo......."
       ]
+    },
+    {
+      "id": "top_hat",
+      "kind": "hat",
+      "name": "Top hat",
+      "description": "A classic, with the jukz-blue band.",
+      "availability": "free",
+      "palette": {
+        "k": "FF1A1A22",
+        "e": "FF2C2C38",
+        "b": "FF5B9BFF",
+        "B": "FFD9E8FF",
+        "g": "FF2A2A34",
+        "h": "FF3A3A48"
+      },
+      "model": {
+        "voxel": 1,
+        "origin": [
+          -6,
+          -8.2,
+          -6
+        ],
+        "layers": [
+          [
+            "...eeeeee...",
+            "..eekkkkee..",
+            ".ekkkkkkkke.",
+            "eekkkkkkkkee",
+            "ekkkkkkkkkke",
+            "ekkkkkkkkkke",
+            "ekkkkkkkkkke",
+            "ekkkkkkkkkke",
+            "eekkkkkkkkee",
+            ".ekkkkkkkke.",
+            "..eekkkkee..",
+            "...eeeeee..."
+          ],
+          [
+            "............",
+            "............",
+            "....bBBb....",
+            "...bbbbbb...",
+            "..bbbbbbbb..",
+            "..bbbbbbbb..",
+            "..bbbbbbbb..",
+            "..bbbbbbbb..",
+            "...bbbbbb...",
+            "....bbbb....",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "....bBBb....",
+            "...bbbbbb...",
+            "..bbbbbbbb..",
+            "..bbbbbbbb..",
+            "..bbbbbbbb..",
+            "..bbbbbbbb..",
+            "...bbbbbb...",
+            "....bbbb....",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "....hkkk....",
+            "...hkkkkk...",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "...kkkkkk...",
+            "....kkkk....",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "....hkkk....",
+            "...hkkkkk...",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "...kkkkkk...",
+            "....kkkk....",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "....hkkk....",
+            "...hkkkkk...",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "...kkkkkk...",
+            "....kkkk....",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "....hkkk....",
+            "...hkkkkk...",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "...kkkkkk...",
+            "....kkkk....",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "....hkkk....",
+            "...hkkkkk...",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "..kkkkkkkk..",
+            "...kkkkkk...",
+            "....kkkk....",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "....gggg....",
+            "...gggggg...",
+            "..gggggggg..",
+            "..gggggggg..",
+            "..gggggggg..",
+            "..gggggggg..",
+            "...gggggg...",
+            "....gggg....",
+            "............",
+            "............"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "crown_3d",
+      "kind": "hat",
+      "name": "Crown",
+      "description": "Heavy is the head that hosts.",
+      "availability": "free",
+      "palette": {
+        "y": "FFFFD54A",
+        "Y": "FFFFE58A",
+        "d": "FFC98A00",
+        "w": "FFFFFFFF",
+        "r": "FFFF4D6A",
+        "R": "FFE0213F",
+        "b": "FF4D9BFF",
+        "g": "FF3DDC84"
+      },
+      "model": {
+        "voxel": 1,
+        "origin": [
+          -5,
+          -7.6,
+          -5
+        ],
+        "layers": [
+          [
+            "dddddddddd",
+            "d........d",
+            "d........d",
+            "d........d",
+            "d........d",
+            "d........d",
+            "d........d",
+            "d........d",
+            "d........d",
+            "dddddddddd"
+          ],
+          [
+            "yyyyrryyyy",
+            "y........y",
+            "y........y",
+            "y........y",
+            "b........b",
+            "b........b",
+            "y........y",
+            "y........y",
+            "y........y",
+            "yyyyggyyyy"
+          ],
+          [
+            "yyyyyyyyyy",
+            "y........y",
+            "y........y",
+            "y........y",
+            "y........y",
+            "y........y",
+            "y........y",
+            "y........y",
+            "y........y",
+            "yyyyyyyyyy"
+          ],
+          [
+            "y...yy...y",
+            "..........",
+            "..........",
+            "..........",
+            "y........y",
+            "y........y",
+            "..........",
+            "..........",
+            "..........",
+            "y...yy...y"
+          ],
+          [
+            "Y...RR...Y",
+            "..........",
+            "..........",
+            "..........",
+            "Y........Y",
+            "Y........Y",
+            "..........",
+            "..........",
+            "..........",
+            "Y...YY...Y"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "cat_ears",
+      "kind": "hat",
+      "name": "Cat ears",
+      "description": "For whoever has six cats.",
+      "availability": "free",
+      "palette": {
+        "c": "FFFFA94D",
+        "d": "FFD9772B",
+        "p": "FFFF9EC0"
+      },
+      "model": {
+        "voxel": 1,
+        "origin": [
+          -5,
+          -8.0,
+          -1.5
+        ],
+        "layers": [
+          [
+            "cppp..pppc",
+            "cccc..cccc",
+            "cccc..cccc"
+          ],
+          [
+            "cpc....cpc",
+            "ccc....ccc",
+            "ccc....ccc"
+          ],
+          [
+            "cc......cc",
+            "cc......cc",
+            "cc......cc"
+          ],
+          [
+            "d........d",
+            "d........d",
+            "d........d"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "party_hat",
+      "kind": "hat",
+      "name": "Party hat",
+      "description": "Someone joined. Celebrate.",
+      "availability": "free",
+      "palette": {
+        "p": "FFFF5CA8",
+        "y": "FFFFD54A",
+        "b": "FF5BC8FF",
+        "w": "FFFFFFFF",
+        "W": "FFF2F2F2"
+      },
+      "model": {
+        "voxel": 1,
+        "origin": [
+          -4,
+          -8.0,
+          -4
+        ],
+        "layers": [
+          [
+            "..wwww..",
+            ".wwwwww.",
+            "wwwwwwww",
+            "wwwwwwww",
+            "wwwwwwww",
+            "wwwwwwww",
+            ".wwwwww.",
+            "..wwww.."
+          ],
+          [
+            "........",
+            "..pppp..",
+            ".pppppp.",
+            ".pppppp.",
+            ".pppppp.",
+            ".pppppp.",
+            "..pppp..",
+            "........"
+          ],
+          [
+            "........",
+            "..pppp..",
+            ".pppppp.",
+            ".pppppp.",
+            ".pppppp.",
+            ".pppppp.",
+            "..pppp..",
+            "........"
+          ],
+          [
+            "........",
+            "...yy...",
+            "..yyyy..",
+            ".yyyyyy.",
+            ".yyyyyy.",
+            "..yyyy..",
+            "...yy...",
+            "........"
+          ],
+          [
+            "........",
+            "........",
+            "..pppp..",
+            "..pppp..",
+            "..pppp..",
+            "..pppp..",
+            "........",
+            "........"
+          ],
+          [
+            "........",
+            "........",
+            "...pp...",
+            "..pppp..",
+            "..pppp..",
+            "...pp...",
+            "........",
+            "........"
+          ],
+          [
+            "........",
+            "........",
+            "........",
+            "...bb...",
+            "...bb...",
+            "........",
+            "........",
+            "........"
+          ],
+          [
+            "........",
+            "........",
+            "........",
+            "...pp...",
+            "...pp...",
+            "........",
+            "........",
+            "........"
+          ],
+          [
+            "........",
+            "........",
+            "........",
+            "...pp...",
+            "...pp...",
+            "........",
+            "........",
+            "........"
+          ],
+          [
+            "........",
+            "........",
+            "........",
+            "...ww...",
+            "...ww...",
+            "........",
+            "........",
+            "........"
+          ],
+          [
+            "........",
+            "........",
+            "........",
+            "...WW...",
+            "...WW...",
+            "........",
+            "........",
+            "........"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "halo",
+      "kind": "hat",
+      "name": "Halo",
+      "description": "Floats over the host who never griefs.",
+      "availability": "free",
+      "palette": {
+        "y": "FFFFE066",
+        "w": "FFFFF6C8"
+      },
+      "model": {
+        "voxel": 1,
+        "origin": [
+          -5,
+          -11,
+          -5
+        ],
+        "layers": [
+          [
+            "...yyyy...",
+            ".yywwwwyy.",
+            ".yw....wy.",
+            "yw......wy",
+            "yw......wy",
+            "yw......wy",
+            "yw......wy",
+            ".yw....wy.",
+            ".yywwwwyy.",
+            "...yyyy..."
+          ]
+        ],
+        "animation": "bob"
+      }
+    },
+    {
+      "id": "mushroom_cap",
+      "kind": "hat",
+      "name": "Mushroom cap",
+      "description": "Grown in the dark oak forest.",
+      "availability": "free",
+      "palette": {
+        "r": "FFE53935",
+        "R": "FFFF5A4F",
+        "w": "FFFFF8EC",
+        "c": "FFF2D7B0"
+      },
+      "model": {
+        "voxel": 1,
+        "origin": [
+          -6,
+          -7.8,
+          -6
+        ],
+        "layers": [
+          [
+            ".....rr.....",
+            "...rrrrrr...",
+            "..rccccccr..",
+            ".rccccccccr.",
+            ".rccccccccr.",
+            "rrccccccccrr",
+            "rrccccccccrr",
+            ".rccccccccr.",
+            ".rccccccccr.",
+            "..rccccccr..",
+            "...rrrrrr...",
+            ".....rr....."
+          ],
+          [
+            "...rrrrrr...",
+            "..rrrrrrrr..",
+            ".rrrrrrrrrr.",
+            "rrrrrrrrrrrr",
+            "rrrrrrrrrrrr",
+            "rrrrrrrrrrrr",
+            "rrrrrrrrrrrr",
+            "rrrrrrrrrrrr",
+            "rrrrrrrrrrrr",
+            ".rrrrrrrrrr.",
+            "..rrrrrrrr..",
+            "...rrrrrr..."
+          ],
+          [
+            "....rwrr....",
+            "..rrrrrrrr..",
+            ".rrrrrrrrrr.",
+            ".rrrrrrrrrr.",
+            "rrrrrrrrrrrr",
+            "rrrrrrrrrrrr",
+            "rrrrrrrrrrrr",
+            "rrrrrrrrrrrr",
+            ".wrrrrrrrrw.",
+            ".wrrrrrrrrw.",
+            "..rrrrrrrr..",
+            "....rrwr...."
+          ],
+          [
+            "............",
+            "...rwwwrr...",
+            "..rrrrrrrr..",
+            ".rrrrrrrrwr.",
+            ".rrrrrrrrrw.",
+            ".wrrrrrrrrr.",
+            ".rrrrrrrrrr.",
+            ".wrrrrrrrrw.",
+            ".wwrrrrrrww.",
+            "..rrrrrrrr..",
+            "...rrwwwr...",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "...RRRRRR...",
+            "..RRrrrrRR..",
+            "..RrrrrrrR..",
+            "..RrrrrrrR..",
+            "..RrrrrrrR..",
+            "..RrrrrrrR..",
+            "..RRrrrrRR..",
+            "...RRRRRR...",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "............",
+            ".....RR.....",
+            "....RRRw....",
+            "...wwRwww...",
+            "...wwwRwR...",
+            "....wRRR....",
+            ".....RR.....",
+            "............",
+            "............",
+            "............"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "founder_hat",
+      "kind": "hat",
+      "name": "Founder's hat",
+      "description": "Made jukz. Wears gold.",
+      "availability": "grant",
+      "palette": {
+        "y": "FFFFC24A",
+        "d": "FFE5A82E",
+        "b": "FF5B9BFF",
+        "Y": "FFFFE58A",
+        "w": "FFFFF3C4",
+        "W": "FFFFFFFF"
+      },
+      "model": {
+        "voxel": 1,
+        "origin": [
+          -6,
+          -8.2,
+          -6
+        ],
+        "layers": [
+          [
+            "...dddddd...",
+            "..ddyyyydd..",
+            ".dyyyyyyyyd.",
+            "ddyyyyyyyydd",
+            "dyyyyyyyyyyd",
+            "dyyyyyyyyyyd",
+            "dyyyyyyyyyyd",
+            "dyyyyyyyyyyd",
+            "ddyyyyyyyydd",
+            ".dyyyyyyyyd.",
+            "..ddyyyydd..",
+            "...dddddd..."
+          ],
+          [
+            "............",
+            "............",
+            "....bWWb....",
+            "...bbbbbb...",
+            "..bbbbbbbb..",
+            "..bbbbbbbb..",
+            "..bbbbbbbb..",
+            "..bbbbbbbb..",
+            "...bbbbbb...",
+            "....bbbb....",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "....bWWb....",
+            "...bbbbbb...",
+            "..bbbbbbbb..",
+            "..bbbbbbbb..",
+            "..bbbbbbbb..",
+            "..bbbbbbbb..",
+            "...bbbbbb...",
+            "....bbbb....",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "....wyyy....",
+            "...wyyyyy...",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "...yyyyyy...",
+            "....yyyy....",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "....wyyy....",
+            "...wyyyyy...",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "...yyyyyy...",
+            "....yyyy....",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "....wyyy....",
+            "...wyyyyy...",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "...yyyyyy...",
+            "....yyyy....",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "....wyyy....",
+            "...wyyyyy...",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "...yyyyyy...",
+            "....yyyy....",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "....wyyy....",
+            "...wyyyyy...",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "..yyyyyyyy..",
+            "...yyyyyy...",
+            "....yyyy....",
+            "............",
+            "............"
+          ],
+          [
+            "............",
+            "............",
+            "....YYYY....",
+            "...YYYYYY...",
+            "..YYYYYYYY..",
+            "..YYYYYYYY..",
+            "..YYYYYYYY..",
+            "..YYYYYYYY..",
+            "...YYYYYY...",
+            "....YYYY....",
+            "............",
+            "............"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "sunglasses",
+      "kind": "face",
+      "name": "Sunglasses",
+      "description": "Too cool for the spawn chunks.",
+      "availability": "free",
+      "palette": {
+        "k": "FF15151C",
+        "l": "E01C2B4A",
+        "s": "F0AFC8FF"
+      },
+      "model": {
+        "voxel": 1,
+        "origin": [
+          -5,
+          -3,
+          -4.75
+        ],
+        "layers": [
+          [
+            "ksll..sllk",
+            "..........",
+            "..........",
+            "..........",
+            "..........",
+            "..........",
+            "..........",
+            "..........",
+            ".........."
+          ],
+          [
+            "kkkkkkkkkk",
+            "k........k",
+            "k........k",
+            "k........k",
+            "k........k",
+            "k........k",
+            "k........k",
+            "k........k",
+            "k........k"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "glasses_3d",
+      "kind": "face",
+      "name": "3D glasses",
+      "description": "The world looks deeper now.",
+      "availability": "free",
+      "palette": {
+        "w": "FFF4F4F4",
+        "r": "D0FF3B3B",
+        "c": "D03BE0FF"
+      },
+      "model": {
+        "voxel": 1,
+        "origin": [
+          -5,
+          -3,
+          -4.75
+        ],
+        "layers": [
+          [
+            "wrrr..cccw",
+            "..........",
+            "..........",
+            "..........",
+            "..........",
+            "..........",
+            "..........",
+            "..........",
+            ".........."
+          ],
+          [
+            "wwwwwwwwww",
+            "w........w",
+            "w........w",
+            "w........w",
+            "w........w",
+            "w........w",
+            "w........w",
+            "w........w",
+            "w........w"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "mustache",
+      "kind": "face",
+      "name": "Mustache",
+      "description": "Distinguished.",
+      "availability": "free",
+      "palette": {
+        "m": "FF4A2C17",
+        "d": "FF2E1A0C"
+      },
+      "model": {
+        "voxel": 1,
+        "origin": [
+          -4,
+          -0.75,
+          -4.75
+        ],
+        "layers": [
+          [
+            "dmm..mmd"
+          ],
+          [
+            "..mmmm.."
+          ]
+        ]
+      }
+    },
+    {
+      "id": "jukz_pack",
+      "kind": "back",
+      "name": "jukz pack",
+      "description": "Carries the world around.",
+      "availability": "free",
+      "palette": {
+        "b": "FF5B9BFF",
+        "d": "FF2F64C4",
+        "l": "FF8DBBFF",
+        "w": "FFFFFFFF",
+        "y": "FFFFC24A"
+      },
+      "model": {
+        "voxel": 1,
+        "origin": [
+          -3,
+          10,
+          2
+        ],
+        "layers": [
+          [
+            "dbbbbd",
+            "dbbbbd",
+            "dbbbbd"
+          ],
+          [
+            "dbbbbd",
+            "dbbbbd",
+            "dbbbbd"
+          ],
+          [
+            "dbbbbd",
+            "dbbbbd",
+            "dbwwbd"
+          ],
+          [
+            "dbbbbd",
+            "dbbbbd",
+            "dwbbwd"
+          ],
+          [
+            "dbbbbd",
+            "dbbbbd",
+            "dwbbbd"
+          ],
+          [
+            "dbbbbd",
+            "dbbbbd",
+            "dwddbd"
+          ],
+          [
+            "llllll",
+            "llllll",
+            "lllyll"
+          ],
+          [
+            "llllll",
+            "llllll",
+            "llllll"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "wings",
+      "kind": "back",
+      "name": "Wings",
+      "description": "Not a cape. Promise.",
+      "availability": "free",
+      "palette": {
+        "w": "FFFFFFFF",
+        "g": "FFD6DCE8",
+        "b": "FFA9CCFF"
+      },
+      "model": {
+        "voxel": 1,
+        "origin": [
+          -11,
+          10,
+          2.6
+        ],
+        "layers": [
+          [
+            "........bb..bb........"
+          ],
+          [
+            "......bbgw..wgbb......"
+          ],
+          [
+            ".....bbggw..wggbb....."
+          ],
+          [
+            "....bggwww..wwwggb...."
+          ],
+          [
+            "...bggwwww..wwwwggb..."
+          ],
+          [
+            "..bggwwwww..wwwwwggb.."
+          ],
+          [
+            "..ggwwwwww..wwwwwwgg.."
+          ],
+          [
+            ".ggwwwwwww..wwwwwwwgg."
+          ],
+          [
+            ".gwwwwwww....wwwwwwwg."
+          ],
+          [
+            "gwwwwww........wwwwwwg"
+          ],
+          [
+            "wwwww............wwwww"
+          ],
+          [
+            "www................www"
+          ],
+          [
+            "ww..................ww"
+          ]
+        ]
+      }
     }
   ]
 }
