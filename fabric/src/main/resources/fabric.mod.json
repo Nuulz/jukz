@@ -5,6 +5,7 @@
   "name": "Joining Every Known Zone (JUKZ)",
   "description": "Per-world UUID with serverless P2P discovery: each world lives in one place at a time, with rotating host ownership.",
   "authors": ["Nobz"],
+  "icon": "assets/jukz/icon.png",
   "contact": {
     "homepage": "https://nuulm.com/jukz",
     "sources": "https://github.com/Nuulz/jukz",
