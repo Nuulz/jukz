@@ -339,7 +339,7 @@ object JoinCoordinator {
         val savesDir = client.levelStorage.savesDirectory
         val levelName = WorldSaveLocator.findLevelName(savesDir, worldId.uuid) ?: return null
         val saveDir = savesDir.resolve(levelName)
-        val generation = WorldIdSidecar.read(saveDir)?.generation ?: return null
+        val generation = WorldIdSidecar.generation(saveDir) ?: return null
         return SnapshotMarker(generation, JGitWorldSync().headCommit(saveDir) ?: "")
     }
 

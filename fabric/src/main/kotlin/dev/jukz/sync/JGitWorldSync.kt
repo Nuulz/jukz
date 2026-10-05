@@ -48,7 +48,7 @@ class JGitWorldSync(
 ) : WorldSync {
 
     override fun currentGeneration(saveDir: Path): Long =
-        WorldIdSidecar.read(saveDir)?.generation ?: 0L
+        WorldIdSidecar.generation(saveDir) ?: 0L
 
     /**
      * The current snapshot commit id of the local world repo in [saveDir], or null when there is no

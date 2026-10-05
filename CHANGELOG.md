@@ -13,7 +13,9 @@ gets its section as notes. Write them for players, not developers.
 - Your worlds follow your account (Microsoft accounts): worlds you back up to the cloud come over on their own when you start the game on another PC. Singleplayer → My cloud lists them.
 - Worlds travel about half the size: cloud backups and handoffs are compressed far better, with nothing left out (a new world: ~9.5 MB → ~4.6 MB).
 - Accounts are optional. Without one: cloud backups up to 40 MB, kept 30 days, 10 a day. Playing signed in with a Microsoft account: up to 95 MB, kept 180 days, 60 a day, plus your worlds on every PC and cosmetics. If a backup is over the limit, jukz says so instead of retrying.
-- Your account page at nuulm.com/jukz/cuenta (Cosmetics or My cloud → My account): your plan and usage, cloud worlds, a password, and "delete my data".
+- Your account, in game: the person icon on the title screen (or Singleplayer / Cosmetics → My account) shows your plan and today's backups, the worlds in your cloud (bring one here, or forget it) and the worlds only on this PC, with an Upload button so your other PCs get them.
+- The website account page (nuulm.com/jukz/cuenta) keeps the password and "delete my data".
+- Fixed: a world's saved generation stayed one behind after hosting, so opening it re-downloaded your own cloud copy, and uploading it from the menu was refused.
 - This screen: after an update, jukz tells you what changed.
 - Ko-fi button on the title screen, for anyone who wants to help pay for the servers. Nothing is locked behind it.
 

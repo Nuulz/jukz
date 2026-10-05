@@ -173,6 +173,9 @@ object R2SnapshotStore {
         CloudWorlds.uploadHeaders(worldId).forEach { (name, value) -> builder.header(name, value) }
         val request = builder.build()
         val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        if (response.statusCode() == 409) {
+            throw Refusal("the cloud already has a newer copy of this world (open it to get it first)")
+        }
         if (response.statusCode() == 413 || response.statusCode() == 429) {
             val message = runCatching { JsonParser.parseString(response.body()).asJsonObject.get("message").asString }.getOrNull()
             throw Refusal(message ?: "over the cloud backup limit")

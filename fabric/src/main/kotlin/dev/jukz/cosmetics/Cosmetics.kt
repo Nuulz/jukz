@@ -154,11 +154,17 @@ object Cosmetics {
     fun accountPageUrl(done: (String) -> Unit) = pageUrl("account", ACCOUNT_PAGE, done)
 
     private fun pageUrl(page: String?, fallback: String, done: (String) -> Unit) {
-        val me = account as? Account.SignedIn ?: return done(fallback)
+        val me = account as? Account.SignedIn ?: return done(localized(fallback))
         worker.execute {
             val body = JsonObject().apply { page?.let { addProperty("page", it) } }
-            done(runCatching { call("/creator-link", body, me.token).get("url").asString }.getOrDefault(fallback))
+            done(localized(runCatching { call("/creator-link", body, me.token).get("url").asString }.getOrDefault(fallback)))
         }
+    }
+
+    /** The site's Spanish pages (/es/jukz/…) when the game is in Spanish. */
+    private fun localized(url: String): String {
+        val language = runCatching { MinecraftClient.getInstance().options.language }.getOrDefault("")
+        return if (language.startsWith("es")) url.replace("nuulm.com/jukz/", "nuulm.com/es/jukz/") else url
     }
 
     // ---- network ------------------------------------------------------------------------------

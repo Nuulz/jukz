@@ -74,7 +74,9 @@ object WorldOpenInterceptor {
             // strictly newer than what we hold on disk — if so, pull it and take over, so opening the
             // world from the singleplayer list gets "the world lives in one place" too, not only the
             // join-by-code flow. Probe off the render thread; the generation lives in the head object.
-            val localGen = readSidecar(levelName)?.generation ?: -1L
+            val localGen = runCatching {
+                WorldIdSidecar.generation(MinecraftClient.getInstance().levelStorage.savesDirectory.resolve(levelName))
+            }.getOrNull() ?: -1L
             // Our copy's key signs the request (a keyed world's backup only goes to key holders).
             runCatching { WorldKeyStore.loadExisting(client.levelStorage.savesDirectory.resolve(levelName), worldId) }
             val ghost = runCatching { R2SnapshotStore.ghostSnapshot(worldId) }.getOrNull()

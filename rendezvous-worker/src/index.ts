@@ -168,6 +168,7 @@ function checkAuth(request: Request, env: Env): Response | null {
 // ---- cloud worlds per account ----------------------------------------------------------------------
 // A premium player's backed-up worlds (recorded at upload, above) follow their account: another PC
 // signed in as them lists them and downloads them without the world key — the key is inside the pack.
+//  - GET  /v1/account/summary                   → plan, limits, usage today, worlds, cosmetics, creations
 //  - GET  /v1/account/worlds                    → {worlds: [{worldId, name, generation, updated}]}
 //  - POST /v1/account/worlds/<id>/download      → {packUrl, headUrl} (signed GET URLs)
 //  - POST /v1/account/worlds/<id>/forget        drop it from the account (the backup stays)
@@ -184,6 +185,10 @@ async function handleAccount(request: Request, env: Env, url: URL): Promise<Resp
   const player = await sessionPlayer(request, env);
   if (!player) return error(401, "sign in with a Microsoft account first");
   const store = cosmeticsStore(env);
+  if (request.method === "GET" && url.pathname === "/v1/account/summary") {
+    // The in-game account screen: everything at once, with the limits of this (signed-in) plan.
+    return json(200, { ...(await store.playerSummary(player, dayKey(Date.now()))), tier: "account", limits: LIMITS });
+  }
   if (request.method === "GET" && url.pathname === "/v1/account/worlds") {
     return json(200, { worlds: await store.accountWorlds(player) });
   }
@@ -233,7 +238,11 @@ async function snapshotUploadUrl(request: Request, env: Env, url: URL): Promise<
   const subject = usageSubject(player, request.headers.get("cf-connecting-ip") ?? "unknown");
   const day = dayKey(Date.now());
   const declared = Number.isSafeInteger(body.size) ? (body.size as number) : undefined;
-  const allowed = checkUpload(tier, declared, await store.uploadsToday(subject, day));
+  // Local testing only (`wrangler dev --var DEV_MAX_SNAPSHOT_BYTES:…`): a tiny cap to see the refusal in game.
+  const devMax = Number(env.DEV_MAX_SNAPSHOT_BYTES) || 0;
+  const allowed = devMax && declared !== undefined && declared > devMax
+    ? { ok: false as const, status: 413 as const, message: `this world is ${Math.round(declared / 1048576)} MB; cloud backups are up to ${Math.round(devMax / 1048576)} MB (test limit)` }
+    : checkUpload(tier, declared, await store.uploadsToday(subject, day));
   if (!allowed.ok) {
     console.log(`snapshot upload refused world=${worldId} tier=${tier} (${allowed.message})`);
     return json(allowed.status, { status: "limit", message: allowed.message });

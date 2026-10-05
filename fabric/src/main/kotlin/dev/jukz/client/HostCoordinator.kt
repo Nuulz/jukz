@@ -19,6 +19,7 @@ import dev.jukz.transport.UpnpPortForwarder
 import dev.jukz.transport.WsRelayClient
 import dev.jukz.world.WorldAccessFlag
 import dev.jukz.world.WorldKeyStore
+import dev.jukz.world.WorldIdSidecar
 import dev.jukz.world.WorldIdState
 import kotlinx.coroutines.runBlocking
 import net.minecraft.client.MinecraftClient
@@ -155,6 +156,9 @@ object HostCoordinator {
         server.execute {
             val state = WorldIdState.get(server.overworld)
             val generation = state.incrementGeneration()
+            // Keep jukz.dat in step: it is what's read while the world is closed (menu uploads, the
+            // "newer cloud copy?" check on open). It used to keep the pre-bump value, one behind.
+            runCatching { WorldIdSidecar.write(server, state) }
             future.complete(WorldId.of(state.worldId) to generation)
         }
         return future.get()

@@ -320,6 +320,23 @@ export class CosmeticsStore extends DurableObject<Env> {
     };
   }
 
+  /** The in-game account screen's summary, for a signed-in player (cosmetics session). */
+  playerSummary(playerId: string, day: string) {
+    const profile = this.sql.exec<{ name: string }>("SELECT name FROM profiles WHERE id = ?", playerId).toArray()[0];
+    const creator = this.sql.exec<{ account: string }>("SELECT account FROM creators WHERE player_id = ?", playerId).toArray()[0];
+    const submissions = creator ? this.submissionRows("WHERE account = ?", creator.account) : [];
+    return {
+      name: profile?.name ?? "",
+      uploadsToday: this.uploadsToday(`player:${playerId}`, day),
+      worlds: this.accountWorlds(playerId),
+      owned: ownedItems(catalog, this.grants(playerId)).length,
+      creator: creator ? {
+        published: submissions.filter((s) => s.status === "published").length,
+        pending: submissions.filter((s) => s.status === "pending").length,
+      } : null,
+    };
+  }
+
   /**
    * Delete everything jukz keeps about this account: the page account, its uploads (whose files the
    * caller removes from R2), and — if it is tied to a Minecraft account — the cosmetics profile, picks,

@@ -38,6 +38,37 @@ object UiIcons {
         ),
     )
 
+    /** A player bust in a jukz-blue frame: your account. */
+    val ACCOUNT: CosmeticCatalog.Art = CosmeticCatalog.art(
+        listOf(
+            "................",
+            ".....oooooo.....",
+            "....osssssso....",
+            "...osssssssso...",
+            "...oskksskkso...",
+            "...osWksskWso...",
+            "...osssssssso...",
+            "....ossppsso....",
+            ".....oooooo.....",
+            "...oobbbbbboo...",
+            "..obbbbbbbbbbo..",
+            ".obbbbbwwbbbbbo.",
+            ".obbbbbwwbbbbbo.",
+            ".obbbbbbbbbbbbo.",
+            ".oooooooooooooo.",
+            "................",
+        ),
+        mapOf(
+            'o' to 0xFF0B1A33.toInt(),
+            's' to 0xFFF2C9A0.toInt(),
+            'k' to 0xFF3A2A20.toInt(),
+            'W' to 0xFFFFFFFF.toInt(),
+            'b' to 0xFF5B9BFF.toInt(),
+            'w' to 0xFFD6E7FF.toInt(),
+            'p' to 0xFFC98A70.toInt(),
+        ),
+    )
+
     /** The default badge (the jukz world cube), for the cosmetics button. */
     fun jukz(): CosmeticCatalog.Art? = Cosmetics.catalog.item(Cosmetics.catalog.defaultBadge)?.art
 }

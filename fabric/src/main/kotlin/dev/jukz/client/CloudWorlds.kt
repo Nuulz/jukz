@@ -106,6 +106,108 @@ object CloudWorlds {
         }
     }
 
+    // ---- the account screen ------------------------------------------------------------------
+
+    /** What the account screen shows for a signed-in player (GET /v1/account/summary). */
+    class Summary(
+        val name: String,
+        val uploadsToday: Int,
+        val uploadsPerDay: Int,
+        val maxBackupMb: Int,
+        val keepDays: Int,
+        val ownedCosmetics: Int,
+        val creationsPublished: Int?,
+        val creationsPending: Int?,
+    )
+
+    @Volatile var summary: Summary? = null
+        private set
+
+    /** A jukz world in this PC's saves/, by folder, with the name the game shows. */
+    class LocalWorld(val folder: String, val name: String, val worldId: UUID, val generation: Long)
+
+    enum class Upload { UPLOADING, DONE, FAILED }
+
+    /** Per local world: the last "upload to my cloud" attempt, and its message for the screen. */
+    val uploads = java.util.concurrent.ConcurrentHashMap<UUID, Pair<Upload, String>>()
+
+    /** Refresh the summary and the cloud world list together; [done] runs on the client thread. */
+    fun refreshAccount(done: () -> Unit = {}) {
+        worker.execute {
+            refreshAccountNow()
+            MinecraftClient.getInstance().execute(done)
+        }
+    }
+
+    private fun refreshAccountNow() {
+            runCatching {
+                val o = JsonParser.parseString(send(request("/v1/account/summary").GET())).asJsonObject
+                val limits = o.getAsJsonObject("limits").getAsJsonObject(o.get("tier").asString)
+                val creator = o.get("creator")?.takeIf { !it.isJsonNull }?.asJsonObject
+                summary = Summary(
+                    name = o.get("name").asString,
+                    uploadsToday = o.get("uploadsToday").asInt,
+                    uploadsPerDay = limits.get("uploadsPerDay").asInt,
+                    maxBackupMb = (limits.get("maxSnapshotBytes").asLong / 1_048_576).toInt(),
+                    keepDays = limits.get("keepDays").asInt,
+                    ownedCosmetics = o.get("owned").asInt,
+                    creationsPublished = creator?.get("published")?.asInt,
+                    creationsPending = creator?.get("pending")?.asInt,
+                )
+                worlds = o.getAsJsonArray("worlds").map {
+                    val w = it.asJsonObject
+                    World(UUID.fromString(w.get("worldId").asString), w.get("name").asString, w.get("generation").asLong, w.get("updated").asLong)
+                }
+            }.onFailure { JukzMod.logger.info("jukz: account summary unavailable ({})", it.message) }
+    }
+
+    /** The jukz worlds in this PC's saves/ (those with a world id), newest folder first. */
+    fun localWorlds(): List<LocalWorld> = runCatching {
+        Files.list(savesDir()).use { stream ->
+            stream.filter { Files.isDirectory(it) }.toList().mapNotNull { dir ->
+                val info = runCatching { dev.jukz.world.WorldIdSidecar.read(dir) }.getOrNull() ?: return@mapNotNull null
+                LocalWorld(dir.fileName.toString(), levelName(dir) ?: dir.fileName.toString(), info.worldId,
+                    dev.jukz.world.WorldIdSidecar.generation(dir) ?: info.generation)
+            }.sortedByDescending { runCatching { Files.getLastModifiedTime(savesDir().resolve(it.folder)).toMillis() }.getOrDefault(0L) }
+        }
+    }.getOrDefault(emptyList())
+
+    /**
+     * Back a world of this PC up to the cloud, on this account — what closing it alone does, from the
+     * menu. Not for the world that is open right now (the game is still writing it).
+     */
+    fun upload(world: LocalWorld, done: () -> Unit = {}) {
+        uploads[world.worldId] = Upload.UPLOADING to "packing…"
+        worker.execute {
+            val result = runCatching {
+                val saveDir = savesDir().resolve(world.folder)
+                val worldId = WorldId(world.worldId)
+                dev.jukz.world.WorldKeyStore.loadOrCreate(saveDir, worldId) // uploads are signed with the world key
+                val pack = dev.jukz.sync.SnapshotPack.build(saveDir, JGitWorldSync(), dev.jukz.sync.SnapshotCodec.Level.SMALL)
+                    ?: error("couldn't pack the world")
+                uploads[world.worldId] = Upload.UPLOADING to "uploading %.1f MB…".format(pack.bytes.size / 1_048_576.0)
+                R2SnapshotStore.uploadGhost(worldId, world.generation, pack.bytes, pack.head) { sent, total ->
+                    if (total > 0) uploads[world.worldId] = Upload.UPLOADING to "uploading %.1f / %.1f MB…".format(sent / 1_048_576.0, total / 1_048_576.0)
+                }
+            }.getOrElse { R2SnapshotStore.UploadResult.Refused(it.message ?: "failed") }
+            uploads[world.worldId] = when (result) {
+                R2SnapshotStore.UploadResult.Done -> Upload.DONE to "in your cloud"
+                is R2SnapshotStore.UploadResult.Refused -> Upload.FAILED to result.message
+                R2SnapshotStore.UploadResult.Retry -> Upload.FAILED to "couldn't reach the server; try again"
+            }
+            if (result == R2SnapshotStore.UploadResult.Done) {
+                Seen.add(world.worldId) // it's here already: never "bring" it back
+                refreshAccountNow() // the list and today's count
+            }
+            MinecraftClient.getInstance().execute(done)
+        }
+    }
+
+    private fun levelName(dir: Path): String? = runCatching {
+        val root = net.minecraft.nbt.NbtIo.readCompressed(dir.resolve("level.dat"), net.minecraft.nbt.NbtSizeTracker.ofUnlimitedBytes())
+        root.getCompound("Data").getString("LevelName").takeIf { it.isNotBlank() }
+    }.getOrNull()
+
     // ---- work (worker thread) -----------------------------------------------------------------
 
     private fun refreshNow(): List<World> {

@@ -3,7 +3,7 @@ package dev.jukz
 import dev.jukz.client.GuestSession
 import dev.jukz.client.HostCoordinator
 import dev.jukz.client.CloudWorlds
-import dev.jukz.client.gui.CloudWorldsScreen
+import dev.jukz.client.gui.AccountScreen
 import dev.jukz.client.gui.CosmeticsScreen
 import dev.jukz.client.gui.IconButton
 import dev.jukz.client.gui.SupportScreen
@@ -92,9 +92,9 @@ object JukzClient : ClientModInitializer {
 
                 is SelectWorldScreen -> {
                     addCopyCodeButton(screen, scaledWidth, scaledHeight)
-                    // Your worlds from other PCs (premium accounts): top-right, clear of the search box.
-                    Screens.getButtons(screen).add(ButtonWidget.builder(Text.literal("My cloud")) {
-                        client.setScreen(CloudWorldsScreen(screen))
+                    // Your account and your worlds on other PCs: top-right, clear of the search box.
+                    Screens.getButtons(screen).add(ButtonWidget.builder(Text.literal("My account")) {
+                        client.setScreen(AccountScreen(screen))
                     }.dimensions(scaledWidth - 84, 4, 80, 20).build())
                 }
 
@@ -252,6 +252,9 @@ object JukzClient : ClientModInitializer {
         val y = options.y
         val left = options.x - 24 - 24 // past vanilla's language button
         val right = options.x + 200 + 4 + 24 // past vanilla's accessibility button
+        buttons.add(IconButton(left - 24, y, { UiIcons.ACCOUNT }, Text.literal("Your jukz account")) {
+            MinecraftClient.getInstance().setScreen(AccountScreen(screen))
+        })
         buttons.add(IconButton(left, y, UiIcons::jukz, Text.literal("jukz cosmetics")) {
             MinecraftClient.getInstance().setScreen(CosmeticsScreen(screen))
         })

@@ -33,6 +33,8 @@ export interface Env {
   CREATIONS: R2Bucket;
   /** Where the creators page lives (the mod's link points there); defaults to nuulm.com/jukz/crear. */
   CREATORS_PAGE_URL?: string;
+  /** Local testing only: a tiny cloud backup cap, to see the "over the limit" screen. Never set in production. */
+  DEV_MAX_SNAPSHOT_BYTES?: string;
   /** Local dev only: let offline accounts sign in to cosmetics without Mojang. Never set in production. */
   COSMETICS_DEV_UNVERIFIED?: string;
   /** Optional base URL for signed snapshot URLs (wrangler dev rewrites the request host to the route). */

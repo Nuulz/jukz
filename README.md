@@ -62,9 +62,11 @@ Signing in is optional: jukz works the same without an account, with smaller clo
 - The limits are only about the **copy in the cloud**. Worlds on your PC never expire, and a world that
   is over the limit still plays and hands off normally; it just isn't backed up (the game says so).
 - A fresh world is ~4.6 MB compressed, so 40 MB covers well-played worlds.
-- Your account page, **[nuulm.com/jukz/cuenta](https://nuulm.com/jukz/cuenta)** (in game: Cosmetics or My
-  cloud → **My account**, already signed in), shows your plan and usage, your cloud worlds, sets a
-  password and **deletes your data**. World backups aren't deleted with it, since friends may be playing
+- **In game**, the person icon on the title screen (also Singleplayer / Cosmetics → **My account**) is your
+  account: plan and today's backups, the worlds in your cloud (bring one here or forget it), and the worlds
+  only on this PC with an **Upload** button, so your other PCs get them.
+- The website, **[nuulm.com/jukz/cuenta](https://nuulm.com/jukz/cuenta)** (the Website button opens it signed
+  in), sets a password and **deletes your data**. World backups aren't deleted with it, since friends may be playing
   them; they expire on their own.
 
 ### Who can do what
@@ -157,7 +159,7 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     game uses. End-to-end loopback tests run a real host against a real guest (discovery → handshake →
     byte relay → handoff / close). `ForwardingEndpointResolver` + `PortForwarder` keep router
     port-opening best-effort: it never fails the host.
-- **`fabric` (55 tests, plus the in-game runs above):**
+- **`fabric` (57 tests, plus the in-game runs above):**
   - World identity: `WorldIdState` (1.21.1 `PersistentState`) + `WorldIdSidecar` (pre-start
     `jukz.dat`), and `WorldSaveLocator` to find a world's save by UUID.
   - **Auto-host on open** — `HostCoordinator` (on `ClientPlayConnectionEvents.JOIN`) bumps the fence
@@ -222,7 +224,8 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     upload; the Worker remembers the world on that account (`/v1/account/worlds`, max 50). `CloudWorlds`
     signs in at the title screen, brings worlds this PC never had into `saves/` (the world key is inside
     the pack, so this PC hosts them like the first) and won't bring back one deleted here
-    (`config/jukz-cloud-worlds.properties`); `CloudWorldsScreen` is Singleplayer → **My cloud**. Validated
+    (`config/jukz-cloud-worlds.properties`); `AccountScreen` (title screen, Singleplayer, Cosmetics) lists them
+    with the account's plan (`GET /v1/account/summary`) and uploads a closed world from the menu. Validated
     with two run folders on one account: PC 2 brought the world and hosted it live at the next generation.
   - **Community cosmetics** — `CosmeticsScreen`'s **Make your own** opens nuulm.com/jukz/crear with a
     15-minute link signed by the Worker for the signed-in account, which verifies the page account (that's

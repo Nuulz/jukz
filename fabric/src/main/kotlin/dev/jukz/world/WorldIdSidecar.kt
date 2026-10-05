@@ -35,6 +35,19 @@ object WorldIdSidecar {
         write(server.getSavePath(WorldSavePath.ROOT), Info(state.worldId, state.generation))
     }
 
+    /**
+     * The world's real generation while it is closed: the larger of jukz.dat and the world's own
+     * `data/jukz_world_id.dat`. Saves written before jukz.dat followed every bump lag one behind.
+     */
+    fun generation(saveRoot: Path): Long? {
+        val sidecar = runCatching { read(saveRoot)?.generation }.getOrNull()
+        val inWorld = runCatching {
+            NbtIo.readCompressed(saveRoot.resolve("data").resolve("jukz_world_id.dat"), net.minecraft.nbt.NbtSizeTracker.ofUnlimitedBytes())
+                .getCompound("data").takeIf { it.contains("generation") }?.getLong("generation")
+        }.getOrNull()
+        return listOfNotNull(sidecar, inWorld).maxOrNull()
+    }
+
     fun write(saveRoot: Path, info: Info) {
         val nbt = NbtCompound()
         nbt.putUuid(KEY_WORLD_ID, info.worldId)
