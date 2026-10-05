@@ -25,6 +25,8 @@ import {
 export interface Env {
   HUB: DurableObjectNamespace<RendezvousHub>;
   COSMETICS: DurableObjectNamespace<import("./cosmetics.ts").CosmeticsStore>;
+  /** Anti-abuse counters, one instance per device / address / player (see guard.ts). */
+  GUARD: DurableObjectNamespace<import("./guard.ts").Guard>;
   SNAPSHOTS: R2Bucket;
   SNAPSHOT_SIGNING_KEY?: string;
   RENDEZVOUS_AUTH_TOKEN?: string;

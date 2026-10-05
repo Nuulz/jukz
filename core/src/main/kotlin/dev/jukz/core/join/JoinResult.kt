@@ -25,6 +25,9 @@ sealed interface JoinResult {
      */
     data class WrongVersion(val host: GameVersion) : JoinResult
 
+    /** The rendezvous refused: too many worlds opened or joined in a short time. Nothing was dialled. */
+    data class Limited(val retryAfterSecs: Long) : JoinResult
+
     /** Transport or handshake error before a successful hand-off. */
     data class Failed(val reason: String) : JoinResult
 }

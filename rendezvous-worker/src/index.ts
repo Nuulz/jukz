@@ -6,6 +6,7 @@
 //  - /v1/cosmetics/*                                                               (badges, see cosmetics.ts)
 //  - /v1/creators/*                                                                (creators page, creators.ts)
 //  - /v1/account/worlds                                                           (a player's cloud worlds)
+//  - POST /v1/device/{challenge,register}                                          (anti-abuse, guard.ts)
 //  - GET  /healthz
 // State lives in Durable Objects sharded by world (`world:<id>`: record + snapshot fence) and by relay
 // session (`relay:<shard>`), so one world's traffic never queues another's. Snapshot bytes never touch
@@ -14,12 +15,14 @@
 
 import { CosmeticsStore, cosmeticsStore, handleCosmetics, sessionPlayer } from "./cosmetics.ts";
 import { corsHeaders, handleCreators } from "./creators.ts";
+import { Guard, guardWorldCall, handleDevice } from "./guard.ts";
+import { INTENT_HEADER } from "./guard-logic.ts";
 import { CLIENT_IP_HEADER, type Env, RendezvousHub } from "./hub.ts";
 import { BadRequest, parseWorldId, relayShard, shardOfNonce, parseGameHeader } from "./logic.ts";
 import { LIMITS, checkUpload, dayKey, expired, parseTier, tierOf, usageSubject } from "./limits.ts";
 import { signBlobUrl, verifyBlobUrl, URL_TTL_SECS } from "./signing.ts";
 
-export { CosmeticsStore, RendezvousHub };
+export { CosmeticsStore, Guard, RendezvousHub };
 
 const MAX_BODY_BYTES = 4 * 1024;
 
@@ -66,6 +69,15 @@ export default {
       const headers = new Headers(response.headers);
       for (const [k, v] of Object.entries(cors)) headers.set(k, v);
       return new Response(response.body, { status: response.status, headers });
+    }
+
+    if (path.startsWith("/v1/device/")) {
+      try {
+        return await handleDevice(request, env, url);
+      } catch (e) {
+        if (e instanceof SyntaxError) return error(400, "malformed JSON body");
+        throw e;
+      }
     }
 
     if (path.startsWith("/v1/account/")) {
@@ -147,12 +159,20 @@ async function routeToShard(request: Request, env: Env, url: URL): Promise<Respo
 
   const lookup = path.match(/^\/v1\/worlds\/([^/]+)$/);
   if (lookup && request.method === "GET") {
-    return hub(env, `world:${parseWorldId(lookup[1])}`).fetch(new Request(request, { headers }));
+    const worldId = parseWorldId(lookup[1]);
+    const kind = request.headers.get(INTENT_HEADER) === "join" ? "join" : "peek";
+    const refused = await guardWorldCall(request, env, kind, worldId, "");
+    if (refused) return refused;
+    return hub(env, `world:${worldId}`).fetch(new Request(request, { headers }));
   }
   if (["/v1/announce", "/v1/heartbeat", "/v1/withdraw"].includes(path) && request.method === "POST") {
     // The world id is in the (≤ 4 KB) body: read it once, route on it, forward the same bytes.
     const text = await request.text();
     const worldId = parseWorldId((JSON.parse(text) as Record<string, unknown>).worldId);
+    if (path === "/v1/announce") {
+      const refused = await guardWorldCall(request, env, "open", worldId, text);
+      if (refused) return refused;
+    }
     return hub(env, `world:${worldId}`).fetch(new Request(request.url, { method: "POST", headers, body: text }));
   }
   return error(404, "not found");

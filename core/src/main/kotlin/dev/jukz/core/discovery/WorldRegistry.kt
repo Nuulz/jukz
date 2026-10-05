@@ -35,6 +35,12 @@ interface WorldRegistry {
     /** The current live record for [worldId], or null if none / expired. */
     suspend fun lookup(worldId: WorldId): WorldRecord?
 
+    /**
+     * [lookup] made to join the world: the rendezvous counts it against the anti-abuse limit (a plain
+     * lookup is a menu badge refreshing). Throws [dev.jukz.core.guard.DiscoveryLimited] when refused.
+     */
+    suspend fun lookupToJoin(worldId: WorldId): WorldRecord? = lookup(worldId)
+
     /** Remove the record only if its token equals [token] (don't clobber a newer host). */
     suspend fun withdraw(worldId: WorldId, token: ClaimToken)
 

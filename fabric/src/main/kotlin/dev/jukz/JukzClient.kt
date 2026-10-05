@@ -18,6 +18,10 @@ import net.minecraft.client.gui.screens.ConfirmLinkScreen
 import net.minecraft.client.gui.screens.TitleScreen
 import dev.jukz.client.gui.HostInfoScreen
 import dev.jukz.cosmetics.Cosmetics
+import dev.jukz.client.gui.LimitedScreen
+import dev.jukz.compat.toast
+import dev.jukz.config.JukzConfig
+import dev.jukz.discovery.DeviceIdentity
 import dev.jukz.cosmetics.CosmeticsFeatureRenderer
 //? if >=26.2 {
 /*import net.fabricmc.fabric.api.client.rendering.v1.LivingEntityRenderLayerRegistrationCallback
@@ -77,6 +81,18 @@ import org.lwjgl.glfw.GLFWWindowCloseCallbackI
 object JukzClient : ClientModInitializer {
     override fun onInitializeClient() {
         UiHotReload.install() // dev runs only: owo-ui models are read live from src/
+
+        // Anti-abuse: a premium session raises the limits; a refusal while opening a world is a toast.
+        DeviceIdentity.sessionToken = { Cosmetics.sessionToken() }
+        DeviceIdentity.onLimited = { secs ->
+            val client = Minecraft.getInstance()
+            client.execute {
+                client.toast(
+                    Component.literal("World not shared online"),
+                    Component.literal("Too many worlds opened. It goes online in ${LimitedScreen.waitText(secs)}."),
+                )
+            }
+        }
 
         // 3D cosmetics (hats, face and back pieces) on every player model.
         //? if >=26.2 {
@@ -148,6 +164,7 @@ object JukzClient : ClientModInitializer {
             if (versionChecked || client.hasOverlay) return@EndTick
             versionChecked = true
             Cosmetics.ensureSignedIn() // on the menu already: your cloud worlds and cosmetics are ready sooner
+            JukzConfig.rendezvousUrl?.let { DeviceIdentity.ensureRegisteredAsync(it) } // anti-abuse: once per install
             if (!JukzState.versionChanged()) return@EndTick
             client.openScreen(if (JukzState.firstRun()) SupportScreen(title) else UpdateScreen(title, JukzState.lastVersion()))
         })

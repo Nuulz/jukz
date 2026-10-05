@@ -6,6 +6,7 @@ import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.discovery.WorldRegistry
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.core.model.WorldId
+import dev.jukz.core.guard.DiscoveryLimited
 
 /**
  * Composes the LAN registry (multicast, zero-latency, works with no internet) with the rendezvous
@@ -58,9 +59,23 @@ class CompositeWorldRegistry(
         return true
     }
 
-    override suspend fun lookup(worldId: WorldId): WorldRecord? {
+    override suspend fun lookup(worldId: WorldId): WorldRecord? =
+        newest(runCatching { lan.lookup(worldId) }.getOrNull(), runCatching { rendezvous.lookup(worldId) }.getOrNull())
+
+    override suspend fun lookupToJoin(worldId: WorldId): WorldRecord? {
         val local = runCatching { lan.lookup(worldId) }.getOrNull()
-        val global = runCatching { rendezvous.lookup(worldId) }.getOrNull()
+        val global = try {
+            rendezvous.lookupToJoin(worldId)
+        } catch (e: DiscoveryLimited) {
+            if (local == null) throw e // refused, and no LAN host to fall back on
+            null
+        } catch (e: Exception) {
+            null
+        }
+        return newest(local, global)
+    }
+
+    private fun newest(local: WorldRecord?, global: WorldRecord?): WorldRecord? {
         return when {
             local == null -> global
             global == null -> local

@@ -14,6 +14,8 @@ import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.NodeId
 import dev.jukz.core.model.WorldId
 import dev.jukz.core.model.WorldKey
+import dev.jukz.core.guard.DeviceKey
+import dev.jukz.core.guard.DiscoveryLimited
 import dev.jukz.world.WorldKeyStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -60,7 +62,8 @@ class RendezvousWorldRegistry(
 
     override suspend fun publishIfNewer(record: WorldRecord): PublishResult = withContext(Dispatchers.IO) {
         val response = try {
-            send(signed(post("/v1/announce", announceBody(record)), WorldKey.OP_ANNOUNCE, record.worldId), writeTimeout)
+            val announce = post("/v1/announce", announceBody(record))
+            sendGuarded(signed(announce, WorldKey.OP_ANNOUNCE, record.worldId), "POST", "/v1/announce", announce.body, writeTimeout)
         } catch (e: Exception) {
             logUnreachable("announce", e)
             // Optimistic: keep hosting; the heartbeat loop keeps retrying the announce.
@@ -77,6 +80,14 @@ class RendezvousWorldRegistry(
             409 -> {
                 val body = JsonParser.parseString(response.body()).asJsonObject
                 PublishResult.Rejected(recordFromJson(body.getAsJsonObject("current")))
+            }
+            429 -> {
+                // Too many worlds opened from this device: it plays locally, and the heartbeat's
+                // re-announce shares it on its own once the block is over.
+                val secs = retryAfter(response)
+                JukzMod.logger.warn("jukz: rendezvous refused the announce — too many worlds opened; retry in {}s", secs)
+                DeviceIdentity.noticeLimited(secs)
+                PublishResult.Published(record)
             }
             403 -> {
                 // Another key owns this world on the rendezvous: this copy can play locally / on the LAN
@@ -130,10 +141,16 @@ class RendezvousWorldRegistry(
         }
     }
 
-    override suspend fun lookup(worldId: WorldId): WorldRecord? = withContext(Dispatchers.IO) {
-        val request = request("/v1/worlds/${worldId.uuid}").GET().timeout(lookupTimeout).build()
+    override suspend fun lookup(worldId: WorldId): WorldRecord? = lookup(worldId, join = false)
+
+    override suspend fun lookupToJoin(worldId: WorldId): WorldRecord? = lookup(worldId, join = true)
+
+    private suspend fun lookup(worldId: WorldId, join: Boolean): WorldRecord? = withContext(Dispatchers.IO) {
+        val path = "/v1/worlds/${worldId.uuid}"
+        val builder = request(path).GET()
+        if (join) builder.header(DeviceKey.HEADER_INTENT, "join")
         val response = try {
-            http.send(request, HttpResponse.BodyHandlers.ofString())
+            sendGuarded(builder, "GET", path, "", lookupTimeout)
         } catch (e: Exception) {
             logUnreachable("lookup", e)
             return@withContext null // backend down must never block opening a world
@@ -148,6 +165,11 @@ class RendezvousWorldRegistry(
             404 -> {
                 logReachable()
                 null
+            }
+            429 -> {
+                val secs = retryAfter(response)
+                if (join) throw DiscoveryLimited(secs)
+                null // a menu badge: just no badge for now
             }
             else -> {
                 JukzMod.logger.warn("jukz: rendezvous lookup returned HTTP {}", response.statusCode())
@@ -192,6 +214,26 @@ class RendezvousWorldRegistry(
 
     private fun send(builder: HttpRequest.Builder, timeout: Duration): HttpResponse<String> =
         http.send(builder.timeout(timeout).build(), HttpResponse.BodyHandlers.ofString())
+
+    /**
+     * Send a call the rendezvous counts against the anti-abuse limits, signed with this device's key
+     * ([DeviceIdentity]). If the rendezvous doesn't know the key yet, register it (once) and resend.
+     */
+    private fun sendGuarded(builder: HttpRequest.Builder, method: String, path: String, body: String, timeout: Duration): HttpResponse<String> {
+        val signedPath = URI.create(base + path).rawPath
+        fun attempt(): HttpResponse<String> {
+            DeviceIdentity.headers(method, signedPath, body).forEach { (name, value) -> builder.setHeader(name, value) }
+            return send(builder, timeout)
+        }
+        val first = attempt()
+        if (first.statusCode() != 401 || !first.body().contains("\"register\"")) return first
+        DeviceIdentity.forget()
+        return if (DeviceIdentity.ensureRegistered(base)) attempt() else first
+    }
+
+    private fun retryAfter(response: HttpResponse<String>): Long =
+        runCatching { JsonParser.parseString(response.body()).asJsonObject.get("retryAfterSecs").asLong }
+            .getOrElse { response.headers().firstValue("retry-after").map { it.toLong() }.orElse(300L) }
 
     /** Warn once per outage, not once per beat; an info line marks recovery. */
     private fun logUnreachable(op: String, e: Throwable) {

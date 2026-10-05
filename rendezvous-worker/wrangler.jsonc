@@ -11,12 +11,14 @@
   "durable_objects": {
     "bindings": [
       { "name": "HUB", "class_name": "RendezvousHub" },
-      { "name": "COSMETICS", "class_name": "CosmeticsStore" }
+      { "name": "COSMETICS", "class_name": "CosmeticsStore" },
+      { "name": "GUARD", "class_name": "Guard" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RendezvousHub"] },
-    { "tag": "v2", "new_sqlite_classes": ["CosmeticsStore"] }
+    { "tag": "v2", "new_sqlite_classes": ["CosmeticsStore"] },
+    { "tag": "v3", "new_sqlite_classes": ["Guard"] }
   ],
   "r2_buckets": [
     { "binding": "SNAPSHOTS", "bucket_name": "jukz-snapshots" },
@@ -27,7 +29,15 @@
     "RENDEZVOUS_RATE_LIMIT_PER_MIN": "120",
     "RELAY_MAX_SESSIONS": "200",
     "RELAY_MAX_STREAMS_PER_SESSION": "16",
-    "RELAY_WORKCONN_TIMEOUT_MS": "8000"
+    "RELAY_WORKCONN_TIMEOUT_MS": "8000",
+    // Anti-abuse (guard-logic.ts): worlds opened/joined per minute per device, the proof of work for a
+    // new device, and whether an older jukz without a device key is still let in (flip once it's rare).
+    "GUARD_DEVICE_PER_MIN": "4",
+    "GUARD_PREMIUM_PER_MIN": "8",
+    "GUARD_IP_PER_MIN": "60",
+    "GUARD_REGISTRATIONS_PER_HOUR": "10",
+    "GUARD_POW_BITS": "22",
+    "GUARD_REQUIRE_DEVICE": "false"
   },
   // Daily cleanup of expired cloud backups (see limits.ts and cleanup() in index.ts), 08:00 UTC.
   "triggers": { "crons": ["0 8 * * *"] },

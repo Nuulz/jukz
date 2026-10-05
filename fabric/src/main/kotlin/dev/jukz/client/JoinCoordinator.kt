@@ -3,6 +3,7 @@ package dev.jukz.client
 import dev.jukz.compat.openScreen
 import dev.jukz.core.join.JoinConfig
 import dev.jukz.client.gui.VersionScreen
+import dev.jukz.client.gui.LimitedScreen
 import dev.jukz.core.model.VersionFit
 import dev.jukz.core.model.GameVersion
 import dev.jukz.compat.currentGame
@@ -178,6 +179,8 @@ object JoinCoordinator {
                 showHandoff(client, worldId, shortCode, parent, result.record?.snapshot, target = null, generation = result.record?.hostGeneration ?: 0L, dialer = DirectChannelDialer(), intent = TakeoverIntent.GHOST)
             is JoinResult.WrongVersion ->
                 client.openScreen(VersionScreen.hostOnOtherVersion(result.host) { client.openScreen(parent) })
+            is JoinResult.Limited ->
+                client.openScreen(LimitedScreen(result.retryAfterSecs) { client.openScreen(parent) })
             is JoinResult.Failed ->
                 client.openScreen(
                     NatErrorScreen(

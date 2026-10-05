@@ -1,5 +1,6 @@
 package dev.jukz.core.join
 
+import dev.jukz.core.guard.DiscoveryLimited
 import dev.jukz.core.model.GameVersion
 import dev.jukz.core.model.VersionFit
 import dev.jukz.core.discovery.SnapshotOffer
@@ -79,7 +80,11 @@ class JoinController(
      * rendezvous-observed public address); the first one that completes a handshake wins.
      */
     suspend fun join(worldId: WorldId): JoinResult {
-        val record = registry.lookup(worldId) ?: return JoinResult.HostUnavailable
+        val record = try {
+            registry.lookupToJoin(worldId)
+        } catch (e: DiscoveryLimited) {
+            return JoinResult.Limited(e.retryAfterSecs)
+        } ?: return JoinResult.HostUnavailable
         config.game?.let { mine ->
             if (VersionFit.of(mine, record.game) != VersionFit.SAME) return JoinResult.WrongVersion(record.game ?: GameVersion.LEGACY)
         }
