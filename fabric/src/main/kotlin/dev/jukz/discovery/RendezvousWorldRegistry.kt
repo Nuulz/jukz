@@ -226,6 +226,7 @@ class RendezvousWorldRegistry(
             return send(builder, timeout)
         }
         val first = attempt()
+        if (DeviceIdentity.adjustClock(first)) return attempt()
         if (first.statusCode() != 401 || !first.body().contains("\"register\"")) return first
         DeviceIdentity.forget()
         return if (DeviceIdentity.ensureRegistered(base)) attempt() else first

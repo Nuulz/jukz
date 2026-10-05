@@ -103,7 +103,7 @@ export async function guardWorldCall(
   const url = new URL(request.url);
   const limits = guardLimits(env as unknown as Record<string, unknown>);
   const device = await checkDevice(request.method, url.pathname, body, (n) => request.headers.get(n), Date.now());
-  if (!device.ok) return json(device.status, { status: "error", message: device.message });
+  if (!device.ok) return json(device.status, { status: "error", message: device.message, serverTime: Date.now() });
   const ip = clientIp(request);
   const premium = device.device !== null && (await sessionPlayer(request, env)) !== null;
 
@@ -154,7 +154,7 @@ export async function handleDevice(request: Request, env: Env, url: URL): Promis
 
   const text = await request.text();
   const device = await checkDevice(request.method, url.pathname, text, (n) => request.headers.get(n), now);
-  if (!device.ok) return json(device.status, { status: "error", message: device.message });
+  if (!device.ok) return json(device.status, { status: "error", message: device.message, serverTime: Date.now() });
   if (device.device === null) return json(401, { status: "error", message: "registration must be signed by the device key" });
   const stub = subject(env, `dev:${device.device}`);
   if (await stub.isRegistered()) return json(200, { status: "ok" });

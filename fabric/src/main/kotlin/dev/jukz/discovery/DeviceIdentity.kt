@@ -14,18 +14,21 @@ import java.net.http.HttpResponse
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 /**
- * This install's anti-abuse identity on disk and with the rendezvous: the [DeviceKey]
- * (`config/jukz-device.key`, made on first launch) and whether the rendezvous has registered it
- * (`config/jukz-device.registered` holds the rendezvous URL it registered with).
+ * This PC's anti-abuse identity on disk and with the rendezvous: the [DeviceKey] (`~/.jukz/device.key`,
+ * made on first launch) and whether the rendezvous has registered it (`~/.jukz/device.registered` holds
+ * the rendezvous URL it registered with). It lives in the user's home, not in the instance's `config/`:
+ * modpacks ship that folder, and a shared key would make every player of the pack share one limit.
  *
  * Registering is silent: a premium account proves itself with its cosmetics session (Mojang-verified);
  * otherwise the client solves a ~1 s [ProofOfWork] puzzle, once per install, in the background.
  */
 object DeviceIdentity {
-    private const val KEY_FILE = "jukz-device.key"
-    private const val REGISTERED_FILE = "jukz-device.registered"
+    private const val KEY_FILE = "device.key"
+    private const val REGISTERED_FILE = "device.registered"
 
     /** The signed-in cosmetics session (premium players), set by the client; null on a dedicated server. */
     @Volatile var sessionToken: () -> String? = { null }
@@ -34,6 +37,9 @@ object DeviceIdentity {
     @Volatile var onLimited: (Long) -> Unit = {}
 
     @Volatile private var noticeUntil = 0L
+
+    /** Server time minus ours, learned when the rendezvous says our signature is outside its window. */
+    @Volatile private var clockOffsetMs = 0L
 
     private val http: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(4))
@@ -58,7 +64,7 @@ object DeviceIdentity {
     /** Device signature headers (plus the premium session, which raises the limits) for one call. */
     fun headers(method: String, path: String, body: String): Map<String, String> {
         val k = key ?: return emptyMap()
-        val headers = k.headers(method, path, body, System.currentTimeMillis()).toMutableMap()
+        val headers = k.headers(method, path, body, System.currentTimeMillis() + clockOffsetMs).toMutableMap()
         sessionToken()?.let { headers[SESSION_HEADER] = it }
         return headers
     }
@@ -92,7 +98,8 @@ object DeviceIdentity {
                 body.addProperty("challenge", text)
                 body.addProperty("nonce", nonce)
             }
-            val answer = post(base, "/v1/device/register", body.toString(), signed = true)
+            var answer = post(base, "/v1/device/register", body.toString(), signed = true)
+            if (adjustClock(answer)) answer = post(base, "/v1/device/register", body.toString(), signed = true)
             if (answer.statusCode() == 200) {
                 Files.writeString(configDir().resolve(REGISTERED_FILE), base)
                 JukzMod.logger.info("jukz: this device is registered with the rendezvous{}", if (premium) " (premium)" else "")
@@ -102,6 +109,22 @@ object DeviceIdentity {
                 false
             }
         }.onFailure { JukzMod.logger.warn("jukz: device registration failed ({})", it.message) }.getOrDefault(false)
+    }
+
+    /**
+     * A 401 for a signature outside the rendezvous' window means this PC's clock is off: take the
+     * server's time from the response (its body, else the Date header). True when the offset changed (worth a resend).
+     */
+    fun adjustClock(response: HttpResponse<String>): Boolean {
+        if (response.statusCode() != 401 || !response.body().contains("window")) return false
+        val server = runCatching { JsonParser.parseString(response.body()).asJsonObject.get("serverTime").asLong }.getOrNull()
+            ?: response.headers().firstValue("date").map {
+                runCatching { ZonedDateTime.parse(it, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() }.getOrNull()
+            }.orElse(null)
+            ?: return false
+        clockOffsetMs = server - System.currentTimeMillis()
+        JukzMod.logger.warn("jukz: this PC's clock is off by {} s; signing with the server's time", clockOffsetMs / 1000)
+        return true
     }
 
     /** Show the "too many worlds" notice at most once per refusal period. */
@@ -128,7 +151,9 @@ object DeviceIdentity {
         return http.send(builder.build(), HttpResponse.BodyHandlers.ofString())
     }
 
-    private fun configDir(): Path = FabricLoader.getInstance().configDir
+    private fun configDir(): Path = runCatching {
+        Path.of(System.getProperty("user.home"), ".jukz").also { Files.createDirectories(it) }
+    }.getOrElse { FabricLoader.getInstance().configDir }
 
     private const val SESSION_HEADER = "x-jukz-cosmetics-token"
 }
