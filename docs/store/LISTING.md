@@ -1,5 +1,7 @@
 # Store listing (Modrinth and CurseForge)
 
+> ¿Perdido? Lee primero [`GUIA.md`](GUIA.md): explica en español qué hacer paso a paso. Este archivo trae los textos en inglés para pegar.
+
 Text and files ready to paste when creating the project. Icon: `icon.png` (128x128, same file as the mod's own).
 
 ## Basics
@@ -91,7 +93,7 @@ nothing is locked behind it.
 Source, docs and issues: github.com/Nuulz/jukz · Website: nuulm.com/jukz
 ```
 
-## Steps only the owner can do
+## Steps only the owner can do (see GUIA.md for the Spanish walkthrough)
 
 1. **Modrinth:** create the project at modrinth.com/dashboard/projects (sign in with GitHub). Paste the fields
    above, upload the icon and gallery, and upload `jukz-0.2.1.jar` from the GitHub release as version 0.2.1
