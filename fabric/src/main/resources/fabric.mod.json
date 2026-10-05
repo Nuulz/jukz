@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "jukz",
   "version": "${version}",
-  "name": "jukz",
+  "name": "Joining Every Known Zone (JUKZ)",
   "description": "Play with friends in the same world with no server: it opens on whoever is playing, passes to the next player when they leave, and waits in the cloud when everyone is gone.",
   "authors": ["Nobz"],
   "icon": "assets/jukz/icon.png",

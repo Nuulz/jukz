@@ -19,7 +19,7 @@ handoff, the cloud (ghost) takeover, closing/reopening access and the world-list
 Install, next to Minecraft **1.21.1** with Fabric Loader ≥ 0.16.5:
 [Fabric API](https://modrinth.com/mod/fabric-api),
 [Fabric Language Kotlin](https://modrinth.com/mod/fabric-language-kotlin),
-[owo-lib](https://modrinth.com/mod/owo-lib) and the jukz jar (`fabric/build/libs/jukz-0.2.1.jar`).
+[owo-lib](https://modrinth.com/mod/owo-lib) and the jukz jar (`fabric/build/libs/jukz-0.2.2.jar`).
 
 - **Host:** just open a world. It is announced automatically; the share code is in the pause menu →
   **World info (jukz)**, which also has **Access: Open/Closed** to make the world private for a while.
@@ -257,7 +257,7 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
 ```bash
 ./gradlew :core:test     # the deterministic core tests (94)
 ./gradlew :fabric:test   # the fabric JUnit tests (snapshot handoff, access flag, UI models, ...)
-./gradlew build          # compile everything + assemble fabric/build/libs/jukz-0.2.1.jar
+./gradlew build          # compile everything + assemble fabric/build/libs/jukz-0.2.2.jar
 (cd rendezvous-worker && npm install && npm test)   # the Cloudflare rendezvous
 (cd rendezvous && cargo test)                       # the self-hostable Rust rendezvous
 ```

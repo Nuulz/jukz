@@ -4,6 +4,10 @@ Every version gets a `## X.Y.Z` section with `- ` bullets. The mod shows the sec
 version you last played in its "jukz was updated" screen, and a GitHub release whose notes are empty
 gets its section as notes. Write them for players, not developers.
 
+## 0.2.2
+
+- The mod is listed under its full name, Joining Every Known Zone (JUKZ).
+
 ## 0.2.1
 
 - Mod Menu support: jukz has its icon, links (website, Ko-fi, source) and a Config button that opens your account screen. Mod Menu is optional.

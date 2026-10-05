@@ -40,3 +40,4 @@ logs/
 
 # Superpowers brainstorming scaffolding (local only)
 .superpowers/
+docs/store/
