@@ -1,6 +1,6 @@
 package dev.jukz.client.gui
 
-import net.minecraft.text.Text
+import net.minecraft.network.chat.Component
 
 /**
  * Shown when nobody is hosting the world (no record, or the announced host turned out to be a
@@ -11,8 +11,8 @@ class ShouldHostScreen(
     private val onBack: () -> Unit,
     private val onHostLocally: (() -> Unit)? = null,
 ) : JukzStatusScreen(
-    Text.literal("Nobody is hosting this world"),
-    Text.literal(detail),
+    Component.literal("Nobody is hosting this world"),
+    Component.literal(detail),
     accentColor = ACCENT_ACTION,
     showSpinner = false,
 ) {

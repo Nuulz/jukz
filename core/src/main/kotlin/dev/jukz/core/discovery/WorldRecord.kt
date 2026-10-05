@@ -1,6 +1,7 @@
 package dev.jukz.core.discovery
 
 import dev.jukz.core.model.ClaimToken
+import dev.jukz.core.model.GameVersion
 import dev.jukz.core.model.Endpoint
 import dev.jukz.core.model.WorldId
 
@@ -28,6 +29,8 @@ data class WorldRecord(
     val snapshot: SnapshotOffer? = null,
     val playerCount: Int = 0,
     val relay: RelayOffer? = null,
+    /** The Minecraft version the host runs (wire v5); null from older hosts, which ran 1.21.1. */
+    val game: GameVersion? = null,
 ) {
     init {
         require(endpoints.isNotEmpty()) { "a record must announce at least one endpoint" }

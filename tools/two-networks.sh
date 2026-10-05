@@ -35,7 +35,7 @@ CHILD_IF=jukz2net0
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 NAME_A="${NAME_A:-HostA}"
 NAME_B="${NAME_B:-GuestB}"
-JAVA_HOME="${JAVA_HOME:-$HOME/.jdks/jdk-21.0.12.1+1}"
+JAVA_HOME="${JAVA_HOME:-$HOME/.jdks/jdk-25.0.4.1+1}"
 
 say() { printf '\033[1;34m[two-networks]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[two-networks]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -140,7 +140,7 @@ cmd_play() {
   configure "$ROOT/fabric/run/clientA"; configure "$ROOT/fabric/run/clientB"
   if [ -z "$(client_pid clientA)" ]; then
     say "Starting client A ($NAME_A) on the normal connection…"
-    (cd "$ROOT" && JAVA_HOME="$JAVA_HOME" setsid bash gradlew :fabric:runPlay -Pjukz.runDir=run/clientA "-Pjukz.username=$NAME_A" > /tmp/jukz2net-clientA.log 2>&1 &)
+    (cd "$ROOT" && JAVA_HOME="$JAVA_HOME" setsid bash gradlew :fabric:1.21.1:runPlay -Pjukz.runDir=run/clientA "-Pjukz.username=$NAME_A" > /tmp/jukz2net-clientA.log 2>&1 &)
   fi
   local pa=""
   for _ in $(seq 1 180); do pa="$(client_pid clientA)"; [ -n "$pa" ] && break; sleep 2; done

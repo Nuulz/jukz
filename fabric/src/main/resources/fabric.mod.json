@@ -36,11 +36,11 @@
     }
   },
   "depends": {
-    "fabricloader": ">=0.16.5",
-    "minecraft": "~1.21.1",
-    "java": ">=21",
+    "fabricloader": ">=${loader}",
+    "minecraft": "${minecraft}",
+    "java": ">=${java_major}",
     "fabric-api": "*",
     "fabric-language-kotlin": ">=1.12.0",
-    "owo-lib": ">=0.12.15"
+    "owo-lib": ">=${owo_min}"
   }
 }

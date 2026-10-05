@@ -1,5 +1,7 @@
 package dev.jukz.core.join
 
+import dev.jukz.core.model.GameVersion
+import dev.jukz.core.model.VersionFit
 import dev.jukz.core.discovery.SnapshotOffer
 import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.discovery.WorldRegistry
@@ -78,6 +80,9 @@ class JoinController(
      */
     suspend fun join(worldId: WorldId): JoinResult {
         val record = registry.lookup(worldId) ?: return JoinResult.HostUnavailable
+        config.game?.let { mine ->
+            if (VersionFit.of(mine, record.game) != VersionFit.SAME) return JoinResult.WrongVersion(record.game ?: GameVersion.LEGACY)
+        }
         var lastFailure: Exception? = null
         for (target in record.dialTargets()) {
             try {

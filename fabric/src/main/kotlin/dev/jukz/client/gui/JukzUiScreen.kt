@@ -8,16 +8,16 @@ import io.wispforest.owo.ui.component.ButtonComponent
 import io.wispforest.owo.ui.component.LabelComponent
 import io.wispforest.owo.ui.container.FlowLayout
 import io.wispforest.owo.ui.core.Color
-import io.wispforest.owo.ui.core.Component
+import dev.jukz.compat.UIComponent
 import io.wispforest.owo.ui.core.OwoUIAdapter
-import io.wispforest.owo.ui.core.ParentComponent
+import dev.jukz.compat.ParentUIComponent
 import io.wispforest.owo.ui.core.Positioning
 import io.wispforest.owo.ui.core.Sizing
 import io.wispforest.owo.ui.parsing.UIModel
 import io.wispforest.owo.ui.parsing.UIModelLoader
-import net.minecraft.client.gui.DrawContext
-import net.minecraft.text.Text
-import net.minecraft.util.Identifier
+import dev.jukz.compat.GuiGraphics
+import net.minecraft.network.chat.Component
+import dev.jukz.compat.Identifier
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.extension
@@ -34,9 +34,9 @@ import kotlin.io.path.nameWithoutExtension
  * packaged one (owo reports the error). In a release build none of that is active.
  */
 abstract class JukzUiScreen(modelName: String) :
-    BaseUIModelScreen<FlowLayout>(FlowLayout::class.java, DataSource.asset(Identifier.of("jukz", modelName))) {
+    BaseUIModelScreen<FlowLayout>(FlowLayout::class.java, DataSource.asset(Identifier.fromNamespaceAndPath("jukz", modelName))) {
 
-    private val modelId = Identifier.of("jukz", modelName)
+    private val modelId = Identifier.fromNamespaceAndPath("jukz", modelName)
 
     /** The model the current UI was built from. BaseUIModelScreen's `model` is fixed at construction. */
     protected var ui: UIModel? = model
@@ -83,18 +83,30 @@ abstract class JukzUiScreen(modelName: String) :
         ui = next
         uiAdapter?.dispose()
         uiAdapter = null
-        clearAndInit()
+        rebuildWidgets()
     }
 
     /**
      * Vanilla's own backdrop — the menu panorama, or the blurred world in-game — behind the panel.
      * owo's base screen turns it off in favour of component surfaces; jukz keeps the familiar look.
      */
-    override fun renderBackground(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
-        if (client?.world == null) renderPanoramaBackground(context, delta)
-        applyBlur(delta)
-        renderDarkening(context)
+    //? if >=26.2 {
+    /*override fun extractBackground(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
+        if (minecraft?.level == null) extractPanorama(context, delta)
+        extractBlurredBackground(context)
+        extractMenuBackground(context)
     }
+    *///?} else {
+    override fun renderBackground(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
+        if (minecraft?.level == null) renderPanorama(context, delta)
+        //? if >=1.21.11 {
+        /*renderBlurredBackground(context)
+        *///?} else {
+        renderBlurredBackground(delta)
+        //?}
+        renderMenuBackground(context)
+    }
+    //?}
 
     // ---- shared building blocks (all from theme.xml) ---------------------------------------------
 
@@ -108,19 +120,19 @@ abstract class JukzUiScreen(modelName: String) :
      * Take [target] out of the tree under [root]. Works during [build], before mounting, when owo's
      * `Component.remove()` can't yet (components only learn their parent once mounted).
      */
-    protected fun detach(root: ParentComponent, target: Component): Boolean {
+    protected fun detach(root: ParentUIComponent, target: UIComponent): Boolean {
         for (child in root.children()) {
             if (child === target) {
                 root.removeChild(child)
                 return true
             }
-            if (child is ParentComponent && detach(child, target)) return true
+            if (child is ParentUIComponent && detach(child, target)) return true
         }
         return false
     }
 
     /** Expand one of theme.xml's templates. */
-    protected fun <T : Component> themed(type: Class<T>, template: String, params: Map<String, String> = emptyMap()): T =
+    protected fun <T : UIComponent> themed(type: Class<T>, template: String, params: Map<String, String> = emptyMap()): T =
         ui!!.expandTemplate(type, "$template@jukz:$THEME", params)
 
     protected fun label(root: FlowLayout, id: String): LabelComponent = root.childById(LabelComponent::class.java, id)
@@ -131,7 +143,7 @@ abstract class JukzUiScreen(modelName: String) :
     }
 
     /** Append a themed button to the row with [rowId]. */
-    protected fun addButton(root: FlowLayout, rowId: String, text: Text, width: Int = 150, onPress: () -> Unit): ButtonComponent {
+    protected fun addButton(root: FlowLayout, rowId: String, text: Component, width: Int = 150, onPress: () -> Unit): ButtonComponent {
         val button = themed(ButtonComponent::class.java, "button", mapOf("id" to "button-${text.string}", "width" to "$width"))
         button.message = text
         button.onPress { onPress() }
@@ -140,7 +152,7 @@ abstract class JukzUiScreen(modelName: String) :
     }
 
     /** Wire a themed button the model already declares under [id]. */
-    protected fun wireButton(root: FlowLayout, id: String, text: Text, onPress: () -> Unit): ButtonComponent =
+    protected fun wireButton(root: FlowLayout, id: String, text: Component, onPress: () -> Unit): ButtonComponent =
         root.childById(ButtonComponent::class.java, id).apply {
             message = text
             onPress { onPress() }
@@ -202,7 +214,7 @@ object UiHotReload {
     fun install() {
         val dir = sourceDir ?: return
         val models = Files.list(dir).use { files -> files.filter { it.extension == "xml" }.toList() }
-        models.forEach { UIModelLoader.setHotReloadPath(Identifier.of("jukz", it.nameWithoutExtension), it) }
+        models.forEach { UIModelLoader.setHotReloadPath(Identifier.fromNamespaceAndPath("jukz", it.nameWithoutExtension), it) }
         JukzMod.logger.info("jukz: owo-ui hot reload on for {} model(s) in {}", models.size, dir)
     }
 

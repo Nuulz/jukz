@@ -1,11 +1,11 @@
 package dev.jukz.net
 
-import net.minecraft.network.RegistryByteBuf
-import net.minecraft.network.codec.PacketCodec
-import net.minecraft.network.codec.PacketCodecs
-import net.minecraft.network.packet.CustomPayload
-import net.minecraft.util.Identifier
-import net.minecraft.util.Uuids
+import net.minecraft.network.RegistryFriendlyByteBuf
+import net.minecraft.network.codec.StreamCodec
+import net.minecraft.network.codec.ByteBufCodecs
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload
+import dev.jukz.compat.Identifier
+import net.minecraft.core.UUIDUtil
 import java.util.UUID
 
 /**
@@ -14,15 +14,15 @@ import java.util.UUID
  * session's handoff snapshot. Sent in-game on purpose — only players the server let in (Mojang-verified
  * in online mode) receive it, unlike the control channel, which anyone with the share code can open.
  */
-data class WorldAccessPayload(val worldId: UUID, val key: String, val gate: String) : CustomPayload {
-    override fun getId(): CustomPayload.Id<WorldAccessPayload> = ID
+data class WorldAccessPayload(val worldId: UUID, val key: String, val gate: String) : CustomPacketPayload {
+    override fun type(): CustomPacketPayload.Type<WorldAccessPayload> = ID
 
     companion object {
-        val ID: CustomPayload.Id<WorldAccessPayload> = CustomPayload.Id(Identifier.of("jukz", "world_access"))
-        val CODEC: PacketCodec<RegistryByteBuf, WorldAccessPayload> = PacketCodec.tuple(
-            Uuids.PACKET_CODEC, WorldAccessPayload::worldId,
-            PacketCodecs.STRING, WorldAccessPayload::key,
-            PacketCodecs.STRING, WorldAccessPayload::gate,
+        val ID: CustomPacketPayload.Type<WorldAccessPayload> = CustomPacketPayload.Type(Identifier.fromNamespaceAndPath("jukz", "world_access"))
+        val CODEC: StreamCodec<RegistryFriendlyByteBuf, WorldAccessPayload> = StreamCodec.composite(
+            UUIDUtil.STREAM_CODEC, WorldAccessPayload::worldId,
+            ByteBufCodecs.STRING_UTF8, WorldAccessPayload::key,
+            ByteBufCodecs.STRING_UTF8, WorldAccessPayload::gate,
             ::WorldAccessPayload,
         )
     }

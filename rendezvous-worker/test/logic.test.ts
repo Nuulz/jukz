@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  BadRequest, type Entry, RateLimiter, type Token, type WorldRecord,
+  BadRequest, type Entry, parseGame, parseGameHeader, RateLimiter, type Token, type WorldRecord,
   announce, cmpToken, fenceAllows, heartbeat, liveRecord, mergeObservedEndpoint, parseToken, shouldWithdraw, MAX_ENDPOINTS,
 } from "../src/logic.ts";
 
@@ -115,4 +115,20 @@ test("a relay nonce carries its session's shard and stays a safe integer", () =>
   }
   assert.equal(shardOfNonce(-1), undefined);
   assert.equal(shardOfNonce(Number.NaN), undefined);
+});
+
+
+test("a host's Minecraft version is checked and kept", () => {
+  assert.deepEqual(parseGame({ name: "1.21.11", dataVersion: 4671 }), { name: "1.21.11", dataVersion: 4671 });
+  assert.equal(parseGame(undefined), undefined); // older mods send none
+  assert.throws(() => parseGame({ name: "", dataVersion: 4671 }));
+  assert.throws(() => parseGame({ name: "1.21.11", dataVersion: -1 }));
+  assert.throws(() => parseGame({ name: "<script>", dataVersion: 1 }));
+});
+
+test("the backup upload's version header is read leniently", () => {
+  assert.deepEqual(parseGameHeader("26.2;4800"), { name: "26.2", dataVersion: 4800 });
+  assert.equal(parseGameHeader(null), undefined);
+  assert.equal(parseGameHeader("garbage"), undefined);
+  assert.equal(parseGameHeader("1.21.11;abc"), undefined);
 });

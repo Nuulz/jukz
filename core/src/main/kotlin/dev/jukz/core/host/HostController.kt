@@ -73,7 +73,7 @@ class HostController(
             val endpoint = endpointResolver.resolve(listenPort)
             val relayOffer = runCatching { relayRegistrar.register(listenPort) }.getOrNull()
             val candidate = WorldRecord(worldId, token, listOf(endpoint), heartbeatSeq = 0)
-                .copy(playerCount = playerCount(), relay = relayOffer)
+                .copy(playerCount = playerCount(), relay = relayOffer, game = config.game)
             when (val result = registry.publishIfNewer(candidate)) {
                 is PublishResult.Published -> {
                     record = result.record

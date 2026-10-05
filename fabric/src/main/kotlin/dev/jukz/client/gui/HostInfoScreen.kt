@@ -1,17 +1,18 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.openScreen
 import dev.jukz.client.HostCoordinator
 import dev.jukz.core.host.HostStatus
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.runtime.HostSession
 import dev.jukz.world.WorldKeyStore
-import io.wispforest.owo.ui.component.Components
+import dev.jukz.compat.UIComponents
 import io.wispforest.owo.ui.component.LabelComponent
 import io.wispforest.owo.ui.container.FlowLayout
 import io.wispforest.owo.ui.core.Color
 import io.wispforest.owo.ui.core.Insets
-import net.minecraft.client.gui.screen.Screen
-import net.minecraft.text.Text
+import net.minecraft.client.gui.screens.Screen
+import net.minecraft.network.chat.Component
 
 /**
  * Host-side status panel, reached from the pause-menu button once a world is shared. Shows the
@@ -36,12 +37,12 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
     private var builtFor: ClaimToken? = null // the hosting session this panel shows (null = not hosting)
 
     override fun build(root: FlowLayout) {
-        label(root, "title").text(Text.literal("World info"))
+        label(root, "title").text(Component.literal("World info"))
         val rows = root.childById(FlowLayout::class.java, "rows")
         val rec = record
         builtFor = rec?.token
         if (rec == null) {
-            rows.child(Components.label(Text.literal("Not hosting this world.")).color(Color.ofArgb(COLOR_SUBTLE)))
+            rows.child(UIComponents.label(Component.literal("Not hosting this world.")).color(Color.ofArgb(COLOR_SUBTLE)))
         } else {
             listOfNotNull(
                 "Share code" to rec.worldId.shortCode(),
@@ -61,16 +62,16 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
 
         // Access toggle (F4-D): open/close the world to guests. Reads the per-world flag for its label.
         wireButton(root, "access-button", accessLabel()) { toggleAccess() }
-        addButton(root, "buttons", Text.literal("Copy code"), width = 100) {
-            record?.let { client?.keyboard?.clipboard = it.worldId.shortCode() }
+        addButton(root, "buttons", Component.literal("Copy code"), width = 100) {
+            record?.let { minecraft?.keyboardHandler?.clipboard = it.worldId.shortCode() }
         }
-        addButton(root, "buttons", Text.literal("Refresh"), width = 100) { refresh() }
-        addButton(root, "buttons", Text.literal("Done"), width = 100) { client?.setScreen(parent) }
+        addButton(root, "buttons", Component.literal("Refresh"), width = 100) { refresh() }
+        addButton(root, "buttons", Component.literal("Done"), width = 100) { minecraft?.openScreen(parent) }
 
         // Self-heal: every jukz world is auto-hosted on open, but if that hasn't taken (or failed),
         // kick it off now so opening this panel always ends with the world online.
         if (!HostSession.isHosting) {
-            client?.server?.let { HostCoordinator.autoHost(it) }
+            minecraft?.singleplayerServer?.let { HostCoordinator.autoHost(it) }
         }
         refresh()
     }
@@ -79,21 +80,21 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
     private fun infoRow(label: String, value: String, id: String): Pair<FlowLayout, LabelComponent> {
         val row = themed(FlowLayout::class.java, "info-row", mapOf("label" to label, "id" to id))
         val valueLabel = row.childById(LabelComponent::class.java, id)
-        valueLabel.text(Text.literal(value))
+        valueLabel.text(Component.literal(value))
         return row to valueLabel
     }
 
 
     /** "Access: Open" / "Access: Closed", read from the per-world flag at build time. */
-    private fun accessLabel(): Text {
-        val server = client?.server
+    private fun accessLabel(): Component {
+        val server = minecraft?.singleplayerServer
         val closed = server != null && HostCoordinator.isAccessDisabled(server)
-        return Text.literal(if (closed) "Access: Closed" else "Access: Open")
+        return Component.literal(if (closed) "Access: Closed" else "Access: Open")
     }
 
     /** Flip access for the loaded world, then rebuild so the label + status refresh. */
     private fun toggleAccess() {
-        val server = client?.server ?: return
+        val server = minecraft?.singleplayerServer ?: return
         if (HostCoordinator.isAccessDisabled(server)) HostCoordinator.enableAccess(server)
         else HostCoordinator.disableAccess(server)
         rebuild()
@@ -134,7 +135,7 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
         }
         if (current == shownStatus) return
         shownStatus = current
-        label.text(Text.literal(current.first)).color(Color.ofArgb(current.second))
+        label.text(Component.literal(current.first)).color(Color.ofArgb(current.second))
     }
 
     override fun shouldCloseOnEsc(): Boolean = true

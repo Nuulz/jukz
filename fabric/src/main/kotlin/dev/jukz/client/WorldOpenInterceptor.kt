@@ -1,5 +1,16 @@
 package dev.jukz.client
 
+import dev.jukz.compat.currentScreen
+import dev.jukz.compat.openScreen
+import net.minecraft.nbt.NbtIo
+import net.minecraft.nbt.NbtAccounter
+import dev.jukz.client.gui.VersionScreen
+import dev.jukz.core.model.VersionFit
+import dev.jukz.core.model.GameVersion
+import dev.jukz.compat.string
+import dev.jukz.compat.int
+import dev.jukz.compat.compound
+import dev.jukz.compat.currentGame
 import dev.jukz.JukzMod
 import dev.jukz.client.gui.SearchingHostScreen
 import dev.jukz.core.model.WorldId
@@ -8,11 +19,11 @@ import dev.jukz.sync.R2SnapshotStore
 import dev.jukz.world.WorldKeyStore
 import dev.jukz.world.WorldIdSidecar
 import kotlinx.coroutines.runBlocking
-import net.minecraft.client.MinecraftClient
+import net.minecraft.client.Minecraft
 
 /**
  * Makes "the world lives in one place" the default behaviour of opening a singleplayer world. Driven
- * from a mixin at the head of `IntegratedServerLoader.start`: before the local server boots, the
+ * from a mixin at the head of `WorldOpenFlows.openWorld`: before the local server boots, the
  * world's persisted jukz UUID (read from its `jukz.dat` sidecar without starting the world) is looked
  * up in discovery. If a live host is announced, the local boot is cancelled and the player is joined
  * to that host as a guest; otherwise the world opens locally as usual. No button — joining is an
@@ -31,7 +42,7 @@ object WorldOpenInterceptor {
     private var bypass = false
 
     /**
-     * Head hook of `IntegratedServerLoader.start`. Returns true to cancel the local boot because jukz
+     * Head hook of `WorldOpenFlows.openWorld`. Returns true to cancel the local boot because jukz
      * is handling the open (consulting discovery / joining a host); false to let the world boot
      * locally. [onCancel] is the vanilla "loading was aborted" callback, threaded through to the
      * re-entrant local boot.
@@ -47,21 +58,27 @@ object WorldOpenInterceptor {
     }
 
     private fun readSidecar(levelName: String): WorldIdSidecar.Info? = runCatching {
-        val saveRoot = MinecraftClient.getInstance().levelStorage.savesDirectory.resolve(levelName)
+        val saveRoot = Minecraft.getInstance().levelSource.baseDir.resolve(levelName)
         WorldIdSidecar.read(saveRoot)
     }.getOrNull()
 
     private fun beginConsult(worldId: WorldId, levelName: String, onCancel: Runnable) {
-        val client = MinecraftClient.getInstance()
+        val client = Minecraft.getInstance()
         val parent = client.currentScreen // the world-select screen, to fall back to
         val shortCode = worldId.shortCode()
-        client.setScreen(SearchingHostScreen(shortCode) { openLocally(levelName, onCancel) })
+        client.openScreen(SearchingHostScreen(shortCode) { openLocally(levelName, onCancel) })
 
         Thread {
             val live = try {
                 runBlocking { Discovery.registry.lookup(worldId) }
             } catch (e: Throwable) {
                 null
+            }
+            if (live != null && VersionFit.of(currentGame, live.game) != VersionFit.SAME) {
+                // Someone hosts it on another Minecraft version: the game couldn't connect, and opening the
+                // local copy would split the world. Say so instead.
+                client.execute { client.openScreen(VersionScreen.hostOnOtherVersion(live.game ?: GameVersion.LEGACY) { client.openScreen(parent) }) }
+                return@Thread
             }
             if (live != null) {
                 client.execute {
@@ -75,10 +92,10 @@ object WorldOpenInterceptor {
             // world from the singleplayer list gets "the world lives in one place" too, not only the
             // join-by-code flow. Probe off the render thread; the generation lives in the head object.
             val localGen = runCatching {
-                WorldIdSidecar.generation(MinecraftClient.getInstance().levelStorage.savesDirectory.resolve(levelName))
+                WorldIdSidecar.generation(Minecraft.getInstance().levelSource.baseDir.resolve(levelName))
             }.getOrNull() ?: -1L
             // Our copy's key signs the request (a keyed world's backup only goes to key holders).
-            runCatching { WorldKeyStore.loadExisting(client.levelStorage.savesDirectory.resolve(levelName), worldId) }
+            runCatching { WorldKeyStore.loadExisting(client.levelSource.baseDir.resolve(levelName), worldId) }
             val ghost = runCatching { R2SnapshotStore.ghostSnapshot(worldId) }.getOrNull()
             val head = ghost?.let { runCatching { R2SnapshotStore.ghostHead(it.headUrl) }.getOrNull() }
             client.execute {
@@ -87,9 +104,21 @@ object WorldOpenInterceptor {
                         "jukz: {} has a newer cloud copy (gen {} > local {}) — loading it",
                         shortCode, head.generation, localGen,
                     )
-                    JoinCoordinator.takeOverGhost(worldId, shortCode, parent, ghost, head.commit)
+                    val takeOver = { JoinCoordinator.takeOverGhost(worldId, shortCode, parent, ghost, head.commit) }
+                    val saved = head.game ?: GameVersion.LEGACY
+                    when (VersionFit.of(currentGame, head.game)) {
+                        VersionFit.SAME -> takeOver()
+                        VersionFit.UPGRADE -> client.openScreen(VersionScreen.upgrade(saved, { client.openScreen(parent) }) { takeOver() })
+                        VersionFit.TOO_NEW -> client.openScreen(VersionScreen.tooNew(saved) { client.openScreen(parent) })
+                    }
                 } else {
-                    openLocally(levelName, onCancel)
+                    // Our own copy: one saved on an older version is upgraded by opening it, so ask first.
+                    val saved = localSaveVersion(levelName)
+                    if (saved != null && VersionFit.of(currentGame, saved) == VersionFit.UPGRADE) {
+                        client.openScreen(VersionScreen.upgrade(saved, { client.openScreen(parent) }) { openLocally(levelName, onCancel) })
+                    } else {
+                        openLocally(levelName, onCancel)
+                    }
                 }
             }
         }.apply {
@@ -98,10 +127,28 @@ object WorldOpenInterceptor {
         }.start()
     }
 
+    /** The version a save was last played on, from its level.dat (Data.DataVersion and Data.Version.Name). */
+    private fun localSaveVersion(levelName: String): GameVersion? = runCatching {
+        val levelDat = Minecraft.getInstance().levelSource.baseDir.resolve(levelName).resolve("level.dat")
+        val data = NbtIo.readCompressed(levelDat, NbtAccounter.unlimitedHeap()).compound("Data")
+        val dataVersion = data.int("DataVersion") ?: return null
+        GameVersion(data.compound("Version").string("Name") ?: "an older version", dataVersion)
+    }.getOrNull()
+
+    /**
+     * JGit writes its objects read-only. Minecraft 26.x upgrades an older world by moving every file in it,
+     * and fails ("another program accessed the world") on those, so make the snapshot repo writable first.
+     */
+    private fun makeGitWritable(levelName: String) = runCatching {
+        val git = Minecraft.getInstance().levelSource.baseDir.resolve(levelName).resolve(".git").toFile()
+        if (git.isDirectory) git.walkTopDown().forEach { if (!it.canWrite()) it.setWritable(true, true) }
+    }
+
     /** Resume the vanilla local boot, bypassing this interceptor for the re-entrant call. */
     private fun openLocally(levelName: String, onCancel: Runnable) {
+        makeGitWritable(levelName)
         bypass = true
-        MinecraftClient.getInstance().createIntegratedServerLoader().start(levelName, onCancel)
+        Minecraft.getInstance().createWorldOpenFlows().openWorld(levelName, onCancel)
     }
 
     /**

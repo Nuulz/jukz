@@ -15,7 +15,7 @@
 import { CosmeticsStore, cosmeticsStore, handleCosmetics, sessionPlayer } from "./cosmetics.ts";
 import { corsHeaders, handleCreators } from "./creators.ts";
 import { CLIENT_IP_HEADER, type Env, RendezvousHub } from "./hub.ts";
-import { BadRequest, parseWorldId, relayShard, shardOfNonce } from "./logic.ts";
+import { BadRequest, parseWorldId, relayShard, shardOfNonce, parseGameHeader } from "./logic.ts";
 import { LIMITS, checkUpload, dayKey, expired, parseTier, tierOf, usageSubject } from "./limits.ts";
 import { signBlobUrl, verifyBlobUrl, URL_TTL_SECS } from "./signing.ts";
 
@@ -175,6 +175,7 @@ function checkAuth(request: Request, env: Env): Response | null {
 // All with the cosmetics session (x-jukz-cosmetics-token); offline accounts can't get one.
 
 const LEVEL_NAME_HEADER = "x-jukz-level-name";
+const GAME_HEADER = "x-jukz-game"; // the Minecraft version the backup was saved on, "<name>;<dataVersion>"
 
 function cleanLevelName(raw: string): string {
   const name = raw.replace(/[\u0000-\u001f]/g, "").trim().slice(0, 64);
@@ -260,7 +261,7 @@ async function snapshotUploadUrl(request: Request, env: Env, url: URL): Promise<
     } catch {
       // keep the default
     }
-    await store.rememberWorld(player, worldId, name, Number(body.generation) || 0);
+    await store.rememberWorld(player, worldId, name, Number(body.generation) || 0, parseGameHeader(request.headers.get(GAME_HEADER)));
   }
   return json(200, {
     packUrl: await signBlobUrl(publicOrigin(env, url), key, "put", worldId, "pack", Date.now(), tier),

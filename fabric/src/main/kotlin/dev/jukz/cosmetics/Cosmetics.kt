@@ -1,12 +1,13 @@
 package dev.jukz.cosmetics
 
+import dev.jukz.compat.jukzSessionService
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import dev.jukz.JukzMod
 import dev.jukz.config.JukzConfig
 import dev.jukz.cosmetics.CosmeticCatalog.Item
 import dev.jukz.cosmetics.CosmeticCatalog.Slot
-import net.minecraft.client.MinecraftClient
+import net.minecraft.client.Minecraft
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -163,27 +164,27 @@ object Cosmetics {
 
     /** The site's Spanish pages (/es/jukz/…) when the game is in Spanish. */
     private fun localized(url: String): String {
-        val language = runCatching { MinecraftClient.getInstance().options.language }.getOrDefault("")
+        val language = runCatching { Minecraft.getInstance().options.languageCode }.getOrDefault("")
         return if (language.startsWith("es")) url.replace("nuulm.com/jukz/", "nuulm.com/es/jukz/") else url
     }
 
     // ---- network ------------------------------------------------------------------------------
 
     private fun signIn(): Account {
-        val client = MinecraftClient.getInstance()
-        val session = client.session
+        val client = Minecraft.getInstance()
+        val session = client.user
         val challenge = call("/challenge", JsonObject(), null)
         val challengeText = challenge.get("challenge").asString
         val body = JsonObject().apply {
             addProperty("challenge", challengeText)
-            addProperty("name", session.username)
-            session.uuidOrNull?.let { addProperty("id", it.toString()) }
+            addProperty("name", session.name)
+            session.profileId?.let { addProperty("id", it.toString()) }
         }
         // Proof of the account: the chat-signing certificate Mojang issues every Microsoft account, plus
         // the challenge signed with its key — checked by the Worker offline (Mojang refuses hasJoined
         // calls from Cloudflare). Without one (offline accounts), fall back to the server-style handshake,
         // which self-hosted and local Workers can still confirm with Mojang.
-        val keys = runCatching { client.profileKeys.fetchKeyPair().get(10, TimeUnit.SECONDS).orElse(null) }.getOrNull()
+        val keys = runCatching { client.profileKeyPairManager.prepareKeyPair().get(10, TimeUnit.SECONDS).orElse(null) }.getOrNull()
         if (keys != null) {
             val data = keys.publicKey().data()
             val encoder = Base64.getEncoder()
@@ -198,7 +199,7 @@ object Cosmetics {
             }
             body.addProperty("signature", encoder.encodeToString(signer.sign()))
         } else {
-            runCatching { client.sessionService.joinServer(session.uuidOrNull, session.accessToken, challenge.get("serverId").asString) }
+            runCatching { client.jukzSessionService.joinServer(session.profileId, session.accessToken, challenge.get("serverId").asString) }
                 .onFailure { JukzMod.logger.info("jukz: cosmetics sign-in without a Mojang certificate or session ({})", it.message) }
         }
         val answer = call("/session", body, null)

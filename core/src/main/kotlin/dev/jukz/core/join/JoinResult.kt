@@ -1,5 +1,6 @@
 package dev.jukz.core.join
 
+import dev.jukz.core.model.GameVersion
 import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.model.WorldId
 
@@ -17,6 +18,12 @@ sealed interface JoinResult {
      * left behind), so the caller can pull the latest save before taking over hosting (F4-B).
      */
     data class ShouldHost(val worldId: WorldId, val record: WorldRecord? = null) : JoinResult
+
+    /**
+     * The host runs another Minecraft version ([host]; an older mod announcing none ran 1.21.1), so the
+     * game couldn't connect. Nothing was dialled.
+     */
+    data class WrongVersion(val host: GameVersion) : JoinResult
 
     /** Transport or handshake error before a successful hand-off. */
     data class Failed(val reason: String) : JoinResult

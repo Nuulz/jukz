@@ -1,5 +1,12 @@
 package dev.jukz.client
 
+import dev.jukz.compat.openScreen
+import dev.jukz.core.join.JoinConfig
+import dev.jukz.client.gui.VersionScreen
+import dev.jukz.core.model.VersionFit
+import dev.jukz.core.model.GameVersion
+import dev.jukz.compat.currentGame
+import dev.jukz.compat.leaveWorld
 import dev.jukz.JukzMod
 import dev.jukz.client.gui.AccessClosedScreen
 import dev.jukz.client.gui.HostHandoffScreen
@@ -30,9 +37,9 @@ import dev.jukz.world.WorldIdSidecar
 import dev.jukz.world.WorldKeyStore
 import dev.jukz.world.WorldSaveLocator
 import kotlinx.coroutines.runBlocking
-import net.minecraft.client.MinecraftClient
-import net.minecraft.client.gui.screen.Screen
-import net.minecraft.client.gui.screen.TitleScreen
+import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.screens.Screen
+import net.minecraft.client.gui.screens.TitleScreen
 import java.nio.file.Files
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
@@ -67,10 +74,11 @@ object JoinCoordinator {
         registry: WorldRegistry = Discovery.registry,
         dialer: ChannelDialer = defaultDialer(),
     ) {
-        val client = MinecraftClient.getInstance()
+        val client = Minecraft.getInstance()
         val handoff: GameHandoff = MinecraftGameHandoff { parent }
         val controller = JoinController(
             registry, dialer, handoff, SystemClock,
+            JoinConfig(game = currentGame), // a host on another version is explained, not dialled
             onHostLost = { wid, offer, target, gen -> onHostLeaving(client, wid, shortCode, offer, target, gen, dialer) },
             onHostClosed = { onHostClosedAccess(client, shortCode) },
         )
@@ -79,10 +87,10 @@ object JoinCoordinator {
         val onCancel = {
             cancelled.set(true)
             controller.close()
-            client.execute { client.setScreen(parent) }
+            client.execute { client.openScreen(parent) }
         }
 
-        client.setScreen(SearchingHostScreen(shortCode, onCancel))
+        client.openScreen(SearchingHostScreen(shortCode, onCancel))
 
         Thread {
             val result = try {
@@ -110,14 +118,23 @@ object JoinCoordinator {
                     // older solo fork (both gen 40).
                     val candidate = SnapshotMarker(head.generation, head.commit)
                     if (SnapshotLineage.shouldReplace(localSnapshotMarker(client, worldId), candidate)) {
-                        client.execute { showGhostTakeover(client, worldId, shortCode, parent, ghost, head.commit) }
+                        val saved = head.game ?: GameVersion.LEGACY
+                        client.execute {
+                            when (VersionFit.of(currentGame, head.game)) {
+                                VersionFit.SAME -> showGhostTakeover(client, worldId, shortCode, parent, ghost, head.commit)
+                                VersionFit.UPGRADE -> client.openScreen(VersionScreen.upgrade(saved, { client.openScreen(parent) }) {
+                                    showGhostTakeover(client, worldId, shortCode, parent, ghost, head.commit)
+                                })
+                                VersionFit.TOO_NEW -> client.openScreen(VersionScreen.tooNew(saved) { client.openScreen(parent) })
+                            }
+                        }
                     } else {
                         JukzMod.logger.info("jukz: cloud ghost for {} is not newer than the local copy — keeping local", shortCode)
                         client.execute {
-                            client.setScreen(
+                            client.openScreen(
                                 ShouldHostScreen(
                                     "No live host was found for $shortCode.",
-                                    onBack = { client.setScreen(parent) },
+                                    onBack = { client.openScreen(parent) },
                                 ),
                             )
                         }
@@ -139,7 +156,7 @@ object JoinCoordinator {
     }
 
     private fun applyResult(
-        client: MinecraftClient,
+        client: Minecraft,
         result: JoinResult,
         worldId: WorldId,
         shortCode: String,
@@ -149,22 +166,24 @@ object JoinCoordinator {
             is JoinResult.Connected ->
                 JukzMod.logger.info("jukz: joined host at {}:{}", result.host, result.port)
             JoinResult.HostUnavailable ->
-                client.setScreen(
+                client.openScreen(
                     ShouldHostScreen(
                         "No live host was found for $shortCode.",
-                        onBack = { client.setScreen(parent) },
+                        onBack = { client.openScreen(parent) },
                     ),
                 )
             // The host we tried to join was already a ghost: offer the takeover with whatever it left.
             // No live connection to ride, so the offer (from the record) is pulled directly, best-effort.
             is JoinResult.ShouldHost ->
                 showHandoff(client, worldId, shortCode, parent, result.record?.snapshot, target = null, generation = result.record?.hostGeneration ?: 0L, dialer = DirectChannelDialer(), intent = TakeoverIntent.GHOST)
+            is JoinResult.WrongVersion ->
+                client.openScreen(VersionScreen.hostOnOtherVersion(result.host) { client.openScreen(parent) })
             is JoinResult.Failed ->
-                client.setScreen(
+                client.openScreen(
                     NatErrorScreen(
                         result.reason,
                         onRetry = { start(worldId, shortCode, parent) },
-                        onHostLocally = { client.setScreen(parent) },
+                        onHostLocally = { client.openScreen(parent) },
                     ),
                 )
         }
@@ -175,7 +194,7 @@ object JoinCoordinator {
      * Invoked from the controller's reader thread, so it hops to the client thread to show the prompt.
      */
     private fun onHostLeaving(
-        client: MinecraftClient,
+        client: Minecraft,
         worldId: WorldId,
         shortCode: String,
         offer: SnapshotOffer?,
@@ -202,19 +221,19 @@ object JoinCoordinator {
      * this is NOT a handoff: never offer "Host now" (our local copy is stale — hosting it would split the
      * world). Leave the session and say why, whether the kick already dropped us or not.
      */
-    private fun onHostClosedAccess(client: MinecraftClient, shortCode: String) {
+    private fun onHostClosedAccess(client: Minecraft, shortCode: String) {
         val engaged = GuestSession.recentlyEngaged()
         GuestSession.leave() // also stops the disconnect hooks from swapping in the "host left" wait
         if (!engaged) return
         JukzMod.logger.info("jukz: host of {} closed access — not offering handoff", shortCode)
         client.execute {
-            val screen = AccessClosedScreen { client.setScreen(TitleScreen()) }
-            if (client.world != null) client.disconnect(screen) else client.setScreen(screen)
+            val screen = AccessClosedScreen { client.openScreen(TitleScreen()) }
+            if (client.level != null) client.leaveWorld(screen) else client.openScreen(screen)
         }
     }
 
     private fun showHandoff(
-        client: MinecraftClient,
+        client: Minecraft,
         worldId: WorldId,
         shortCode: String,
         parent: Screen?,
@@ -234,12 +253,12 @@ object JoinCoordinator {
                 onHostNow = { beginTakeover(client, worldId, shortCode, parent, prefetch, intent) },
                 // Declining still pulled the host's pack (the host counted it as a completed handoff and
                 // left WITHOUT a cloud backup), so back it up to the cloud rather than drop the only copy.
-                onBack = { GuestSession.leave(); backupDeclinedSnapshot(worldId, generation, prefetch); client.setScreen(parent) },
+                onBack = { GuestSession.leave(); backupDeclinedSnapshot(worldId, generation, prefetch); client.openScreen(parent) },
             )
             // If we are still in the host's world (a live handoff), leave it cleanly WITH this prompt
             // as the screen, so the vanilla "Connection lost" never flashes. For a ghost takeover (we
             // were never connected to a world), just show it.
-            if (client.world != null) client.disconnect(screen) else client.setScreen(screen)
+            if (client.level != null) client.leaveWorld(screen) else client.openScreen(screen)
         }
     }
 
@@ -255,7 +274,7 @@ object JoinCoordinator {
         ghost: R2SnapshotStore.GhostUrls,
         headCommit: String,
     ) {
-        val client = MinecraftClient.getInstance()
+        val client = Minecraft.getInstance()
         val prefetch = prefetchGhostSnapshot(ghost, headCommit)
         beginTakeover(client, worldId, shortCode, parent, prefetch, intent = TakeoverIntent.GHOST)
     }
@@ -265,7 +284,7 @@ object JoinCoordinator {
      * the same "Host now" prompt the live handoff uses; taking over reuses [beginTakeover].
      */
     private fun showGhostTakeover(
-        client: MinecraftClient,
+        client: Minecraft,
         worldId: WorldId,
         shortCode: String,
         parent: Screen?,
@@ -276,9 +295,9 @@ object JoinCoordinator {
         val screen = HostHandoffScreen(
             snapshotApplied = true,
             onHostNow = { beginTakeover(client, worldId, shortCode, parent, prefetch, intent = TakeoverIntent.GHOST) },
-            onBack = { discardPrefetch(prefetch); client.setScreen(parent) },
+            onBack = { discardPrefetch(prefetch); client.openScreen(parent) },
         )
-        client.setScreen(screen)
+        client.openScreen(screen)
     }
 
     /**
@@ -335,8 +354,8 @@ object JoinCoordinator {
      * we hold no local copy of the world. Used to refuse a cloud ghost that is not a strictly-newer
      * lineage, so a same-generation sibling fork never overwrites what we already have.
      */
-    private fun localSnapshotMarker(client: MinecraftClient, worldId: WorldId): SnapshotMarker? {
-        val savesDir = client.levelStorage.savesDirectory
+    private fun localSnapshotMarker(client: Minecraft, worldId: WorldId): SnapshotMarker? {
+        val savesDir = client.levelSource.baseDir
         val levelName = WorldSaveLocator.findLevelName(savesDir, worldId.uuid) ?: return null
         val saveDir = savesDir.resolve(levelName)
         val generation = WorldIdSidecar.generation(saveDir) ?: return null
@@ -413,7 +432,7 @@ object JoinCoordinator {
      * and never silently forks the world.
      */
     private fun beginTakeover(
-        client: MinecraftClient,
+        client: Minecraft,
         worldId: WorldId,
         shortCode: String,
         parent: Screen?,
@@ -421,9 +440,9 @@ object JoinCoordinator {
         intent: TakeoverIntent,
     ) {
         GuestSession.leave() // the old guest session is done; we are about to become the host
-        client.setScreen(SearchingHostScreen(shortCode) {}) // "preparing" spinner; no cancel mid-takeover
+        client.openScreen(SearchingHostScreen(shortCode) {}) // "preparing" spinner; no cancel mid-takeover
         Thread {
-            val savesDir = client.levelStorage.savesDirectory
+            val savesDir = client.levelSource.baseDir
             val existing = WorldSaveLocator.findLevelName(savesDir, worldId.uuid)
             val levelName = existing ?: "jukz-$shortCode"
             val saveDir = savesDir.resolve(levelName)
@@ -436,10 +455,10 @@ object JoinCoordinator {
             if (existing == null && !applied) {
                 JukzMod.logger.warn("jukz: no local copy of {} and no snapshot to pull; cannot take over", shortCode)
                 client.execute {
-                    client.setScreen(
+                    client.openScreen(
                         ShouldHostScreen(
                             "Couldn't get a copy of $shortCode to host.",
-                            onBack = { client.setScreen(parent) },
+                            onBack = { client.openScreen(parent) },
                         ),
                     )
                 }

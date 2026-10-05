@@ -1,7 +1,7 @@
 package dev.jukz.mixin;
 
 import dev.jukz.client.WorldOpenInterceptor;
-import net.minecraft.server.integrated.IntegratedServerLoader;
+import net.minecraft.client.gui.screens.worldselection.WorldOpenFlows;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -17,11 +17,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * screen calls. The interceptor re-enters this same method (guarded) to perform the local boot when
  * it decides not to join.
  */
-@Mixin(IntegratedServerLoader.class)
-public class IntegratedServerLoaderMixin {
+@Mixin(WorldOpenFlows.class)
+public class WorldOpenFlowsMixin {
 
     @Inject(
-        method = "start(Ljava/lang/String;Ljava/lang/Runnable;)V",
+        method = "openWorld(Ljava/lang/String;Ljava/lang/Runnable;)V",
         at = @At("HEAD"),
         cancellable = true
     )

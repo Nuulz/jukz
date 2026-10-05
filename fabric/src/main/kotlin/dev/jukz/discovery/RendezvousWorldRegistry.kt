@@ -1,5 +1,6 @@
 package dev.jukz.discovery
 
+import dev.jukz.core.model.GameVersion
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -214,6 +215,7 @@ class RendezvousWorldRegistry(
         addProperty("heartbeatSeq", record.heartbeatSeq)
         addProperty("playerCount", record.playerCount)
         record.relay?.let { add("relay", JsonObject().apply { addProperty("sessionId", it.sessionId) }) }
+        record.game?.let { add("game", JsonObject().apply { addProperty("name", it.name); addProperty("dataVersion", it.dataVersion) }) }
     }
 
     private fun tokenToJson(token: ClaimToken): JsonObject = JsonObject().apply {
@@ -247,6 +249,7 @@ class RendezvousWorldRegistry(
             heartbeatSeq = json.get("heartbeatSeq").asLong,
             playerCount = json.get("playerCount")?.asInt ?: 0,
             relay = json.getAsJsonObject("relay")?.let { RelayOffer(it.get("sessionId").asString) },
+            game = json.getAsJsonObject("game")?.let { runCatching { GameVersion(it.get("name").asString, it.get("dataVersion").asInt) }.getOrNull() },
         )
     }
 }

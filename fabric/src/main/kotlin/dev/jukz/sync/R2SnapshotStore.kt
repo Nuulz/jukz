@@ -1,5 +1,7 @@
 package dev.jukz.sync
 
+import dev.jukz.compat.currentGame
+import dev.jukz.core.model.GameVersion
 import com.google.gson.JsonParser
 import dev.jukz.JukzMod
 import dev.jukz.client.CloudWorlds
@@ -26,8 +28,11 @@ object R2SnapshotStore {
 
     data class GhostUrls(val packUrl: String, val headUrl: String)
 
-    /** The ghost's head metadata: the fencing [generation] and the [commit] id its pack resets to. */
-    data class GhostHead(val generation: Long, val commit: String)
+    /**
+     * The ghost's head metadata: the fencing [generation], the [commit] id its pack resets to, and the
+     * Minecraft version it was saved on ([game]; null in heads from older mods, which ran 1.21.1).
+     */
+    data class GhostHead(val generation: Long, val commit: String, val game: GameVersion? = null)
 
     private val http: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(8))
@@ -68,7 +73,9 @@ object R2SnapshotStore {
             putBytes(urls.packUrl, pack, onProgress)
             // The head object carries the fencing generation alongside the commit id ("<gen> <commit>"),
             // so a direct-open can compare it to the local copy without downloading the whole pack.
-            putBytes(urls.headUrl, "$generation $head".toByteArray(Charsets.UTF_8)) { _, _ -> }
+            // ... then the Minecraft version it was saved on ("<gen> <commit> <dataVersion> <name>"); older
+            // mods read the first two fields and ignore the rest.
+            putBytes(urls.headUrl, "$generation $head ${currentGame.dataVersion} ${currentGame.name}".toByteArray(Charsets.UTF_8)) { _, _ -> }
             UploadResult.Done
         }.getOrElse {
             if (it is Refusal) {
@@ -108,9 +115,18 @@ object R2SnapshotStore {
      */
     fun ghostHead(headUrl: String): GhostHead? {
         val text = downloadText(headUrl)?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        val parts = text.split(Regex("\\s+"))
+        return parseHead(text)
+    }
+
+    /** "<generation> <commit> [<dataVersion> <name>]", or a legacy head holding only the commit id. */
+    fun parseHead(text: String): GhostHead {
+        val parts = text.trim().split(Regex("\\s+"))
         val gen = if (parts.size >= 2) parts[0].toLongOrNull() else null
-        return if (gen != null) GhostHead(gen, parts[1]) else GhostHead(0L, parts.last())
+        if (gen == null) return GhostHead(0L, parts.last())
+        val data = parts.getOrNull(2)?.toIntOrNull()
+        val name = parts.drop(3).joinToString(" ")
+        val game = if (data != null && data > 0 && name.isNotBlank()) GameVersion(name, data) else null
+        return GhostHead(gen, parts[1], game)
     }
 
     /** GET a small text object (the head commit id). Returns its trimmed content, or null on 404/error. */

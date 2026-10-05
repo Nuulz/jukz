@@ -1,5 +1,7 @@
 package dev.jukz.core.host
 
+import dev.jukz.core.model.GameVersion
+
 /**
  * Timings for the host flow. [heartbeatIntervalMs] must sit well within the registry's record TTL
  * so a live host keeps re-announcing before its record can expire. [settleWindowMs] is a short delay
@@ -11,4 +13,6 @@ package dev.jukz.core.host
 data class HostConfig(
     val heartbeatIntervalMs: Long = 60_000,
     val settleWindowMs: Long = 2_000,
+    /** This game's Minecraft version, announced so guests on other versions know before connecting. */
+    val game: GameVersion? = null,
 )

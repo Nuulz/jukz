@@ -1,9 +1,10 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.openScreen
 import dev.jukz.client.GuestSession
-import net.minecraft.client.MinecraftClient
-import net.minecraft.client.gui.screen.TitleScreen
-import net.minecraft.text.Text
+import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.screens.TitleScreen
+import net.minecraft.network.chat.Component
 
 /**
  * A transient wait shown to a guest the instant its host's connection drops, in place of the vanilla
@@ -13,14 +14,14 @@ import net.minecraft.text.Text
  * never stuck on the spinner.
  */
 class HostLeavingScreen : JukzStatusScreen(
-    Text.literal("The host left"),
-    Text.literal("Getting the world…"),
+    Component.literal("The host left"),
+    Component.literal("Getting the world…"),
     accentColor = ACCENT_INFO,
 ) {
     override fun buttons() = listOf(
         StatusButton("Cancel") {
             GuestSession.leave()
-            MinecraftClient.getInstance().setScreen(TitleScreen())
+            Minecraft.getInstance().openScreen(TitleScreen())
         },
     )
 }

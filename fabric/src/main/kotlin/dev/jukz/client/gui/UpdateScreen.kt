@@ -1,12 +1,13 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.openScreen
 import dev.jukz.config.Changelog
 import dev.jukz.config.JukzState
 import io.wispforest.owo.ui.component.LabelComponent
 import io.wispforest.owo.ui.container.FlowLayout
-import net.minecraft.client.gui.screen.ConfirmLinkScreen
-import net.minecraft.client.gui.screen.Screen
-import net.minecraft.text.Text
+import net.minecraft.client.gui.screens.ConfirmLinkScreen
+import net.minecraft.client.gui.screens.Screen
+import net.minecraft.network.chat.Component
 
 /**
  * "jukz was updated": shown once, on the first launch of a new version (see [JukzState]). Lists the
@@ -24,30 +25,30 @@ class UpdateScreen(private val parent: Screen?, private val previous: String?) :
     override fun build(root: FlowLayout) {
         val version = JukzState.modVersion
         accent(root, COLOR_LIVE)
-        label(root, "title").text(Text.literal("jukz was updated to $version"))
-        label(root, "subtitle").text(Text.literal(if (previous != null) "What's new since $previous:" else "What's new:"))
+        label(root, "title").text(Component.literal("jukz was updated to $version"))
+        label(root, "subtitle").text(Component.literal(if (previous != null) "What's new since $previous:" else "What's new:"))
 
         val sections = Changelog.between(Changelog.bundled(), previous, version)
         val changes = root.childById(FlowLayout::class.java, "changes")
         val bullets = sections.flatMap { it.bullets }.ifEmpty { listOf("Fixes and improvements. The full notes are on GitHub.") }
         bullets.forEachIndexed { i, text ->
             val row = ui!!.expandTemplate(FlowLayout::class.java, "change", mapOf("id" to "change-$i"))
-            row.childById(LabelComponent::class.java, "change-$i").text(Text.literal(text))
+            row.childById(LabelComponent::class.java, "change-$i").text(Component.literal(text))
             changes.child(row)
         }
 
-        label(root, "hint").text(Text.literal("jukz stays free. If you like it, Ko-fi helps keep the servers on."))
-        addButton(root, "buttons", Text.literal("Release notes"), width = 100) {
-            ConfirmLinkScreen.open(this, "$RELEASES/tag/v$version")
+        label(root, "hint").text(Component.literal("jukz stays free. If you like it, Ko-fi helps keep the servers on."))
+        addButton(root, "buttons", Component.literal("Release notes"), width = 100) {
+            ConfirmLinkScreen.confirmLinkNow(this, "$RELEASES/tag/v$version")
         }
-        addButton(root, "buttons", Text.literal("Ko-fi"), width = 60) { ConfirmLinkScreen.open(this, CosmeticsScreen.KOFI_URL) }
-        addButton(root, "buttons", Text.literal("Continue"), width = 100) { client?.setScreen(parent) }
+        addButton(root, "buttons", Component.literal("Ko-fi"), width = 60) { ConfirmLinkScreen.confirmLinkNow(this, CosmeticsScreen.KOFI_URL) }
+        addButton(root, "buttons", Component.literal("Continue"), width = 100) { minecraft?.openScreen(parent) }
     }
 
     override fun shouldCloseOnEsc(): Boolean = true
 
-    override fun close() {
-        client?.setScreen(parent)
+    override fun onClose() {
+        minecraft?.openScreen(parent)
     }
 
     companion object {

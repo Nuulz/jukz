@@ -1,14 +1,15 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.openScreen
 import dev.jukz.JukzMod
 import dev.jukz.runtime.GhostUpload
 import dev.jukz.sync.R2SnapshotStore
 import io.wispforest.owo.ui.component.LabelComponent
 import io.wispforest.owo.ui.container.FlowLayout
-import net.minecraft.client.MinecraftClient
-import net.minecraft.client.gui.DrawContext
-import net.minecraft.client.gui.screen.TitleScreen
-import net.minecraft.text.Text
+import net.minecraft.client.Minecraft
+import dev.jukz.compat.GuiGraphics
+import net.minecraft.client.gui.screens.TitleScreen
+import net.minecraft.network.chat.Component
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
@@ -40,7 +41,7 @@ class UploadingWorldScreen : JukzUiScreen("upload") {
 
     override fun build(root: FlowLayout) {
         this.root = root
-        label(root, "title").text(Text.literal("Saving your world to the cloud"))
+        label(root, "title").text(Component.literal("Saving your world to the cloud"))
         status = label(root, "message")
         tip = label(root, "tip")
         bar = progressBar(root, "bar")
@@ -59,7 +60,7 @@ class UploadingWorldScreen : JukzUiScreen("upload") {
         }
         if (done.get()) {
             GhostUpload.clear()
-            MinecraftClient.getInstance().setScreen(TitleScreen())
+            Minecraft.getInstance().openScreen(TitleScreen())
             return
         }
         if (escapeOffered && !escapeShown) showEscape()
@@ -97,7 +98,7 @@ class UploadingWorldScreen : JukzUiScreen("upload") {
     private fun showEscape() {
         val r = root ?: return
         escapeShown = true
-        addButton(r, "buttons", Text.literal(if (refused != null) "Continue" else "Exit anyway (no cloud backup)"), width = 220) {
+        addButton(r, "buttons", Component.literal(if (refused != null) "Continue" else "Exit anyway (no cloud backup)"), width = 220) {
             JukzMod.logger.warn("jukz: player skipped the ghost upload — world has no cloud backup")
             done.set(true) // unblocks tick() -> returns to the title screen; the upload thread stops
         }
@@ -116,13 +117,13 @@ class UploadingWorldScreen : JukzUiScreen("upload") {
         }
         if (force || line != shownStatus) {
             shownStatus = line
-            status?.text(Text.literal(line))
+            status?.text(Component.literal(line))
         }
         val now = System.currentTimeMillis()
         if (force || now - lastMessageSwapMs > MESSAGE_SWAP_MS) {
             if (!force) messageIndex = (messageIndex + 1) % MESSAGES.size
             lastMessageSwapMs = now
-            tip?.text(Text.literal(MESSAGES[messageIndex]))
+            tip?.text(Component.literal(MESSAGES[messageIndex]))
         }
     }
 
@@ -133,11 +134,19 @@ class UploadingWorldScreen : JukzUiScreen("upload") {
         else "Uploading…"
     }
 
-    override fun render(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
+    //? if >=26.2 {
+    /*override fun extractRenderState(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
+        val t = total.get()
+        bar?.progress(if (t > 0) sent.get().toDouble() / t else 0.0, COLOR_LIVE)
+        super.extractRenderState(context, mouseX, mouseY, delta)
+    }
+    *///?} else {
+    override fun render(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
         val t = total.get()
         bar?.progress(if (t > 0) sent.get().toDouble() / t else 0.0, COLOR_LIVE)
         super.render(context, mouseX, mouseY, delta)
     }
+    //?}
 
     companion object {
         private const val MAX_ATTEMPTS_BEFORE_ESCAPE = 3

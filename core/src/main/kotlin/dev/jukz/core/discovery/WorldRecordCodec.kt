@@ -2,6 +2,7 @@ package dev.jukz.core.discovery
 
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.core.model.Endpoint
+import dev.jukz.core.model.GameVersion
 import dev.jukz.core.model.NodeId
 import dev.jukz.core.model.WorldId
 import java.io.ByteArrayInputStream
@@ -18,7 +19,8 @@ import java.util.UUID
 object WorldRecordCodec {
 
     private const val MAGIC = 0x6A_6B_7A_31 // "jkz1"
-    private const val VERSION = 4            // current: + optional relay offer
+    private const val VERSION = 5            // current: + the host's Minecraft version
+    private const val V4_RELAY = 4           // optional relay offer
     private const val V3_SNAPSHOT = 3        // optional snapshot offer + player count
     private const val V2_MULTI_ENDPOINT = 2  // multi-endpoint candidate list, no snapshot
     private const val LEGACY_VERSION = 1     // single endpoint, no count prefix
@@ -59,6 +61,13 @@ object WorldRecordCodec {
             o.writeBoolean(relay != null)
             if (relay != null) {
                 o.writeUTF(relay.sessionId)
+            }
+            // v5 tail: the host's Minecraft version.
+            val game = record.game
+            o.writeBoolean(game != null)
+            if (game != null) {
+                o.writeUTF(game.name)
+                o.writeInt(game.dataVersion)
             }
         }
         return bos.toByteArray()
@@ -101,6 +110,11 @@ object WorldRecordCodec {
                     relay = RelayOffer(i.readUTF())
                 }
             }
+            // v5 tail (absent before: game=null, i.e. an older host on 1.21.1).
+            var game: GameVersion? = null
+            if (version > V4_RELAY && i.readBoolean()) {
+                game = GameVersion(i.readUTF(), i.readInt())
+            }
             return WorldRecord(
                 worldId = WorldId(UUID(msb, lsb)),
                 token = ClaimToken(generation, claimEpochMillis, NodeId(nodeBytes)),
@@ -109,6 +123,7 @@ object WorldRecordCodec {
                 snapshot = snapshot,
                 playerCount = playerCount,
                 relay = relay,
+                game = game,
             )
         }
     }
