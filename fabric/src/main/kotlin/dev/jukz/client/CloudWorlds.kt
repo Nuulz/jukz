@@ -1,5 +1,8 @@
 package dev.jukz.client
 
+import dev.jukz.core.model.VersionFit
+import dev.jukz.core.model.GameVersion
+import dev.jukz.compat.currentGame
 import dev.jukz.compat.string
 import dev.jukz.compat.compound
 import dev.jukz.compat.toast
@@ -40,7 +43,10 @@ import java.util.concurrent.Executors
  * open path, which pulls a newer cloud copy by itself.
  */
 object CloudWorlds {
-    class World(val worldId: UUID, val name: String, val generation: Long, val updated: Long)
+    /** An account world; [game] is the Minecraft version it was backed up on (null: 1.21.1, older mods). */
+    class World(val worldId: UUID, val name: String, val generation: Long, val updated: Long, val game: GameVersion?) {
+        val fit: VersionFit get() = VersionFit.of(currentGame, game)
+    }
 
     enum class State { HERE, AWAY, BRINGING, FAILED }
 
@@ -57,7 +63,11 @@ object CloudWorlds {
     fun uploadHeaders(worldId: WorldId): List<Pair<String, String>> {
         val token = Cosmetics.sessionToken() ?: return emptyList()
         val name = runCatching { localName(worldId.uuid) }.getOrNull() ?: "World"
-        return listOf("x-jukz-cosmetics-token" to token, "x-jukz-level-name" to URLEncoder.encode(name, Charsets.UTF_8).replace("+", "%20"))
+        return listOf(
+            "x-jukz-cosmetics-token" to token,
+            "x-jukz-level-name" to URLEncoder.encode(name, Charsets.UTF_8).replace("+", "%20"),
+            "x-jukz-game" to "${currentGame.name};${currentGame.dataVersion}", // the account list shows it
+        )
     }
 
     /**
@@ -73,7 +83,9 @@ object CloudWorlds {
                 return@execute
             }
             val seen = Seen.load()
-            val missing = list.filter { !isHere(it.worldId) && it.worldId !in seen }
+            // Only worlds of this very version come on their own: a newer one can't open here, and an older
+            // one would be upgraded (and lost to friends on its version) the moment it's opened.
+            val missing = list.filter { !isHere(it.worldId) && it.worldId !in seen && it.fit == VersionFit.SAME }
             if (missing.isEmpty()) return@execute
             toast("Your worlds from another PC", "Bringing ${missing.size} world${if (missing.size == 1) "" else "s"} from your cloud…")
             val brought = missing.filter { bringNow(it) }
@@ -157,10 +169,7 @@ object CloudWorlds {
                     creationsPublished = creator?.get("published")?.asInt,
                     creationsPending = creator?.get("pending")?.asInt,
                 )
-                worlds = o.getAsJsonArray("worlds").map {
-                    val w = it.asJsonObject
-                    World(UUID.fromString(w.get("worldId").asString), w.get("name").asString, w.get("generation").asLong, w.get("updated").asLong)
-                }
+                worlds = o.getAsJsonArray("worlds").map { worldFromJson(it.asJsonObject) }
             }.onFailure { JukzMod.logger.info("jukz: account summary unavailable ({})", it.message) }
     }
 
@@ -215,12 +224,16 @@ object CloudWorlds {
 
     private fun refreshNow(): List<World> {
         val body = JsonParser.parseString(send(request("/v1/account/worlds").GET())).asJsonObject
-        val list = body.getAsJsonArray("worlds").map {
-            val o = it.asJsonObject
-            World(UUID.fromString(o.get("worldId").asString), o.get("name").asString, o.get("generation").asLong, o.get("updated").asLong)
-        }
+        val list = body.getAsJsonArray("worlds").map { worldFromJson(it.asJsonObject) }
         worlds = list
         return list
+    }
+
+    private fun worldFromJson(o: com.google.gson.JsonObject): World {
+        val game = o.get("game")?.takeIf { it.isJsonObject }?.asJsonObject?.let { g ->
+            runCatching { GameVersion(g.get("name").asString, g.get("dataVersion").asInt) }.getOrNull()
+        }
+        return World(UUID.fromString(o.get("worldId").asString), o.get("name").asString, o.get("generation").asLong, o.get("updated").asLong, game)
     }
 
     private fun bringNow(world: World): Boolean {
@@ -228,6 +241,8 @@ object CloudWorlds {
         val ok = runCatching {
             val urls = JsonParser.parseString(post("/v1/account/worlds/${world.worldId}/download")).asJsonObject
             val head = R2SnapshotStore.ghostHead(urls.get("headUrl").asString) ?: error("no backup in the cloud")
+            // The backup itself says which version saved it; a newer one couldn't be opened here.
+            if (VersionFit.of(currentGame, head.game) == VersionFit.TOO_NEW) error("it was saved on Minecraft ${head.game?.name}")
             val pack = R2SnapshotStore.downloadToTemp(urls.get("packUrl").asString) { _, _ -> } ?: error("download failed")
             try {
                 val saveDir = freeSaveDir(world.name)
@@ -245,7 +260,7 @@ object CloudWorlds {
         }.onFailure { JukzMod.logger.warn("jukz: couldn't bring cloud world {} ({})", world.name, it.message) }.isSuccess
         states[world.worldId] = if (ok) State.HERE else State.FAILED
         if (ok) Seen.add(world.worldId)
-        else toast("Couldn't bring ${world.name}", "Try again from Singleplayer → My cloud.")
+        else toast("Couldn't bring ${world.name}", "Try again from your jukz account (the person icon).")
         return ok
     }
 

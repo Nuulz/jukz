@@ -16,6 +16,12 @@ export interface RelayInfo {
   sessionId: string;
 }
 
+/** The Minecraft version a host runs, or a backup was saved on (absent: 1.21.1, from older mods). */
+export interface GameInfo {
+  name: string;
+  dataVersion: number;
+}
+
 export interface WorldRecord {
   worldId: string;
   token: Token;
@@ -23,6 +29,7 @@ export interface WorldRecord {
   heartbeatSeq: number;
   playerCount: number;
   relay?: RelayInfo;
+  game?: GameInfo;
 }
 
 /** A record plus its lease deadline (epoch ms), as persisted in the hub. */
@@ -90,6 +97,31 @@ export function parseRelay(raw: unknown): RelayInfo | undefined {
     throw new BadRequest("relay.sessionId must be 16..64 hex chars");
   }
   return { sessionId };
+}
+
+/** A Minecraft version from a client: a short name like "1.21.11" and its positive data version. */
+export function parseGame(raw: unknown): GameInfo | undefined {
+  if (raw == null) return undefined;
+  const { name, dataVersion } = raw as GameInfo;
+  if (typeof name !== "string" || !/^[0-9A-Za-z][0-9A-Za-z.\- ]{0,31}$/.test(name)) {
+    throw new BadRequest("game.name must be a short version name");
+  }
+  if (!Number.isSafeInteger(dataVersion) || dataVersion < 1 || dataVersion > 1_000_000) {
+    throw new BadRequest("game.dataVersion must be a positive integer");
+  }
+  return { name, dataVersion };
+}
+
+/** The `x-jukz-game` header of a backup upload ("<name>;<dataVersion>"); undefined if absent or malformed. */
+export function parseGameHeader(raw: string | null): GameInfo | undefined {
+  if (!raw) return undefined;
+  const at = raw.lastIndexOf(";");
+  if (at < 0) return undefined;
+  try {
+    return parseGame({ name: raw.slice(0, at), dataVersion: Number(raw.slice(at + 1)) });
+  } catch {
+    return undefined;
+  }
 }
 
 /**

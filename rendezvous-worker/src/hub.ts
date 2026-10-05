@@ -12,6 +12,7 @@ import {
   heartbeat,
   liveRecord,
   mergeObservedEndpoint,
+  parseGame,
   nonceFor,
   parseEndpoints,
   parseRelay,
@@ -159,6 +160,7 @@ export class RendezvousHub extends DurableObject<Env> {
       heartbeatSeq: Number(body.heartbeatSeq) || 0,
       playerCount: Number(body.playerCount) || 0,
       relay: parseRelay(body.relay),
+      game: parseGame(body.game),
     };
     const outcome = announce(await this.entry(worldId), record, Date.now(), this.ttlMs);
     if (outcome.kind === "rejected") {

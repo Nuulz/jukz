@@ -1,5 +1,7 @@
 package dev.jukz.client
 
+import dev.jukz.core.host.HostConfig
+import dev.jukz.compat.currentGame
 import dev.jukz.compat.leaveWorld
 import dev.jukz.compat.closeLevel
 import dev.jukz.compat.isOwner
@@ -131,6 +133,7 @@ object HostCoordinator {
             endpointResolver = ForwardingEndpointResolver(forwarder, LocalEndpointResolver()),
             nodeId = PersistentNodeId.nodeId,
             clock = SystemClock,
+            config = HostConfig(game = currentGame), // guests on other versions are told before connecting
             // Self-heal: if our lease is genuinely lost to a newer host (the heartbeat CAS fails),
             // stop serving our fork and offer the player the live winner — never keep a silent second
             // server running (the 2026-06-13 split-brain, where this callback was unwired and a

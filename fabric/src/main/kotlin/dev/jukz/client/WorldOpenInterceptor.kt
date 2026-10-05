@@ -1,5 +1,14 @@
 package dev.jukz.client
 
+import net.minecraft.nbt.NbtIo
+import net.minecraft.nbt.NbtAccounter
+import dev.jukz.client.gui.VersionScreen
+import dev.jukz.core.model.VersionFit
+import dev.jukz.core.model.GameVersion
+import dev.jukz.compat.string
+import dev.jukz.compat.int
+import dev.jukz.compat.compound
+import dev.jukz.compat.currentGame
 import dev.jukz.JukzMod
 import dev.jukz.client.gui.SearchingHostScreen
 import dev.jukz.core.model.WorldId
@@ -63,6 +72,12 @@ object WorldOpenInterceptor {
             } catch (e: Throwable) {
                 null
             }
+            if (live != null && VersionFit.of(currentGame, live.game) != VersionFit.SAME) {
+                // Someone hosts it on another Minecraft version: the game couldn't connect, and opening the
+                // local copy would split the world. Say so instead.
+                client.execute { client.setScreen(VersionScreen.hostOnOtherVersion(live.game ?: GameVersion.LEGACY) { client.setScreen(parent) }) }
+                return@Thread
+            }
             if (live != null) {
                 client.execute {
                     JukzMod.logger.info("jukz: {} is hosted live — joining instead of opening locally", shortCode)
@@ -87,9 +102,21 @@ object WorldOpenInterceptor {
                         "jukz: {} has a newer cloud copy (gen {} > local {}) — loading it",
                         shortCode, head.generation, localGen,
                     )
-                    JoinCoordinator.takeOverGhost(worldId, shortCode, parent, ghost, head.commit)
+                    val takeOver = { JoinCoordinator.takeOverGhost(worldId, shortCode, parent, ghost, head.commit) }
+                    val saved = head.game ?: GameVersion.LEGACY
+                    when (VersionFit.of(currentGame, head.game)) {
+                        VersionFit.SAME -> takeOver()
+                        VersionFit.UPGRADE -> client.setScreen(VersionScreen.upgrade(saved, { client.setScreen(parent) }) { takeOver() })
+                        VersionFit.TOO_NEW -> client.setScreen(VersionScreen.tooNew(saved) { client.setScreen(parent) })
+                    }
                 } else {
-                    openLocally(levelName, onCancel)
+                    // Our own copy: one saved on an older version is upgraded by opening it, so ask first.
+                    val saved = localSaveVersion(levelName)
+                    if (saved != null && VersionFit.of(currentGame, saved) == VersionFit.UPGRADE) {
+                        client.setScreen(VersionScreen.upgrade(saved, { client.setScreen(parent) }) { openLocally(levelName, onCancel) })
+                    } else {
+                        openLocally(levelName, onCancel)
+                    }
                 }
             }
         }.apply {
@@ -97,6 +124,14 @@ object WorldOpenInterceptor {
             name = "jukz-open-consult"
         }.start()
     }
+
+    /** The version a save was last played on, from its level.dat (Data.DataVersion and Data.Version.Name). */
+    private fun localSaveVersion(levelName: String): GameVersion? = runCatching {
+        val levelDat = Minecraft.getInstance().levelSource.baseDir.resolve(levelName).resolve("level.dat")
+        val data = NbtIo.readCompressed(levelDat, NbtAccounter.unlimitedHeap()).compound("Data")
+        val dataVersion = data.int("DataVersion") ?: return null
+        GameVersion(data.compound("Version").string("Name") ?: "an older version", dataVersion)
+    }.getOrNull()
 
     /** Resume the vanilla local boot, bypassing this interceptor for the re-entrant call. */
     private fun openLocally(levelName: String, onCancel: Runnable) {

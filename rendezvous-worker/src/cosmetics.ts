@@ -51,7 +51,7 @@ import {
   passwordMatches,
   rewardChoices,
 } from "./creators-logic.ts";
-import { BadRequest, RateLimiter } from "./logic.ts";
+import { BadRequest, type GameInfo, RateLimiter } from "./logic.ts";
 import { MOJANG_CERTIFICATE_KEYS } from "./mojang-keys.ts";
 
 // Validated at load: a broken catalog edit fails the Worker (and its tests) instead of reaching players.
@@ -92,6 +92,12 @@ export class CosmeticsStore extends DurableObject<Env> {
     this.sql.exec(`CREATE TABLE IF NOT EXISTS account_worlds (
       player_id TEXT NOT NULL, world_id TEXT NOT NULL, name TEXT NOT NULL, generation INTEGER NOT NULL,
       updated INTEGER NOT NULL, PRIMARY KEY (player_id, world_id))`);
+    // v2: the Minecraft version each world was backed up on (null for older rows: 1.21.1).
+    const worldColumns = this.sql.exec<{ name: string }>("PRAGMA table_info(account_worlds)").toArray().map((c) => c.name);
+    if (!worldColumns.includes("game_name")) {
+      this.sql.exec("ALTER TABLE account_worlds ADD COLUMN game_name TEXT");
+      this.sql.exec("ALTER TABLE account_worlds ADD COLUMN game_data INTEGER");
+    }
     // Cloud backups per day and subject (limits.ts): an IP without an account, a player with one.
     this.sql.exec(`CREATE TABLE IF NOT EXISTS usage (
       subject TEXT NOT NULL, day TEXT NOT NULL, uploads INTEGER NOT NULL, PRIMARY KEY (subject, day))`);
@@ -189,11 +195,12 @@ export class CosmeticsStore extends DurableObject<Env> {
   // ---- cloud worlds --------------------------------------------------------------------------------
 
   /** [playerId] just backed up [worldId] (with the world's key): remember it on their account. */
-  rememberWorld(playerId: string, worldId: string, name: string, generation: number): void {
+  rememberWorld(playerId: string, worldId: string, name: string, generation: number, game?: GameInfo): void {
     this.sql.exec(
-      `INSERT INTO account_worlds (player_id, world_id, name, generation, updated) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT (player_id, world_id) DO UPDATE SET name = excluded.name, generation = excluded.generation, updated = excluded.updated`,
-      playerId, worldId, name, generation, Date.now(),
+      `INSERT INTO account_worlds (player_id, world_id, name, generation, updated, game_name, game_data) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (player_id, world_id) DO UPDATE SET name = excluded.name, generation = excluded.generation,
+         updated = excluded.updated, game_name = excluded.game_name, game_data = excluded.game_data`,
+      playerId, worldId, name, generation, Date.now(), game?.name ?? null, game?.dataVersion ?? null,
     );
     // Keep the newest MAX_ACCOUNT_WORLDS per player.
     this.sql.exec(
@@ -203,10 +210,14 @@ export class CosmeticsStore extends DurableObject<Env> {
     );
   }
 
-  accountWorlds(playerId: string): { worldId: string; name: string; generation: number; updated: number }[] {
-    return this.sql.exec<{ world_id: string; name: string; generation: number; updated: number }>(
-      "SELECT world_id, name, generation, updated FROM account_worlds WHERE player_id = ? ORDER BY updated DESC", playerId)
-      .toArray().map((r) => ({ worldId: r.world_id, name: r.name, generation: r.generation, updated: r.updated }));
+  accountWorlds(playerId: string): { worldId: string; name: string; generation: number; updated: number; game: GameInfo | null }[] {
+    return this.sql.exec<{ world_id: string; name: string; generation: number; updated: number; game_name: string | null; game_data: number | null }>(
+      "SELECT world_id, name, generation, updated, game_name, game_data FROM account_worlds WHERE player_id = ? ORDER BY updated DESC", playerId)
+      .toArray().map((r) => ({
+        worldId: r.world_id, name: r.name, generation: r.generation, updated: r.updated,
+        // null: backed up by a mod from before versions were tracked, i.e. Minecraft 1.21.1.
+        game: r.game_name && r.game_data ? { name: r.game_name, dataVersion: r.game_data } : null,
+      }));
   }
 
   ownsWorld(playerId: string, worldId: string): boolean {

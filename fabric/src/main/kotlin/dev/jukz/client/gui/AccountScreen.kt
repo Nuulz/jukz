@@ -1,5 +1,8 @@
 package dev.jukz.client.gui
 
+import dev.jukz.core.model.VersionFit
+import dev.jukz.core.model.GameVersion
+import dev.jukz.compat.currentGame
 import dev.jukz.client.CloudWorlds
 import dev.jukz.client.CloudWorlds.State
 import dev.jukz.client.CloudWorlds.Upload
@@ -89,8 +92,22 @@ class AccountScreen(private val parent: Screen?) : JukzUiScreen("account") {
                     State.BRINGING -> "bringing it…" to ACCENT_INFO
                     State.FAILED -> "couldn't bring it" to ACCENT_ERROR
                 }
-                val actions = row(rows, "c$i", world.name, "saved ${DATE.format(Instant.ofEpochMilli(world.updated))} · $status", color)
-                if (state == State.AWAY || state == State.FAILED) actions.child(button("Bring here", 62) { CloudWorlds.bring(world) { rebuild() }; rebuild() })
+                // Another version's world says so; a newer one can't come here at all.
+                val version = if (world.fit == VersionFit.SAME) "" else " · ${(world.game ?: GameVersion.LEGACY).name}"
+                val actions = row(rows, "c$i", world.name, "saved ${DATE.format(Instant.ofEpochMilli(world.updated))}$version · $status", color)
+                if (state == State.AWAY || state == State.FAILED) {
+                    val bring = button("Bring here", 62) { CloudWorlds.bring(world) { rebuild() }; rebuild() }
+                    val saved = (world.game ?: GameVersion.LEGACY).name
+                    when (world.fit) {
+                        VersionFit.SAME -> {}
+                        VersionFit.UPGRADE -> bring.tooltip(Component.literal("Saved on $saved. Opening it here will update it to ${currentGame.name}."))
+                        VersionFit.TOO_NEW -> {
+                            bring.active = false
+                            bring.tooltip(Component.literal("Saved on Minecraft $saved, newer than your ${currentGame.name}. Open it with $saved."))
+                        }
+                    }
+                    actions.child(bring)
+                }
                 if (state != State.BRINGING) actions.child(button("Forget", 44) { CloudWorlds.forget(world) { rebuild() } }
                     .tooltip(Component.literal("Take it off your account's list. The world itself isn't deleted anywhere.")))
             }

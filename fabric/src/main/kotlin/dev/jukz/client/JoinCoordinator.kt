@@ -1,5 +1,10 @@
 package dev.jukz.client
 
+import dev.jukz.core.join.JoinConfig
+import dev.jukz.client.gui.VersionScreen
+import dev.jukz.core.model.VersionFit
+import dev.jukz.core.model.GameVersion
+import dev.jukz.compat.currentGame
 import dev.jukz.compat.leaveWorld
 import dev.jukz.JukzMod
 import dev.jukz.client.gui.AccessClosedScreen
@@ -72,6 +77,7 @@ object JoinCoordinator {
         val handoff: GameHandoff = MinecraftGameHandoff { parent }
         val controller = JoinController(
             registry, dialer, handoff, SystemClock,
+            JoinConfig(game = currentGame), // a host on another version is explained, not dialled
             onHostLost = { wid, offer, target, gen -> onHostLeaving(client, wid, shortCode, offer, target, gen, dialer) },
             onHostClosed = { onHostClosedAccess(client, shortCode) },
         )
@@ -111,7 +117,16 @@ object JoinCoordinator {
                     // older solo fork (both gen 40).
                     val candidate = SnapshotMarker(head.generation, head.commit)
                     if (SnapshotLineage.shouldReplace(localSnapshotMarker(client, worldId), candidate)) {
-                        client.execute { showGhostTakeover(client, worldId, shortCode, parent, ghost, head.commit) }
+                        val saved = head.game ?: GameVersion.LEGACY
+                        client.execute {
+                            when (VersionFit.of(currentGame, head.game)) {
+                                VersionFit.SAME -> showGhostTakeover(client, worldId, shortCode, parent, ghost, head.commit)
+                                VersionFit.UPGRADE -> client.setScreen(VersionScreen.upgrade(saved, { client.setScreen(parent) }) {
+                                    showGhostTakeover(client, worldId, shortCode, parent, ghost, head.commit)
+                                })
+                                VersionFit.TOO_NEW -> client.setScreen(VersionScreen.tooNew(saved) { client.setScreen(parent) })
+                            }
+                        }
                     } else {
                         JukzMod.logger.info("jukz: cloud ghost for {} is not newer than the local copy — keeping local", shortCode)
                         client.execute {
@@ -160,6 +175,8 @@ object JoinCoordinator {
             // No live connection to ride, so the offer (from the record) is pulled directly, best-effort.
             is JoinResult.ShouldHost ->
                 showHandoff(client, worldId, shortCode, parent, result.record?.snapshot, target = null, generation = result.record?.hostGeneration ?: 0L, dialer = DirectChannelDialer(), intent = TakeoverIntent.GHOST)
+            is JoinResult.WrongVersion ->
+                client.setScreen(VersionScreen.hostOnOtherVersion(result.host) { client.setScreen(parent) })
             is JoinResult.Failed ->
                 client.setScreen(
                     NatErrorScreen(

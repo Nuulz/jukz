@@ -3,6 +3,8 @@ package dev.jukz.compat
 
 import com.mojang.authlib.GameProfile
 import com.mojang.authlib.minecraft.MinecraftSessionService
+import dev.jukz.core.model.GameVersion
+import net.minecraft.SharedConstants
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.components.toasts.SystemToast
 import net.minecraft.network.chat.Component
@@ -72,4 +74,15 @@ fun Minecraft.leaveWorld(next: Screen) = disconnect(next)
 /*fun Minecraft.closeLevel() = level?.disconnect(Component.translatable("menu.savingLevel"))
 *///?} else {
 fun Minecraft.closeLevel() = level?.disconnect()
+//?}
+
+/** The Minecraft version this game runs: its name and the data version it writes into saves. */
+//? if >=1.21.11 {
+/*val currentGame: GameVersion by lazy {
+    SharedConstants.getCurrentVersion().let { GameVersion(it.name(), it.dataVersion().version()) }
+}
+*///?} else {
+val currentGame: GameVersion by lazy {
+    SharedConstants.getCurrentVersion().let { GameVersion(it.name, it.dataVersion.version) }
+}
 //?}
