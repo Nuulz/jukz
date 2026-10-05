@@ -21,7 +21,10 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
+          # 25 runs Gradle (Loom 1.18); 21 compiles the 1.21.x jars.
+          java-version: |
+            21
+            25
 
       - uses: gradle/actions/setup-gradle@v4
 
@@ -42,10 +45,15 @@ jobs:
       - name: Jar
         id: jar
         run: |
-          jar="fabric/build/libs/jukz-${{ steps.v.outputs.version }}.jar"
-          test -f "$jar"
-          unzip -l "$jar" | grep -q 'META-INF/jars/org.eclipse.jgit' # the jar must carry its dependencies
-          echo "path=$jar" >> "$GITHUB_OUTPUT"
+          # One jar per Minecraft version: fabric/versions/<mc>/build/libs/jukz-<version>+<mc>.jar
+          mkdir -p dist
+          for jar in fabric/versions/*/build/libs/jukz-${{ steps.v.outputs.version }}+*.jar; do
+            case "$jar" in *-sources.jar) continue ;; esac
+            unzip -l "$jar" | grep -q 'META-INF/jars/org.eclipse.jgit' # the jar must carry its dependencies
+            cp "$jar" dist/
+          done
+          ls dist/*.jar
+          echo "path=dist/*.jar" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -59,11 +67,11 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
           VERSION: ${{ steps.v.outputs.version }}
         run: |
-          gh release upload "$TAG" "${{ steps.jar.outputs.path }}" --clobber
+          gh release upload "$TAG" dist/*.jar --clobber
           if [ -z "$(gh release view "$TAG" --json body -q .body)" ]; then
             awk -v v="## $VERSION" '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
             if [ -s notes.md ]; then
-              printf '\nInstall: drop `jukz-%s.jar` into `mods/` next to Fabric API, Fabric Language Kotlin and owo-lib (Minecraft 1.21.1).\n' "$VERSION" >> notes.md
+              printf '\nInstall: drop the `jukz-%s+<minecraft version>.jar` for your Minecraft into `mods/`, next to Fabric API, Fabric Language Kotlin and owo-lib.\n' "$VERSION" >> notes.md
               gh release edit "$TAG" --notes-file notes.md
             fi
           fi

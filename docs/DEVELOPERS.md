@@ -19,7 +19,7 @@ handoff, the cloud (ghost) takeover, closing/reopening access and the world-list
 Install, next to Minecraft **1.21.1** with Fabric Loader ≥ 0.16.5:
 [Fabric API](https://modrinth.com/mod/fabric-api),
 [Fabric Language Kotlin](https://modrinth.com/mod/fabric-language-kotlin),
-[owo-lib](https://modrinth.com/mod/owo-lib) and the jukz jar (`fabric/build/libs/jukz-0.2.2.jar`).
+[owo-lib](https://modrinth.com/mod/owo-lib) and the jukz jar (`fabric/versions/1.21.1/build/libs/jukz-0.2.2+1.21.1.jar`).
 
 - **Host:** just open a world. It is announced automatically; the share code is in the pause menu →
   **World info (jukz)**, which also has **Access: Open/Closed** to make the world private for a while.
@@ -256,14 +256,23 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
 
 ```bash
 ./gradlew :core:test     # the deterministic core tests (94)
-./gradlew :fabric:test   # the fabric JUnit tests (snapshot handoff, access flag, UI models, ...)
-./gradlew build          # compile everything + assemble fabric/build/libs/jukz-0.2.2.jar
+./gradlew :fabric:1.21.1:test   # the fabric JUnit tests (snapshot handoff, access flag, UI models, ...)
+./gradlew build          # compile everything + one jar per Minecraft version in fabric/versions/<mc>/build/libs/
 (cd rendezvous-worker && npm install && npm test)   # the Cloudflare rendezvous
 (cd rendezvous && cargo test)                       # the self-hostable Rust rendezvous
 ```
 
-Requires **JDK 21** (`JAVA_HOME`; Gradle 8.10.1 does not run on newer JDKs). The wrapper pins Gradle
-8.10.1 and Fabric Loom 1.7.
+Gradle runs on **JDK 25** (`JAVA_HOME`; Loom 1.18 needs it) and compiles the 1.21.x jars with JDK 21 (a toolchain,
+found in `~/.jdks` or downloaded). The wrapper pins Gradle 9.8.0; Loom comes from `loom-back-compat` (`loomx.loom_version`
+in `gradle.properties`), which applies the remapping Loom on 1.21.x and the unobfuscated one on 26.1+.
+
+### Minecraft versions (Stonecutter)
+
+`:fabric` is built once per Minecraft version with [Stonecutter](https://stonecutter.kikugie.dev/): the versions are
+listed in `settings.gradle.kts`, each one is the project `:fabric:<version>` (folder `fabric/versions/<version>/`) and
+reads its dependency versions from `fabric/stonecutter.properties.toml`. The code is written in Mojang's official names.
+Code that differs between versions goes in `//? if >=1.21.11 { … }` comments; "Set active project to …" rewrites `src/`
+for the version you are editing (commit with the `vcsVersion` active).
 
 ### Editing screens (owo-ui, hot reload)
 
@@ -279,7 +288,7 @@ data and wires components by `id`.
 | `join_prompt.xml` | Play together (multiplayer screen) |
 | `upload.xml` | Saving your world to the cloud |
 
-In a dev run (`gradlew runClientA` / `runClientB`) the models are read straight from `src/` and an
+In a dev run (`gradlew :fabric:1.21.1:runClientA` / `runClientB`) the models are read straight from `src/` and an
 open screen rebuilds itself when its model **or `theme.xml`** is saved, edit, save, look, no restart.
 A malformed model falls back to the packaged copy and owo reports the parse error. Kotlin changes still
 need a restart. `UiModelsTest` checks in plain JUnit that the models parse, use existing theme
@@ -293,10 +302,10 @@ Two isolated dev clients (separate `runDir`, so separate logs / saves / config /
 distinct peers) are wired as Loom run configs:
 
 ```bash
-./gradlew runClientA   # instance A (username HostA),  run dir fabric/run/clientA  (Windows: run-client-a.bat)
-./gradlew runClientB   # instance B (username GuestB), run dir fabric/run/clientB  (Windows: run-client-b.bat)
+./gradlew :fabric:1.21.1:runClientA   # instance A (username HostA),  run dir fabric/run/clientA  (Windows: run-client-a.bat)
+./gradlew :fabric:1.21.1:runClientB   # instance B (username GuestB), run dir fabric/run/clientB  (Windows: run-client-b.bat)
 # Any other name / folder / memory, e.g. to just play from a checkout:
-./gradlew :fabric:runPlay -Pjukz.username=Steve -Pjukz.runDir=run/steve -Pjukz.ram=4G
+./gradlew :fabric:1.21.1:runPlay -Pjukz.username=Steve -Pjukz.runDir=run/steve -Pjukz.ram=4G
 ```
 
 Open a world in A (it auto-hosts; the share code is under pause menu → **World info (jukz)**), then

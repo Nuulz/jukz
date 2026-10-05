@@ -1,0 +1,14 @@
+# Per-Minecraft-version settings for :fabric (read with sc.properties in build.gradle.kts).
+# Shared values first; each [version] table overrides or adds to them.
+deps.fabric_loader = "0.16.5"
+
+["1.21.1"]
+# Range written to fabric.mod.json, and the releases the stores list.
+mod.mc_compat = "1.21.1"
+mod.mc_releases = ["1.21.1"]
+mod.java = 21
+
+deps.fabric_api = "0.116.12+1.21.1"
+deps.fabric_kotlin = "1.12.3+kotlin.2.0.21"
+deps.owo = "0.12.15.4+1.21"
+deps.modmenu = "11.0.3"
