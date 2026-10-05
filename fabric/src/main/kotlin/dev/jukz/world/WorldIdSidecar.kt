@@ -1,9 +1,9 @@
 package dev.jukz.world
 
-import net.minecraft.nbt.NbtCompound
+import net.minecraft.nbt.CompoundTag
 import net.minecraft.nbt.NbtIo
 import net.minecraft.server.MinecraftServer
-import net.minecraft.util.WorldSavePath
+import net.minecraft.world.level.storage.LevelResource
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -27,12 +27,12 @@ object WorldIdSidecar {
         val path = fileIn(saveRoot)
         if (!Files.exists(path)) return null
         val nbt = NbtIo.read(path) ?: return null
-        return Info(nbt.getUuid(KEY_WORLD_ID), nbt.getLong(KEY_GENERATION))
+        return Info(nbt.getUUID(KEY_WORLD_ID), nbt.getLong(KEY_GENERATION))
     }
 
     /** Mirror the current id+generation into the sidecar (called while the world is loaded). */
     fun write(server: MinecraftServer, state: WorldIdState) {
-        write(server.getSavePath(WorldSavePath.ROOT), Info(state.worldId, state.generation))
+        write(server.getWorldPath(LevelResource.ROOT), Info(state.worldId, state.generation))
     }
 
     /**
@@ -42,15 +42,15 @@ object WorldIdSidecar {
     fun generation(saveRoot: Path): Long? {
         val sidecar = runCatching { read(saveRoot)?.generation }.getOrNull()
         val inWorld = runCatching {
-            NbtIo.readCompressed(saveRoot.resolve("data").resolve("jukz_world_id.dat"), net.minecraft.nbt.NbtSizeTracker.ofUnlimitedBytes())
+            NbtIo.readCompressed(saveRoot.resolve("data").resolve("jukz_world_id.dat"), net.minecraft.nbt.NbtAccounter.unlimitedHeap())
                 .getCompound("data").takeIf { it.contains("generation") }?.getLong("generation")
         }.getOrNull()
         return listOfNotNull(sidecar, inWorld).maxOrNull()
     }
 
     fun write(saveRoot: Path, info: Info) {
-        val nbt = NbtCompound()
-        nbt.putUuid(KEY_WORLD_ID, info.worldId)
+        val nbt = CompoundTag()
+        nbt.putUUID(KEY_WORLD_ID, info.worldId)
         nbt.putLong(KEY_GENERATION, info.generation)
         Files.createDirectories(saveRoot)
         NbtIo.write(nbt, fileIn(saveRoot))

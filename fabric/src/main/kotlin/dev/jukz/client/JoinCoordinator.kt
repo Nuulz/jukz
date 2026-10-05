@@ -30,9 +30,9 @@ import dev.jukz.world.WorldIdSidecar
 import dev.jukz.world.WorldKeyStore
 import dev.jukz.world.WorldSaveLocator
 import kotlinx.coroutines.runBlocking
-import net.minecraft.client.MinecraftClient
-import net.minecraft.client.gui.screen.Screen
-import net.minecraft.client.gui.screen.TitleScreen
+import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.screens.Screen
+import net.minecraft.client.gui.screens.TitleScreen
 import java.nio.file.Files
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
@@ -67,7 +67,7 @@ object JoinCoordinator {
         registry: WorldRegistry = Discovery.registry,
         dialer: ChannelDialer = defaultDialer(),
     ) {
-        val client = MinecraftClient.getInstance()
+        val client = Minecraft.getInstance()
         val handoff: GameHandoff = MinecraftGameHandoff { parent }
         val controller = JoinController(
             registry, dialer, handoff, SystemClock,
@@ -139,7 +139,7 @@ object JoinCoordinator {
     }
 
     private fun applyResult(
-        client: MinecraftClient,
+        client: Minecraft,
         result: JoinResult,
         worldId: WorldId,
         shortCode: String,
@@ -175,7 +175,7 @@ object JoinCoordinator {
      * Invoked from the controller's reader thread, so it hops to the client thread to show the prompt.
      */
     private fun onHostLeaving(
-        client: MinecraftClient,
+        client: Minecraft,
         worldId: WorldId,
         shortCode: String,
         offer: SnapshotOffer?,
@@ -202,19 +202,19 @@ object JoinCoordinator {
      * this is NOT a handoff: never offer "Host now" (our local copy is stale — hosting it would split the
      * world). Leave the session and say why, whether the kick already dropped us or not.
      */
-    private fun onHostClosedAccess(client: MinecraftClient, shortCode: String) {
+    private fun onHostClosedAccess(client: Minecraft, shortCode: String) {
         val engaged = GuestSession.recentlyEngaged()
         GuestSession.leave() // also stops the disconnect hooks from swapping in the "host left" wait
         if (!engaged) return
         JukzMod.logger.info("jukz: host of {} closed access — not offering handoff", shortCode)
         client.execute {
             val screen = AccessClosedScreen { client.setScreen(TitleScreen()) }
-            if (client.world != null) client.disconnect(screen) else client.setScreen(screen)
+            if (client.level != null) client.disconnect(screen) else client.setScreen(screen)
         }
     }
 
     private fun showHandoff(
-        client: MinecraftClient,
+        client: Minecraft,
         worldId: WorldId,
         shortCode: String,
         parent: Screen?,
@@ -239,7 +239,7 @@ object JoinCoordinator {
             // If we are still in the host's world (a live handoff), leave it cleanly WITH this prompt
             // as the screen, so the vanilla "Connection lost" never flashes. For a ghost takeover (we
             // were never connected to a world), just show it.
-            if (client.world != null) client.disconnect(screen) else client.setScreen(screen)
+            if (client.level != null) client.disconnect(screen) else client.setScreen(screen)
         }
     }
 
@@ -255,7 +255,7 @@ object JoinCoordinator {
         ghost: R2SnapshotStore.GhostUrls,
         headCommit: String,
     ) {
-        val client = MinecraftClient.getInstance()
+        val client = Minecraft.getInstance()
         val prefetch = prefetchGhostSnapshot(ghost, headCommit)
         beginTakeover(client, worldId, shortCode, parent, prefetch, intent = TakeoverIntent.GHOST)
     }
@@ -265,7 +265,7 @@ object JoinCoordinator {
      * the same "Host now" prompt the live handoff uses; taking over reuses [beginTakeover].
      */
     private fun showGhostTakeover(
-        client: MinecraftClient,
+        client: Minecraft,
         worldId: WorldId,
         shortCode: String,
         parent: Screen?,
@@ -335,8 +335,8 @@ object JoinCoordinator {
      * we hold no local copy of the world. Used to refuse a cloud ghost that is not a strictly-newer
      * lineage, so a same-generation sibling fork never overwrites what we already have.
      */
-    private fun localSnapshotMarker(client: MinecraftClient, worldId: WorldId): SnapshotMarker? {
-        val savesDir = client.levelStorage.savesDirectory
+    private fun localSnapshotMarker(client: Minecraft, worldId: WorldId): SnapshotMarker? {
+        val savesDir = client.levelSource.baseDir
         val levelName = WorldSaveLocator.findLevelName(savesDir, worldId.uuid) ?: return null
         val saveDir = savesDir.resolve(levelName)
         val generation = WorldIdSidecar.generation(saveDir) ?: return null
@@ -413,7 +413,7 @@ object JoinCoordinator {
      * and never silently forks the world.
      */
     private fun beginTakeover(
-        client: MinecraftClient,
+        client: Minecraft,
         worldId: WorldId,
         shortCode: String,
         parent: Screen?,
@@ -423,7 +423,7 @@ object JoinCoordinator {
         GuestSession.leave() // the old guest session is done; we are about to become the host
         client.setScreen(SearchingHostScreen(shortCode) {}) // "preparing" spinner; no cancel mid-takeover
         Thread {
-            val savesDir = client.levelStorage.savesDirectory
+            val savesDir = client.levelSource.baseDir
             val existing = WorldSaveLocator.findLevelName(savesDir, worldId.uuid)
             val levelName = existing ?: "jukz-$shortCode"
             val saveDir = savesDir.resolve(levelName)

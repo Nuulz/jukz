@@ -22,12 +22,12 @@ import dev.jukz.world.WorldKeyStore
 import dev.jukz.world.WorldIdSidecar
 import dev.jukz.world.WorldIdState
 import kotlinx.coroutines.runBlocking
-import net.minecraft.client.MinecraftClient
-import net.minecraft.client.gui.screen.MessageScreen
-import net.minecraft.client.gui.screen.TitleScreen
-import net.minecraft.server.integrated.IntegratedServer
-import net.minecraft.text.Text
-import net.minecraft.util.WorldSavePath
+import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.screens.GenericMessageScreen
+import net.minecraft.client.gui.screens.TitleScreen
+import net.minecraft.client.server.IntegratedServer
+import net.minecraft.network.chat.Component
+import net.minecraft.world.level.storage.LevelResource
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
@@ -80,18 +80,18 @@ object HostCoordinator {
      * host player is left in the world — closing access takes the world private, it does not end it.
      */
     fun disableAccess(server: IntegratedServer) {
-        WorldAccessFlag.disable(server.getSavePath(WorldSavePath.ROOT))
+        WorldAccessFlag.disable(server.getWorldPath(LevelResource.ROOT))
         Thread {
             // Tell guests first, over their live control channels: without this the withdraw + kick read
             // as an abrupt host drop, and a guest would offer to host its stale copy beside ours (a split).
             HostSession.notifyGuestsClosed()
             Thread.sleep(NOTICE_GRACE_MS) // let the notice land before the channels close
             HostSession.onServerStopping() // withdraw from discovery (no snapshot — the world stays open locally)
-            val message = Text.literal("The host has closed access to this world.")
+            val message = Component.literal("The host has closed access to this world.")
             server.execute {
-                val kicked = server.playerManager.playerList.toList()
-                    .filterNot { server.isHost(it.gameProfile) }
-                kicked.forEach { it.networkHandler.disconnect(message) }
+                val kicked = server.playerList.players.toList()
+                    .filterNot { server.isSingleplayerOwner(it.gameProfile) }
+                kicked.forEach { it.connection.disconnect(message) }
                 JukzMod.logger.info("jukz: access closed; {} guest(s) disconnected", kicked.size)
             }
         }.apply { isDaemon = true; name = "jukz-access-close" }.start()
@@ -99,19 +99,19 @@ object HostCoordinator {
 
     /** Re-open access to this world (F4-D): drop the flag and run the normal announce flow again. */
     fun enableAccess(server: IntegratedServer) {
-        WorldAccessFlag.enable(server.getSavePath(WorldSavePath.ROOT))
+        WorldAccessFlag.enable(server.getWorldPath(LevelResource.ROOT))
         autoHost(server)
     }
 
     fun isAccessDisabled(server: IntegratedServer): Boolean = accessDisabled(server)
 
     private fun accessDisabled(server: IntegratedServer): Boolean =
-        runCatching { WorldAccessFlag.isDisabled(server.getSavePath(WorldSavePath.ROOT)) }.getOrDefault(false)
+        runCatching { WorldAccessFlag.isDisabled(server.getWorldPath(LevelResource.ROOT)) }.getOrDefault(false)
 
     private fun runHost(server: IntegratedServer): HostResult {
         val (worldId, generation) = bumpGeneration(server)
         // Every announce, heartbeat, withdraw and cloud upload for this world is signed with its key.
-        WorldKeyStore.loadOrCreate(server.getSavePath(WorldSavePath.ROOT), worldId)
+        WorldKeyStore.loadOrCreate(server.getWorldPath(LevelResource.ROOT), worldId)
         // Share one forwarder between the resolver (which attempts the UPnP map) and the relay
         // registrar (which only registers a relay session when that map failed — CGNAT / no IGD).
         val forwarder = RecordingPortForwarder(UpnpPortForwarder())
@@ -134,7 +134,7 @@ object HostCoordinator {
             // superseded host served + LAN-announced forever).
             onHostLost = { lostWorldId -> onAutoHostLost(lostWorldId) },
             // Connected players (host + any relayed-in guests) for the world-list live badge.
-            playerCount = { runCatching { server.playerManager.playerList.size }.getOrDefault(0) },
+            playerCount = { runCatching { server.playerList.players.size }.getOrDefault(0) },
             // When UPnP could not open the port, register a relay session so non-reachable guests
             // (CGNAT, no UPnP) can still connect; the offer rides the announced record.
             relayRegistrar = relayClient,
@@ -154,7 +154,7 @@ object HostCoordinator {
     private fun bumpGeneration(server: IntegratedServer): Pair<WorldId, Long> {
         val future = CompletableFuture<Pair<WorldId, Long>>()
         server.execute {
-            val state = WorldIdState.get(server.overworld)
+            val state = WorldIdState.get(server.overworld())
             val generation = state.incrementGeneration()
             // Keep jukz.dat in step: it is what's read while the world is closed (menu uploads, the
             // "newer cloud copy?" check on open). It used to keep the pre-bump value, one behind.
@@ -202,7 +202,7 @@ object HostCoordinator {
      * keep playing the local copy (it will diverge) or leave it and join the live host as a guest.
      */
     private fun promptSuperseded(current: WorldRecord) {
-        val client = MinecraftClient.getInstance()
+        val client = Minecraft.getInstance()
         val shortCode = current.worldId.shortCode()
         client.execute {
             client.setScreen(
@@ -216,9 +216,9 @@ object HostCoordinator {
     }
 
     /** Save and leave the local copy (the vanilla quit-world sequence), then join the live host. */
-    private fun leaveAndJoin(client: MinecraftClient, worldId: WorldId, shortCode: String) {
-        client.world?.disconnect()
-        client.disconnect(MessageScreen(Text.translatable("menu.savingLevel")))
+    private fun leaveAndJoin(client: Minecraft, worldId: WorldId, shortCode: String) {
+        client.level?.disconnect()
+        client.disconnect(GenericMessageScreen(Component.translatable("menu.savingLevel")))
         JoinCoordinator.start(worldId, shortCode, TitleScreen())
     }
 

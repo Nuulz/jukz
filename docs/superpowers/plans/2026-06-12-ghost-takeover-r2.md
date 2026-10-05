@@ -24,7 +24,7 @@
 - Create `fabric/src/main/kotlin/dev/jukz/runtime/GhostUpload.kt` — a common-safe holder the server-stopping hook arms with the built pack and the client upload screen drains.
 - Create `fabric/src/main/kotlin/dev/jukz/client/gui/UploadingWorldScreen.kt` — the blocking progress screen (progress bar + rotating messages + escape valve).
 - Modify `fabric/src/main/kotlin/dev/jukz/runtime/HostSession.kt` — the `connectedGuestCount() == 0` branch that builds the pack and arms `GhostUpload`.
-- Modify `fabric/src/main/java/dev/jukz/mixin/MinecraftClientDisconnectMixin.java` — show `UploadingWorldScreen` for the ghost case.
+- Modify `fabric/src/main/java/dev/jukz/mixin/MinecraftDisconnectMixin.java` — show `UploadingWorldScreen` for the ghost case.
 - Modify `fabric/src/main/kotlin/dev/jukz/client/JoinCoordinator.kt` — on `HostUnavailable`, consult the ghost store and offer the takeover.
 - Modify `fabric/src/main/kotlin/dev/jukz/JukzClient.kt` — register the GLFW window-close guard (only fires while uploading).
 
@@ -995,12 +995,12 @@ git commit -m "feat(fabric): UploadingWorldScreen — blocking ghost-upload prog
 ## Task C5: Show the screen at close + guard the window X
 
 **Files:**
-- Modify: `fabric/src/main/java/dev/jukz/mixin/MinecraftClientDisconnectMixin.java`
+- Modify: `fabric/src/main/java/dev/jukz/mixin/MinecraftDisconnectMixin.java`
 - Modify: `fabric/src/main/kotlin/dev/jukz/JukzClient.kt`
 
 - [ ] **Step 1: Show `UploadingWorldScreen` for the ghost case**
 
-In `MinecraftClientDisconnectMixin.java`, add a branch to `jukz$handoffScreen` *before* the existing
+In `MinecraftDisconnectMixin.java`, add a branch to `jukz$handoffScreen` *before* the existing
 host-with-guests branch (the ghost case is host-with-no-guests, so order doesn't conflict, but keep
 it first for readability). Add the import and the branch:
 
@@ -1078,7 +1078,7 @@ Expected: build succeeds (mixin applies, Kotlin + Java compile).
 - [ ] **Step 4: Commit**
 
 ```bash
-git add fabric/src/main/java/dev/jukz/mixin/MinecraftClientDisconnectMixin.java fabric/src/main/kotlin/dev/jukz/JukzClient.kt
+git add fabric/src/main/java/dev/jukz/mixin/MinecraftDisconnectMixin.java fabric/src/main/kotlin/dev/jukz/JukzClient.kt
 git commit -m "feat(fabric): show the upload screen at a guest-less close and veto the window X mid-upload"
 ```
 

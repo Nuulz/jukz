@@ -162,12 +162,12 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     byte relay → handoff / close). `ForwardingEndpointResolver` + `PortForwarder` keep router
     port-opening best-effort: it never fails the host.
 - **`fabric` (57 tests, plus the in-game runs above):**
-  - World identity: `WorldIdState` (1.21.1 `PersistentState`) + `WorldIdSidecar` (pre-start
+  - World identity: `WorldIdState` (1.21.1 `SavedData`) + `WorldIdSidecar` (pre-start
     `jukz.dat`), and `WorldSaveLocator` to find a world's save by UUID.
   - **Auto-host on open**, `HostCoordinator` (on `ClientPlayConnectionEvents.JOIN`) bumps the fence
-    and runs `HostController` with `MinecraftLanOpener` (`IntegratedServer.openToLan`, then
+    and runs `HostController` with `MinecraftLanOpener` (`IntegratedServer.publishServer`, then
     offline-mode so relayed guests aren't kicked by Mojang auth, jukz authorizes via the world code).
-  - **Auto-join on open**, `IntegratedServerLoaderMixin` + `WorldOpenInterceptor` consult discovery
+  - **Auto-join on open**, `WorldOpenFlowsMixin` + `WorldOpenInterceptor` consult discovery
     before booting a world; a live host turns the open into a join. If the cloud holds a strictly newer
     copy than the local one, it is pulled first.
   - **Discovery**, `CompositeWorldRegistry` layers `RendezvousWorldRegistry` (the JSON `/v1`
@@ -190,13 +190,13 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     nobody, or the guest declines, the world is backed up to the cloud instead of stranded.
   - **Ownership & admission**, `WorldKeyStore` (save key + keys received as a guest), signed
     rendezvous calls, `WorldAccessPayload` (key + handoff gate, sent in-game on join),
-    `GuestAdmission` + `PlayerManagerJoinMixin` (online mode for real accounts; offline-mode name
+    `GuestAdmission` + `PlayerListJoinMixin` (online mode for real accounts; offline-mode name
     refusals). Validated in-game: an impostor with the code is refused and gets neither the key nor the
     handoff, and can't revive the world from the cloud, while a real guest takes over and later revives it.
   - **Access control**, World info's **Access: Open/Closed** writes `jukz.access=disabled` to the
     world's `jukz.properties`, sends guests `HostClosed`, then withdraws and kicks them. Guests see
     `AccessClosedScreen` with no takeover offered, so a stale copy can't go live beside the private one.
-  - **World list**, `WorldEntryMixin` + `WorldListLiveBadge` draw a green "live · N" dot on hosted
+  - **World list**, `WorldListEntryMixin` + `WorldListLiveBadge` draw a green "live · N" dot on hosted
     saves (10 s per-world lookup cache, clicking it joins), and a **Copy jukz code** button.
   - **UI**, every screen is an owo-ui model on one shared theme (see *Editing screens* below).
   - **Cosmetics**, everything is ASCII art in [`cosmetics/catalog.json`](../cosmetics/catalog.json),
@@ -206,7 +206,7 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
     ASCII slices: `CosmeticCatalog` meshes them keeping only the faces that touch empty space, and
     `CosmeticsFeatureRenderer` draws them on the player model's head or body bone (hidden under a helmet,
     or elytra for back pieces). The Worker serves the same catalog and Gradle bundles it as the offline
-    copy, so new items need no mod update. `PlayerListHudMixin` + `TabBadge` reserve a marked gap in
+    copy, so new items need no mod update. `PlayerTabOverlayMixin` + `TabBadge` reserve a marked gap in
     front of the name and paint the badge into it. `Cosmetics` signs in with the player's Mojang chat certificate
     (it signs the Worker's challenge; the Worker checks Mojang's signature offline) and looks up other players' loadouts
     (one item per slot) in batches cached for 5 min. `CosmeticsScreen` has a tab per slot, item icons

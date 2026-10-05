@@ -1,6 +1,6 @@
 package dev.jukz.client.gui
 
-import net.minecraft.text.Text
+import net.minecraft.network.chat.Component
 
 /**
  * Shown when the announced host turned out to be gone during a join, after we tried to pull its last
@@ -13,8 +13,8 @@ class HostHandoffScreen(
     private val onHostNow: () -> Unit,
     private val onBack: () -> Unit,
 ) : JukzStatusScreen(
-    Text.literal(TITLE),
-    Text.literal(message(snapshotApplied)),
+    Component.literal(TITLE),
+    Component.literal(message(snapshotApplied)),
     accentColor = ACCENT_ACTION,
     showSpinner = false,
 ) {
@@ -25,7 +25,7 @@ class HostHandoffScreen(
 
     override fun shouldCloseOnEsc(): Boolean = true
 
-    override fun close() {
+    override fun onClose() {
         onBack()
     }
 

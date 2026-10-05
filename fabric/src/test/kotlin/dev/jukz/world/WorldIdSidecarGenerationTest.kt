@@ -1,6 +1,6 @@
 package dev.jukz.world
 
-import net.minecraft.nbt.NbtCompound
+import net.minecraft.nbt.CompoundTag
 import net.minecraft.nbt.NbtIo
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -13,7 +13,7 @@ import java.util.UUID
 class WorldIdSidecarGenerationTest {
     private fun worldData(dir: Path, generation: Long) {
         Files.createDirectories(dir.resolve("data"))
-        val root = NbtCompound().apply { put("data", NbtCompound().apply { putUuid("world_id", UUID.randomUUID()); putLong("generation", generation) }) }
+        val root = CompoundTag().apply { put("data", CompoundTag().apply { putUUID("world_id", UUID.randomUUID()); putLong("generation", generation) }) }
         NbtIo.writeCompressed(root, dir.resolve("data").resolve("jukz_world_id.dat"))
     }
 

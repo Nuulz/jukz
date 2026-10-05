@@ -4,15 +4,15 @@ import dev.jukz.client.GuestSession;
 import dev.jukz.client.gui.HandingOffScreen;
 import dev.jukz.client.gui.HostLeavingScreen;
 import dev.jukz.runtime.HostSession;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.DisconnectedScreen;
-import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.DisconnectedScreen;
+import net.minecraft.client.gui.screens.Screen;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 /**
- * Swaps the screen {@code MinecraftClient.disconnect} is about to show, at the source, for the two jukz
+ * Swaps the screen {@code Minecraft.disconnect} is about to show, at the source, for the two jukz
  * handoff cases — so the misleading vanilla screen never even renders one frame. We hook the two-arg
  * {@code disconnect(Screen, boolean)} because it is the single choke point: the host's voluntary quit
  * reaches it via the one-arg overload, and a guest's lost connection calls it directly from
@@ -32,11 +32,11 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
  * screen) rather than crashing the quit. The guest path additionally has the reactive swap in
  * {@code JukzClient} as a belt-and-suspenders fallback if this injection ever fails to apply.
  */
-@Mixin(MinecraftClient.class)
-public abstract class MinecraftClientDisconnectMixin {
+@Mixin(Minecraft.class)
+public abstract class MinecraftDisconnectMixin {
 
     @ModifyVariable(
-        method = "disconnect(Lnet/minecraft/client/gui/screen/Screen;Z)V",
+        method = "disconnect(Lnet/minecraft/client/gui/screens/Screen;Z)V",
         at = @At("HEAD"),
         argsOnly = true,
         require = 0

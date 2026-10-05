@@ -5,9 +5,9 @@ import io.wispforest.owo.ui.base.BaseComponent
 import io.wispforest.owo.ui.container.FlowLayout
 import io.wispforest.owo.ui.core.OwoUIDrawContext
 import io.wispforest.owo.ui.core.Sizing
-import net.minecraft.client.gui.screen.ConfirmLinkScreen
-import net.minecraft.client.gui.screen.Screen
-import net.minecraft.text.Text
+import net.minecraft.client.gui.screens.ConfirmLinkScreen
+import net.minecraft.client.gui.screens.Screen
+import net.minecraft.network.chat.Component
 
 /**
  * The welcome + Ko-fi note: shown once, on the first launch of a fresh install (updates get
@@ -15,8 +15,8 @@ import net.minecraft.text.Text
  * supporting unlocks nothing.
  */
 class SupportScreen(private val parent: Screen?) : JukzStatusScreen(
-    heading = Text.literal("Thanks for installing jukz!"),
-    statusLine = Text.literal(
+    heading = Component.literal("Thanks for installing jukz!"),
+    statusLine = Component.literal(
         "jukz is free, and it stays free. Finding worlds, the relay and the cloud backups run on a " +
             "server I pay for myself. If jukz kept your world alive, a coffee on Ko-fi keeps it running " +
             "for everyone. Supporting doesn't unlock anything: every feature is the same for all."
@@ -29,8 +29,8 @@ class SupportScreen(private val parent: Screen?) : JukzStatusScreen(
     }
 
     override fun buttons() = listOf(
-        StatusButton("Support on Ko-fi", 130) { ConfirmLinkScreen.open(parent, CosmeticsScreen.KOFI_URL) },
-        StatusButton("Maybe later", 100) { client?.setScreen(parent) },
+        StatusButton("Support on Ko-fi", 130) { ConfirmLinkScreen.confirmLinkNow(parent, CosmeticsScreen.KOFI_URL) },
+        StatusButton("Maybe later", 100) { minecraft?.setScreen(parent) },
     )
 
     override fun build(root: FlowLayout) {
@@ -40,8 +40,8 @@ class SupportScreen(private val parent: Screen?) : JukzStatusScreen(
 
     override fun shouldCloseOnEsc(): Boolean = true
 
-    override fun close() {
-        client?.setScreen(parent)
+    override fun onClose() {
+        minecraft?.setScreen(parent)
     }
 
     private class CupIcon : BaseComponent() {

@@ -1,14 +1,14 @@
 package dev.jukz.cosmetics
 
-import net.minecraft.client.font.TextRenderer
-import net.minecraft.client.gui.DrawContext
-import net.minecraft.text.StringVisitable
-import net.minecraft.text.Style
-import net.minecraft.text.Text
+import net.minecraft.client.gui.Font
+import net.minecraft.client.gui.GuiGraphics
+import net.minecraft.network.chat.FormattedText
+import net.minecraft.network.chat.Style
+import net.minecraft.network.chat.Component
 import java.util.Optional
 import java.util.UUID
 
-/** The tab-list half of badges, called from PlayerListHudMixin. */
+/** The tab-list half of badges, called from PlayerTabOverlayMixin. */
 object TabBadge {
     /** Marks the reserved gap; the badge id follows it. Insertion is shift-click text, unused in the tab. */
     private const val MARKER = "jukz:badge:"
@@ -18,24 +18,24 @@ object TabBadge {
     const val SIZE = 8
 
     @JvmStatic
-    fun decorate(name: Text, player: UUID): Text {
+    fun decorate(name: Component, player: UUID): Component {
         val badge = Cosmetics.badgeFor(player) ?: return name
         // Badge first, then a space, then the name as vanilla built it.
-        return Text.empty()
-            .append(Text.literal(GAP).setStyle(Style.EMPTY.withInsertion(MARKER + badge.id)))
-            .append(Text.literal(" "))
+        return Component.empty()
+            .append(Component.literal(GAP).setStyle(Style.EMPTY.withInsertion(MARKER + badge.id)))
+            .append(Component.literal(" "))
             .append(name)
     }
 
     @JvmStatic
-    fun draw(context: DrawContext, renderer: TextRenderer, text: Text, x: Int, y: Int) {
+    fun draw(context: GuiGraphics, renderer: Font, text: Component, x: Int, y: Int) {
         var offset = 0
-        val id = text.visit(StringVisitable.StyledVisitor { style, segment ->
+        val id = text.visit(FormattedText.StyledContentConsumer { style, segment ->
             val insertion = style.insertion
             if (insertion != null && insertion.startsWith(MARKER)) {
                 Optional.of(insertion.removePrefix(MARKER))
             } else {
-                offset += renderer.getWidth(Text.literal(segment).setStyle(style))
+                offset += renderer.width(Component.literal(segment).setStyle(style))
                 Optional.empty()
             }
         }, Style.EMPTY).orElse(null) ?: return

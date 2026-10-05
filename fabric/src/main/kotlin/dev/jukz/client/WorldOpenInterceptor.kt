@@ -8,11 +8,11 @@ import dev.jukz.sync.R2SnapshotStore
 import dev.jukz.world.WorldKeyStore
 import dev.jukz.world.WorldIdSidecar
 import kotlinx.coroutines.runBlocking
-import net.minecraft.client.MinecraftClient
+import net.minecraft.client.Minecraft
 
 /**
  * Makes "the world lives in one place" the default behaviour of opening a singleplayer world. Driven
- * from a mixin at the head of `IntegratedServerLoader.start`: before the local server boots, the
+ * from a mixin at the head of `WorldOpenFlows.openWorld`: before the local server boots, the
  * world's persisted jukz UUID (read from its `jukz.dat` sidecar without starting the world) is looked
  * up in discovery. If a live host is announced, the local boot is cancelled and the player is joined
  * to that host as a guest; otherwise the world opens locally as usual. No button — joining is an
@@ -31,7 +31,7 @@ object WorldOpenInterceptor {
     private var bypass = false
 
     /**
-     * Head hook of `IntegratedServerLoader.start`. Returns true to cancel the local boot because jukz
+     * Head hook of `WorldOpenFlows.openWorld`. Returns true to cancel the local boot because jukz
      * is handling the open (consulting discovery / joining a host); false to let the world boot
      * locally. [onCancel] is the vanilla "loading was aborted" callback, threaded through to the
      * re-entrant local boot.
@@ -47,13 +47,13 @@ object WorldOpenInterceptor {
     }
 
     private fun readSidecar(levelName: String): WorldIdSidecar.Info? = runCatching {
-        val saveRoot = MinecraftClient.getInstance().levelStorage.savesDirectory.resolve(levelName)
+        val saveRoot = Minecraft.getInstance().levelSource.baseDir.resolve(levelName)
         WorldIdSidecar.read(saveRoot)
     }.getOrNull()
 
     private fun beginConsult(worldId: WorldId, levelName: String, onCancel: Runnable) {
-        val client = MinecraftClient.getInstance()
-        val parent = client.currentScreen // the world-select screen, to fall back to
+        val client = Minecraft.getInstance()
+        val parent = client.screen // the world-select screen, to fall back to
         val shortCode = worldId.shortCode()
         client.setScreen(SearchingHostScreen(shortCode) { openLocally(levelName, onCancel) })
 
@@ -75,10 +75,10 @@ object WorldOpenInterceptor {
             // world from the singleplayer list gets "the world lives in one place" too, not only the
             // join-by-code flow. Probe off the render thread; the generation lives in the head object.
             val localGen = runCatching {
-                WorldIdSidecar.generation(MinecraftClient.getInstance().levelStorage.savesDirectory.resolve(levelName))
+                WorldIdSidecar.generation(Minecraft.getInstance().levelSource.baseDir.resolve(levelName))
             }.getOrNull() ?: -1L
             // Our copy's key signs the request (a keyed world's backup only goes to key holders).
-            runCatching { WorldKeyStore.loadExisting(client.levelStorage.savesDirectory.resolve(levelName), worldId) }
+            runCatching { WorldKeyStore.loadExisting(client.levelSource.baseDir.resolve(levelName), worldId) }
             val ghost = runCatching { R2SnapshotStore.ghostSnapshot(worldId) }.getOrNull()
             val head = ghost?.let { runCatching { R2SnapshotStore.ghostHead(it.headUrl) }.getOrNull() }
             client.execute {
@@ -101,7 +101,7 @@ object WorldOpenInterceptor {
     /** Resume the vanilla local boot, bypassing this interceptor for the re-entrant call. */
     private fun openLocally(levelName: String, onCancel: Runnable) {
         bypass = true
-        MinecraftClient.getInstance().createIntegratedServerLoader().start(levelName, onCancel)
+        Minecraft.getInstance().createWorldOpenFlows().openWorld(levelName, onCancel)
     }
 
     /**

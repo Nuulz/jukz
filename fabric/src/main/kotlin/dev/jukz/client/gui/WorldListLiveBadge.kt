@@ -7,10 +7,10 @@ import dev.jukz.core.model.WorldId
 import dev.jukz.discovery.Discovery
 import dev.jukz.world.WorldIdSidecar
 import kotlinx.coroutines.runBlocking
-import net.minecraft.client.MinecraftClient
-import net.minecraft.client.font.TextRenderer
-import net.minecraft.client.gui.DrawContext
-import net.minecraft.client.gui.screen.Screen
+import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.Font
+import net.minecraft.client.gui.GuiGraphics
+import net.minecraft.client.gui.screens.Screen
 import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
 
@@ -96,7 +96,7 @@ object WorldListLiveBadge {
      * Anchored top-LEFT (a green dot with the live player count centered below it) so it doesn't cover
      * the vanilla last-played line that sits on the right under the folder name.
      */
-    fun render(context: DrawContext, textRenderer: TextRenderer, levelName: String, entryX: Int, entryY: Int, entryWidth: Int) {
+    fun render(context: GuiGraphics, font: Font, levelName: String, entryX: Int, entryY: Int, entryWidth: Int) {
         val worldId = worldIdFor(levelName) ?: return
         ensureFresh(worldId, Discovery.registry)
         val record = cachedRecord(worldId) ?: return
@@ -106,11 +106,11 @@ object WorldListLiveBadge {
         fillCircle(context, cxp, cyp, RADIUS, COLOR_LIVE)
 
         val label = record.playerCount.toString()
-        val labelX = cxp - textRenderer.getWidth(label) / 2
+        val labelX = cxp - font.width(label) / 2
         val labelY = cyp + RADIUS + 2
-        context.drawTextWithShadow(textRenderer, label, labelX, labelY, COLOR_LIVE)
+        context.drawString(font, label, labelX, labelY, COLOR_LIVE)
 
-        badgeBounds[worldId] = intArrayOf(cxp - RADIUS, cyp - RADIUS, cxp + RADIUS + 1, labelY + textRenderer.fontHeight)
+        badgeBounds[worldId] = intArrayOf(cxp - RADIUS, cyp - RADIUS, cxp + RADIUS + 1, labelY + font.lineHeight)
     }
 
     /** If the click landed on a live world's badge, start a direct join and return true. */
@@ -129,14 +129,14 @@ object WorldListLiveBadge {
         worldIds.getOrPut(levelName) {
             Optional.ofNullable(
                 runCatching {
-                    val saveRoot = MinecraftClient.getInstance().levelStorage.savesDirectory.resolve(levelName)
+                    val saveRoot = Minecraft.getInstance().levelSource.baseDir.resolve(levelName)
                     WorldIdSidecar.read(saveRoot)?.let { WorldId.of(it.worldId) }
                 }.getOrNull(),
             )
         }.orElse(null)
 
-    /** A filled disc, drawn scanline by scanline since DrawContext has no circle primitive. */
-    private fun fillCircle(context: DrawContext, cx: Int, cy: Int, r: Int, color: Int) {
+    /** A filled disc, drawn scanline by scanline since GuiGraphics has no circle primitive. */
+    private fun fillCircle(context: GuiGraphics, cx: Int, cy: Int, r: Int, color: Int) {
         for (dy in -r..r) {
             val dx = Math.sqrt((r * r - dy * dy).toDouble()).toInt()
             context.fill(cx - dx, cy + dy, cx + dx + 1, cy + dy + 1, color)

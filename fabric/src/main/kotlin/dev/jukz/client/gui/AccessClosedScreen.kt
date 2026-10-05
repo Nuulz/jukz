@@ -1,6 +1,6 @@
 package dev.jukz.client.gui
 
-import net.minecraft.text.Text
+import net.minecraft.network.chat.Component
 
 /**
  * Shown to a guest when the host closed access to the world (F4-D). The host keeps playing privately,
@@ -10,8 +10,8 @@ import net.minecraft.text.Text
 class AccessClosedScreen(
     private val onBack: () -> Unit,
 ) : JukzStatusScreen(
-    Text.literal("The host closed access"),
-    Text.literal("The world is private for now. Join again once it reopens."),
+    Component.literal("The host closed access"),
+    Component.literal("The world is private for now. Join again once it reopens."),
     accentColor = ACCENT_ERROR,
     showSpinner = false,
 ) {
@@ -19,7 +19,7 @@ class AccessClosedScreen(
 
     override fun shouldCloseOnEsc(): Boolean = true
 
-    override fun close() {
+    override fun onClose() {
         onBack()
     }
 }

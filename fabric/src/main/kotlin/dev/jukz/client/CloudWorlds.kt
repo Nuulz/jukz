@@ -9,9 +9,9 @@ import dev.jukz.sync.JGitWorldSync
 import dev.jukz.sync.R2SnapshotStore
 import dev.jukz.world.WorldSaveLocator
 import kotlinx.coroutines.runBlocking
-import net.minecraft.client.MinecraftClient
-import net.minecraft.client.toast.SystemToast
-import net.minecraft.text.Text
+import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.components.toasts.SystemToast
+import net.minecraft.network.chat.Component
 import org.eclipse.jgit.lib.ObjectId
 import java.net.URI
 import java.net.URLEncoder
@@ -84,7 +84,7 @@ object CloudWorlds {
     fun refresh(done: () -> Unit = {}) {
         worker.execute {
             runCatching { refreshNow() }.onFailure { JukzMod.logger.info("jukz: cloud worlds unavailable ({})", it.message) }
-            MinecraftClient.getInstance().execute(done)
+            Minecraft.getInstance().execute(done)
         }
     }
 
@@ -93,7 +93,7 @@ object CloudWorlds {
         states[world.worldId] = State.BRINGING
         worker.execute {
             bringNow(world)
-            MinecraftClient.getInstance().execute(done)
+            Minecraft.getInstance().execute(done)
         }
     }
 
@@ -102,7 +102,7 @@ object CloudWorlds {
         worker.execute {
             runCatching { post("/v1/account/worlds/${world.worldId}/forget") }
             runCatching { refreshNow() }
-            MinecraftClient.getInstance().execute(done)
+            Minecraft.getInstance().execute(done)
         }
     }
 
@@ -135,7 +135,7 @@ object CloudWorlds {
     fun refreshAccount(done: () -> Unit = {}) {
         worker.execute {
             refreshAccountNow()
-            MinecraftClient.getInstance().execute(done)
+            Minecraft.getInstance().execute(done)
         }
     }
 
@@ -199,12 +199,12 @@ object CloudWorlds {
                 Seen.add(world.worldId) // it's here already: never "bring" it back
                 refreshAccountNow() // the list and today's count
             }
-            MinecraftClient.getInstance().execute(done)
+            Minecraft.getInstance().execute(done)
         }
     }
 
     private fun levelName(dir: Path): String? = runCatching {
-        val root = net.minecraft.nbt.NbtIo.readCompressed(dir.resolve("level.dat"), net.minecraft.nbt.NbtSizeTracker.ofUnlimitedBytes())
+        val root = net.minecraft.nbt.NbtIo.readCompressed(dir.resolve("level.dat"), net.minecraft.nbt.NbtAccounter.unlimitedHeap())
         root.getCompound("Data").getString("LevelName").takeIf { it.isNotBlank() }
     }.getOrNull()
 
@@ -248,7 +248,7 @@ object CloudWorlds {
 
     // ---- helpers ------------------------------------------------------------------------------
 
-    private fun savesDir(): Path = MinecraftClient.getInstance().levelStorage.savesDirectory
+    private fun savesDir(): Path = Minecraft.getInstance().levelSource.baseDir
 
     private fun isHere(worldId: UUID): Boolean = WorldSaveLocator.findLevelName(savesDir(), worldId) != null
 
@@ -269,8 +269,8 @@ object CloudWorlds {
     }
 
     private fun toast(title: String, body: String) {
-        val client = MinecraftClient.getInstance()
-        client.execute { SystemToast.show(client.toastManager, SystemToast.Type.PERIODIC_NOTIFICATION, Text.literal(title), Text.literal(body)) }
+        val client = Minecraft.getInstance()
+        client.execute { SystemToast.addOrUpdate(client.toasts, SystemToast.SystemToastId.PERIODIC_NOTIFICATION, Component.literal(title), Component.literal(body)) }
     }
 
     private fun request(path: String): HttpRequest.Builder {

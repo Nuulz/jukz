@@ -15,7 +15,7 @@ import dev.jukz.world.WorldIdSidecar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.minecraft.nbt.NbtIo
-import net.minecraft.nbt.NbtSizeTracker
+import net.minecraft.nbt.NbtAccounter
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.dircache.DirCacheEntry
 import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription
@@ -354,7 +354,7 @@ class JGitWorldSync(
 
     /**
      * Drop the singleplayer-owner player data baked into the snapshot's `level.dat` (`Data.Player`).
-     * Minecraft loads that compound for whoever opens the world as host (`PlayerManager.loadPlayerData`
+     * Minecraft loads that compound for whoever opens the world as host (`PlayerList.load`
      * reads `SaveProperties.getPlayerData()` for `isHost` players, only falling back to
      * `playerdata/<uuid>.dat` when it is null). Without this, the player taking over would inherit the
      * PREVIOUS host's position, inventory, health and XP. Removing it makes `getPlayerData()` null, so
@@ -366,7 +366,7 @@ class JGitWorldSync(
         val levelDat = saveDir.resolve("level.dat")
         if (!Files.exists(levelDat)) return
         runCatching {
-            val root = NbtIo.readCompressed(levelDat, NbtSizeTracker.ofUnlimitedBytes())
+            val root = NbtIo.readCompressed(levelDat, NbtAccounter.unlimitedHeap())
             val data = root.getCompound("Data")
             if (data.contains("Player")) {
                 data.remove("Player")

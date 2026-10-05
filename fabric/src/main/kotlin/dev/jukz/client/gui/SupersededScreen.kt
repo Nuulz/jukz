@@ -1,6 +1,6 @@
 package dev.jukz.client.gui
 
-import net.minecraft.text.Text
+import net.minecraft.network.chat.Component
 
 /**
  * Shown when this world opened locally but the announce was rejected: another host already owns
@@ -12,8 +12,8 @@ class SupersededScreen(
     private val onKeepPlaying: () -> Unit,
     private val onJoinInstead: () -> Unit,
 ) : JukzStatusScreen(
-    Text.literal("This world is already live elsewhere"),
-    Text.literal("Another player is hosting $shortCode right now. Playing this copy will diverge from theirs."),
+    Component.literal("This world is already live elsewhere"),
+    Component.literal("Another player is hosting $shortCode right now. Playing this copy will diverge from theirs."),
     accentColor = ACCENT_ACTION,
     showSpinner = false,
 ) {
@@ -24,7 +24,7 @@ class SupersededScreen(
 
     override fun shouldCloseOnEsc(): Boolean = true
 
-    override fun close() {
+    override fun onClose() {
         onKeepPlaying() // Esc means "keep playing locally"
     }
 }

@@ -4,13 +4,13 @@
   "package": "dev.jukz.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "PlayerManagerJoinMixin"
+    "PlayerListJoinMixin"
   ],
   "client": [
-    "IntegratedServerLoaderMixin",
-    "MinecraftClientDisconnectMixin",
-    "PlayerListHudMixin",
-    "WorldEntryMixin"
+    "WorldOpenFlowsMixin",
+    "MinecraftDisconnectMixin",
+    "PlayerTabOverlayMixin",
+    "WorldListEntryMixin"
   ],
   "injectors": {
     "defaultRequire": 1

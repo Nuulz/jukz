@@ -1,6 +1,6 @@
 package dev.jukz.client.gui
 
-import net.minecraft.text.Text
+import net.minecraft.network.chat.Component
 
 /** Shown when the join fails (transport / NAT / handshake); offers retry or local hosting. */
 class NatErrorScreen(
@@ -8,8 +8,8 @@ class NatErrorScreen(
     private val onRetry: () -> Unit,
     private val onHostLocally: () -> Unit,
 ) : JukzStatusScreen(
-    Text.literal("Couldn't connect"),
-    Text.literal(detail),
+    Component.literal("Couldn't connect"),
+    Component.literal(detail),
     accentColor = ACCENT_ERROR,
     showSpinner = false,
 ) {

@@ -2,18 +2,18 @@ package dev.jukz.cosmetics
 
 import com.mojang.authlib.GameProfile
 import dev.jukz.cosmetics.CosmeticCatalog.Slot
-import net.minecraft.client.MinecraftClient
-import net.minecraft.client.gui.DrawContext
-import net.minecraft.client.network.AbstractClientPlayerEntity
-import net.minecraft.client.render.DiffuseLighting
-import net.minecraft.client.render.LightmapTextureManager
-import net.minecraft.client.render.OverlayTexture
-import net.minecraft.client.render.RenderLayer
-import net.minecraft.client.render.entity.model.EntityModelLayers
-import net.minecraft.client.render.entity.model.PlayerEntityModel
-import net.minecraft.client.util.SkinTextures
-import net.minecraft.util.Identifier
-import net.minecraft.util.math.RotationAxis
+import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.GuiGraphics
+import net.minecraft.client.player.AbstractClientPlayer
+import com.mojang.blaze3d.platform.Lighting
+import net.minecraft.client.renderer.LightTexture
+import net.minecraft.client.renderer.texture.OverlayTexture
+import net.minecraft.client.renderer.RenderType
+import net.minecraft.client.model.geom.ModelLayers
+import net.minecraft.client.model.PlayerModel
+import net.minecraft.client.resources.PlayerSkin
+import net.minecraft.resources.ResourceLocation
+import com.mojang.math.Axis
 
 /**
  * A player model in a GUI wearing a loadout — no entity or world needed, so it works on the title
@@ -21,54 +21,54 @@ import net.minecraft.util.math.RotationAxis
  * exactly as [CosmeticsFeatureRenderer] does in the world.
  */
 class PlayerPreview(private val profile: GameProfile) {
-    private val client = MinecraftClient.getInstance()
-    private val skin: SkinTextures = client.skinProvider.getSkinTextures(profile)
-    private val model = PlayerEntityModel<AbstractClientPlayerEntity>(
-        client.entityModelLoader.getModelPart(if (skin.model() == SkinTextures.Model.SLIM) EntityModelLayers.PLAYER_SLIM else EntityModelLayers.PLAYER),
-        skin.model() == SkinTextures.Model.SLIM,
+    private val client = Minecraft.getInstance()
+    private val skin: PlayerSkin = client.skinManager.getInsecureSkin(profile)
+    private val model = PlayerModel<AbstractClientPlayer>(
+        client.entityModels.bakeLayer(if (skin.model() == PlayerSkin.Model.SLIM) ModelLayers.PLAYER_SLIM else ModelLayers.PLAYER),
+        skin.model() == PlayerSkin.Model.SLIM,
     ).apply {
-        child = false // entity models start out as babies until an entity sets this
+        young = false // entity models start out as babies until an entity sets this
         // A relaxed stance instead of arms glued to the sides.
-        leftArm.roll = -0.12f; rightArm.roll = 0.12f
-        leftSleeve.copyTransform(leftArm); rightSleeve.copyTransform(rightArm)
+        leftArm.zRot = -0.12f; rightArm.zRot = 0.12f
+        leftSleeve.copyFrom(leftArm); rightSleeve.copyFrom(rightArm)
     }
 
     /**
      * Draw the player standing in the [w]×[h] box at ([x], [y]), turned [yaw] degrees from facing
      * the viewer, wearing [loadout] (slot → item id).
      */
-    fun draw(context: DrawContext, x: Int, y: Int, w: Int, h: Int, yaw: Float, loadout: Map<Slot, String>) {
-        val matrices = context.matrices
-        matrices.push()
+    fun draw(context: GuiGraphics, x: Int, y: Int, w: Int, h: Int, yaw: Float, loadout: Map<Slot, String>) {
+        val matrices = context.pose()
+        matrices.pushPose()
         // Model space (blocks, y down like the GUI): head top at -0.5, feet at +1.5; tall hats reach about
         // -1.15, so the box is fitted to that whole span.
         val scale = h * 0.94f / 2.65f
         matrices.translate(x + w / 2f, y + h * 0.03f + 1.15f * scale, 100f)
         matrices.scale(scale, scale, scale)
-        matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(-8f))
-        matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(180f + yaw)) // the model's front is -z
-        DiffuseLighting.method_34742()
-        val consumers = context.vertexConsumers
-        val light = LightmapTextureManager.MAX_LIGHT_COORDINATE
-        model.render(matrices, consumers.getBuffer(RenderLayer.getEntityTranslucent(skin.texture())), light, OverlayTexture.DEFAULT_UV, -1)
+        matrices.mulPose(Axis.XP.rotationDegrees(-8f))
+        matrices.mulPose(Axis.YP.rotationDegrees(180f + yaw)) // the model's front is -z
+        Lighting.setupForEntityInInventory()
+        val consumers = context.bufferSource()
+        val light = LightTexture.FULL_BRIGHT
+        model.renderToBuffer(matrices, consumers.getBuffer(RenderType.entityTranslucent(skin.texture())), light, OverlayTexture.NO_OVERLAY, -1)
         val ticks = (System.currentTimeMillis() % 1_000_000L) / 50f
-        val buffer = consumers.getBuffer(RenderLayer.getEntityTranslucent(WHITE))
+        val buffer = consumers.getBuffer(RenderType.entityTranslucent(WHITE))
         for ((slot, id) in loadout) {
             if (slot == Slot.BADGE) continue
             val piece = Cosmetics.catalog.item(id)?.model ?: continue
-            matrices.push()
-            (if (slot == Slot.BACK) model.body else model.head).rotate(matrices)
+            matrices.pushPose()
+            (if (slot == Slot.BACK) model.body else model.head).translateAndRotate(matrices)
             matrices.scale(1 / 16f, 1 / 16f, 1 / 16f)
             VoxelMesh.animate(piece, ticks, matrices)
-            VoxelMesh.emit(matrices.peek(), buffer, piece, light, OverlayTexture.DEFAULT_UV)
-            matrices.pop()
+            VoxelMesh.emit(matrices.last(), buffer, piece, light, OverlayTexture.NO_OVERLAY)
+            matrices.popPose()
         }
-        context.draw()
-        DiffuseLighting.enableGuiDepthLighting()
-        matrices.pop()
+        context.flush()
+        Lighting.setupFor3DItems()
+        matrices.popPose()
     }
 
     companion object {
-        private val WHITE: Identifier = Identifier.of("jukz", "textures/cosmetics/white.png")
+        private val WHITE: ResourceLocation = ResourceLocation.fromNamespaceAndPath("jukz", "textures/cosmetics/white.png")
     }
 }

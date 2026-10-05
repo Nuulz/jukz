@@ -10,11 +10,11 @@ import io.wispforest.owo.ui.component.LabelComponent
 import io.wispforest.owo.ui.container.FlowLayout
 import io.wispforest.owo.ui.core.Color
 import io.wispforest.owo.ui.core.Sizing
-import net.minecraft.client.gui.screen.ConfirmLinkScreen
-import net.minecraft.client.gui.screen.Screen
-import net.minecraft.client.gui.screen.TitleScreen
-import net.minecraft.client.gui.screen.world.SelectWorldScreen
-import net.minecraft.text.Text
+import net.minecraft.client.gui.screens.ConfirmLinkScreen
+import net.minecraft.client.gui.screens.Screen
+import net.minecraft.client.gui.screens.TitleScreen
+import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen
+import net.minecraft.network.chat.Component
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -46,7 +46,7 @@ class AccountScreen(private val parent: Screen?) : JukzUiScreen("account") {
         val account = Cosmetics.account
         val signedIn = Cosmetics.sessionToken() != null
         val summary = CloudWorlds.summary
-        label(root, "title").text(Text.literal(if (signedIn && summary != null && summary.name.isNotBlank()) summary.name else "Your account"))
+        label(root, "title").text(Component.literal(if (signedIn && summary != null && summary.name.isNotBlank()) summary.name else "Your account"))
         accent(root, if (account is Cosmetics.Account.Failed) ACCENT_ERROR else ACCENT_INFO)
 
         val (plan, planColor) = when {
@@ -58,20 +58,20 @@ class AccountScreen(private val parent: Screen?) : JukzUiScreen("account") {
                 "Playing without an account. jukz works the same; signing in with a Microsoft account adds your worlds on every PC, bigger backups and cosmetics." to ACCENT_ACTION
             else -> "Signing in with your Minecraft account…" to COLOR_SUBTLE
         }
-        label(root, "plan").text(Text.literal(plan)).color(Color.ofArgb(planColor))
+        label(root, "plan").text(Component.literal(plan)).color(Color.ofArgb(planColor))
 
         val rows = root.childById(FlowLayout::class.java, "rows")
         if (signedIn) buildLists(rows) else buildGuest(rows)
 
-        label(root, "extras").text(Text.literal(extrasLine(signedIn)))
+        label(root, "extras").text(Component.literal(extrasLine(signedIn)))
         if (account is Cosmetics.Account.Failed) {
-            addButton(root, "buttons", Text.literal("Try again"), width = 70) { Cosmetics.ensureSignedIn(force = true); rebuild() }
+            addButton(root, "buttons", Component.literal("Try again"), width = 70) { Cosmetics.ensureSignedIn(force = true); rebuild() }
         }
-        addButton(root, "buttons", Text.literal("Cosmetics"), width = 70) { client?.setScreen(CosmeticsScreen(this)) }
-        addButton(root, "buttons", Text.literal("Website"), width = 64) {
-            Cosmetics.accountPageUrl { url -> client?.execute { ConfirmLinkScreen.open(this, url, true) } }
-        }.tooltip(Text.literal("nuulm.com/jukz/cuenta: your password, the plans, and \"delete my data\""))
-        addButton(root, "buttons", Text.literal("Done"), width = 60) { close() }
+        addButton(root, "buttons", Component.literal("Cosmetics"), width = 70) { minecraft?.setScreen(CosmeticsScreen(this)) }
+        addButton(root, "buttons", Component.literal("Website"), width = 64) {
+            Cosmetics.accountPageUrl { url -> minecraft?.execute { ConfirmLinkScreen.confirmLinkNow(this, url, true) } }
+        }.tooltip(Component.literal("nuulm.com/jukz/cuenta: your password, the plans, and \"delete my data\""))
+        addButton(root, "buttons", Component.literal("Done"), width = 60) { onClose() }
     }
 
     private fun buildLists(rows: FlowLayout) {
@@ -92,14 +92,14 @@ class AccountScreen(private val parent: Screen?) : JukzUiScreen("account") {
                 val actions = row(rows, "c$i", world.name, "saved ${DATE.format(Instant.ofEpochMilli(world.updated))} · $status", color)
                 if (state == State.AWAY || state == State.FAILED) actions.child(button("Bring here", 62) { CloudWorlds.bring(world) { rebuild() }; rebuild() })
                 if (state != State.BRINGING) actions.child(button("Forget", 44) { CloudWorlds.forget(world) { rebuild() } }
-                    .tooltip(Text.literal("Take it off your account's list. The world itself isn't deleted anywhere.")))
+                    .tooltip(Component.literal("Take it off your account's list. The world itself isn't deleted anywhere.")))
             }
         }
 
         val local = CloudWorlds.localWorlds().filter { it.worldId !in cloudIds }
         section(rows, "local", "Only on this PC")
         if (local.isEmpty()) note(rows, "Every jukz world here is in your cloud.")
-        val open = client?.server?.saveProperties?.levelName // the world being played can't be packed now
+        val open = minecraft?.singleplayerServer?.worldData?.levelName // the world being played can't be packed now
         local.forEachIndexed { i, world ->
             val upload = CloudWorlds.uploads[world.worldId]
             val (status, color) = when (upload?.first) {
@@ -112,7 +112,7 @@ class AccountScreen(private val parent: Screen?) : JukzUiScreen("account") {
             if (upload?.first != Upload.UPLOADING && upload?.first != Upload.DONE) {
                 val up = button("Upload", 50) { CloudWorlds.upload(world) { rebuild() }; rebuild() }
                 up.active = open == null || open != world.name
-                up.tooltip(Text.literal(if (up.active) "Back it up to your cloud, so your other PCs get it." else "Close this world first."))
+                up.tooltip(Component.literal(if (up.active) "Back it up to your cloud, so your other PCs get it." else "Close this world first."))
                 actions.child(up)
             }
         }
@@ -136,24 +136,24 @@ class AccountScreen(private val parent: Screen?) : JukzUiScreen("account") {
     }
 
     private fun section(rows: FlowLayout, id: String, text: String) {
-        rows.child(ui!!.expandTemplate(LabelComponent::class.java, "section", mapOf("id" to "section-$id")).text(Text.literal(text)))
+        rows.child(ui!!.expandTemplate(LabelComponent::class.java, "section", mapOf("id" to "section-$id")).text(Component.literal(text)))
     }
 
     private fun note(rows: FlowLayout, text: String) {
-        rows.child(Components.label(Text.literal(text)).color(Color.ofArgb(COLOR_SUBTLE)).maxWidth(300))
+        rows.child(Components.label(Component.literal(text)).color(Color.ofArgb(COLOR_SUBTLE)).maxWidth(300))
     }
 
     /** A world row; returns its action box. */
     private fun row(rows: FlowLayout, id: String, name: String, info: String, infoColor: Int): FlowLayout {
         val row = ui!!.expandTemplate(FlowLayout::class.java, "world-row", mapOf("id" to id))
-        row.childById(LabelComponent::class.java, "name-$id").text(Text.literal(name))
-        row.childById(LabelComponent::class.java, "info-$id").text(Text.literal(info)).color(Color.ofArgb(infoColor))
+        row.childById(LabelComponent::class.java, "name-$id").text(Component.literal(name))
+        row.childById(LabelComponent::class.java, "info-$id").text(Component.literal(info)).color(Color.ofArgb(infoColor))
         rows.child(row)
         return row.childById(FlowLayout::class.java, "actions-$id")
     }
 
     private fun button(text: String, width: Int, onPress: () -> Unit): ButtonComponent =
-        Components.button(Text.literal(text)) { onPress() }.also { it.horizontalSizing(Sizing.fixed(width)) }
+        Components.button(Component.literal(text)) { onPress() }.also { it.horizontalSizing(Sizing.fixed(width)) }
 
     override fun tick() {
         super.tick()
@@ -172,8 +172,8 @@ class AccountScreen(private val parent: Screen?) : JukzUiScreen("account") {
     override fun shouldCloseOnEsc(): Boolean = true
 
     /** Back to a fresh world list, so worlds brought meanwhile show up in it. */
-    override fun close() {
-        client?.setScreen(if (parent is SelectWorldScreen) SelectWorldScreen(TitleScreen()) else parent)
+    override fun onClose() {
+        minecraft?.setScreen(if (parent is SelectWorldScreen) SelectWorldScreen(TitleScreen()) else parent)
     }
 
     companion object {

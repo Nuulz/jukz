@@ -1,8 +1,8 @@
 package dev.jukz.client.gui
 
 import io.wispforest.owo.ui.container.FlowLayout
-import net.minecraft.client.gui.DrawContext
-import net.minecraft.text.Text
+import net.minecraft.client.gui.GuiGraphics
+import net.minecraft.network.chat.Component
 
 /**
  * Shared layout for every jukz status overlay (model `status.xml`): the "jukz" brand in the screen's
@@ -10,8 +10,8 @@ import net.minecraft.text.Text
  * indeterminate bar, so a slow lookup never reads as a crash. Subclasses only declare their [buttons].
  */
 abstract class JukzStatusScreen(
-    private val heading: Text,
-    private val statusLine: Text,
+    private val heading: Component,
+    private val statusLine: Component,
     private val accentColor: Int = ACCENT_INFO,
     private val showSpinner: Boolean = true,
 ) : JukzUiScreen("status") {
@@ -35,10 +35,10 @@ abstract class JukzStatusScreen(
         }
         val buttons = buttons()
         if (buttons.isEmpty()) detach(root, root.childById(FlowLayout::class.java, "buttons"))
-        buttons.forEach { addButton(root, "buttons", Text.literal(it.text), it.width, it.onPress) }
+        buttons.forEach { addButton(root, "buttons", Component.literal(it.text), it.width, it.onPress) }
     }
 
-    override fun render(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
+    override fun render(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
         bar?.indeterminate(accentColor) // before drawing, so this frame shows the new position
         super.render(context, mouseX, mouseY, delta)
     }
