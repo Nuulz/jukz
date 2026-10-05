@@ -88,14 +88,14 @@ class AccountScreen(private val parent: Screen?) : JukzUiScreen("account") {
             else -> cloud.forEachIndexed { i, world ->
                 val state = CloudWorlds.state(world)
                 val (status, color) = when (state) {
-                    State.HERE -> "on this PC" to COLOR_LIVE
-                    State.AWAY -> "not on this PC" to COLOR_SUBTLE
-                    State.BRINGING -> "bringing it…" to ACCENT_INFO
-                    State.FAILED -> "couldn't bring it" to ACCENT_ERROR
+                    State.HERE -> "here" to COLOR_LIVE
+                    State.AWAY -> "not here" to COLOR_SUBTLE
+                    State.BRINGING -> "bringing…" to ACCENT_INFO
+                    State.FAILED -> "failed" to ACCENT_ERROR
                 }
                 // Another version's world says so; a newer one can't come here at all.
                 val version = if (world.fit == VersionFit.SAME) "" else " · ${(world.game ?: GameVersion.LEGACY).name}"
-                val actions = row(rows, "c$i", world.name, "saved ${DATE.format(Instant.ofEpochMilli(world.updated))}$version · $status", color)
+                val actions = row(rows, "c$i", world.name, "${DATE.format(Instant.ofEpochMilli(world.updated))}$version · $status", color)
                 if (state == State.AWAY || state == State.FAILED) {
                     val bring = button("Bring here", 62) { CloudWorlds.bring(world) { rebuild() }; rebuild() }
                     val saved = (world.game ?: GameVersion.LEGACY).name
