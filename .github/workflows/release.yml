@@ -71,7 +71,16 @@ jobs:
           if [ -z "$(gh release view "$TAG" --json body -q .body)" ]; then
             awk -v v="## $VERSION" '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
             if [ -s notes.md ]; then
-              printf '\nInstall: drop the `jukz-%s+<minecraft version>.jar` for your Minecraft into `mods/`, next to Fabric API, Fabric Language Kotlin and owo-lib.\n' "$VERSION" >> notes.md
+              # Which file is which: a player who grabs the wrong jar gets Fabric's "incompatible mods" screen.
+              {
+                printf '\n## Download the jar for your Minecraft version\n\n| Minecraft | File | Java |\n|---|---|---|\n'
+                for jar in $(ls dist/*.jar | sort -V); do
+                  mc="${jar##*+}"; mc="${mc%.jar}"
+                  case "$mc" in 2[6-9].*|[3-9][0-9].*) java=25 ;; *) java=21 ;; esac
+                  printf '| %s | `%s` | %s |\n' "$mc" "${jar##*/}" "$java"
+                done
+                printf '\nDrop it into `mods/`, next to Fabric API, Fabric Language Kotlin and owo-lib. Only one jukz jar at a time.\n'
+              } >> notes.md
               gh release edit "$TAG" --notes-file notes.md
             fi
           fi

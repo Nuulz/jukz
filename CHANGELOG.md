@@ -6,7 +6,7 @@ gets its section as notes. Write them for players, not developers.
 
 ## 0.3.0
 
-- jukz now runs on Minecraft 1.21.11 too (one jar per Minecraft version).
+- jukz now runs on Minecraft 1.21.11 and 26.2 too (one jar per Minecraft version; 26.2 needs Java 25).
 - Worlds know which Minecraft version they're on. A friend hosting on another version is explained instead of a failed connection; a world saved on a newer version is never opened on an older one; and opening an older world asks first, since updating it leaves friends on the old version behind.
 - Your account only brings over worlds of your Minecraft version; the others show their version in the account screen.
 - The mod declares exactly the Minecraft version it was built for.
