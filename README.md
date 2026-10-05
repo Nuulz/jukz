@@ -4,12 +4,21 @@
 
 ### Your Minecraft world, wherever you are. Your friends, whenever they want.
 
-Open a world and your friends can jump in — **no server, no port forwarding, no "is the host online?"**<br>
+Open a world and your friends can jump in, **no server, no port forwarding, no "is the host online?"**<br>
 When the host leaves, someone else takes over. When everyone leaves, the world waits for you in the cloud.
 
-**Minecraft 1.21.1 · Fabric · free**
-
-[**⬇ Download**](https://github.com/Nuulz/jukz/releases/latest) · [Website](https://nuulm.com/jukz) · [Make a cosmetic](https://nuulm.com/jukz/crear) · [Support on Ko-fi](https://ko-fi.com/nobmz)
+<p align="center">
+  <a href="https://github.com/Nuulz/jukz/releases/latest"><img src="https://img.shields.io/github/v/release/Nuulz/jukz?style=for-the-badge&label=Download&color=1e66f5" /></a>
+  <a href="https://nuulm.com/jukz"><img src="https://img.shields.io/badge/Website-nuulm.com%2Fjukz-blue?style=for-the-badge" /></a>
+  <a href="https://nuulm.com/jukz/crear"><img src="https://img.shields.io/badge/Make-a%20cosmetic-8a2be2?style=for-the-badge" /></a>
+  <a href="https://ko-fi.com/nobmz"><img src="https://img.shields.io/badge/Support%20on-Ko--fi-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white" /></a>
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/Minecraft-1.21.1-62b47a?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Loader-Fabric-dbd0b4?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Price-Free-green?style=for-the-badge" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-orange?style=for-the-badge" /></a>
+</p>
 
 <img src="docs/screenshots/playing.png" alt="Two players in the same world, joined through jukz" width="760">
 
@@ -52,7 +61,7 @@ Quit alone? The world is backed up to the cloud, and whoever opens it next conti
 
 ### 💻 Your worlds on every PC
 Sign in with a Microsoft account and your cloud worlds follow you: start the game on another PC, a new
-launcher instance or a friend's computer, and they come over. Manage it all from one screen in the game —
+launcher instance or a friend's computer, and they come over. Manage it all from one screen in the game -
 the person icon on the title screen.
 
 ### 🎩 Cosmetics, free
@@ -80,7 +89,7 @@ Everyone running jukz sees what you wear. Nothing here is a resource pack.
 
 **Want to make one?** Design it in [Blockbench](https://www.blockbench.net/) and send it at
 [nuulm.com/jukz/crear](https://nuulm.com/jukz/crear). If it gets in, it's free for everyone with your name
-on it — and it stays yours if the shop ever starts charging.
+on it, and it stays yours if the shop ever starts charging.
 
 ### 🔒 You decide who gets in
 Close access from the pause menu and the world turns private. Guests are checked by Mojang like on a normal
@@ -107,7 +116,7 @@ server, and every world has an owner key, so someone with only the code can't ta
    [Fabric Language Kotlin](https://modrinth.com/mod/fabric-language-kotlin) ·
    [owo-lib](https://modrinth.com/mod/owo-lib) ·
    the **jukz jar** from the [latest release](https://github.com/Nuulz/jukz/releases/latest).
-3. Open a world. That's it — jukz announces it automatically.
+3. Open a world. That's it, jukz announces it automatically.
 
 Every friend needs the mod too. After an update, jukz shows you what changed, once.
 
@@ -119,8 +128,8 @@ Every friend needs the mod too. After an update, jukz shows you what changed, on
 | Cloud backup size | up to 40 MB | up to 95 MB |
 | Kept in the cloud | 30 days | 180 days |
 | Backups per day | 10 | 60 |
-| Your worlds on every PC | — | up to 50 |
-| Cosmetics | — | ✅ free |
+| Your worlds on every PC | No | up to 50 |
+| Cosmetics | No | ✅ free |
 
 Limits only apply to the **cloud copy**. Your worlds on your PC never expire, and a world over the limit still
 plays and hands off normally. A fresh world is about 4.6 MB, so 40 MB covers well-played worlds.
@@ -152,8 +161,8 @@ stays free.
 
 ---
 
-**Building, hosting your own server or contributing?** Everything technical — architecture, tests, the
-self-hostable rendezvous, releasing — is in [`docs/DEVELOPERS.md`](docs/DEVELOPERS.md).
+**Building, hosting your own server or contributing?** Everything technical, architecture, tests, the
+self-hostable rendezvous, releasing, is in [`docs/DEVELOPERS.md`](docs/DEVELOPERS.md).
 Changes by version: [`CHANGELOG.md`](CHANGELOG.md).
 
-MIT licensed.
+Released under the [MIT license](LICENSE).
