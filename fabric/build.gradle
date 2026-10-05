@@ -12,6 +12,7 @@ repositories {
     maven { name = 'FabricMC'; url = 'https://maven.fabricmc.net/' }
     maven { name = 'JitPack'; url = 'https://jitpack.io' }
     maven { name = 'wispforest'; url = 'https://maven.wispforest.io/releases/' }
+    maven { name = 'TerraformersMC'; url = 'https://maven.terraformersmc.com/releases/' }
     mavenCentral()
 }
 
@@ -26,6 +27,9 @@ dependencies {
     // Players install owo-lib like fabric-api; the tiny sentinel JiJ explains it if it is missing.
     modImplementation "io.wispforest:owo-lib:${owo_version}"
     include "io.wispforest:owo-sentinel:${owo_version}"
+
+    // Mod Menu: compile-only, so jukz gets its Config button and links there but never requires it.
+    modCompileOnly "com.terraformersmc:modmenu:${modmenu_version}"
 
     // The deterministic core. include() jar-in-jars it so it ships inside the mod.
     implementation project(':core')

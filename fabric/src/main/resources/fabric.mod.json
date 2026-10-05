@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "jukz",
   "version": "${version}",
-  "name": "Joining Every Known Zone (JUKZ)",
-  "description": "Per-world UUID with serverless P2P discovery: each world lives in one place at a time, with rotating host ownership.",
+  "name": "jukz",
+  "description": "Play with friends in the same world with no server: it opens on whoever is playing, passes to the next player when they leave, and waits in the cloud when everyone is gone.",
   "authors": ["Nobz"],
   "icon": "assets/jukz/icon.png",
   "contact": {
@@ -19,6 +19,9 @@
     ],
     "client": [
       { "adapter": "kotlin", "value": "dev.jukz.JukzClient" }
+    ],
+    "modmenu": [
+      { "adapter": "kotlin", "value": "dev.jukz.client.gui.JukzModMenu" }
     ]
   },
   "mixins": [
@@ -26,7 +29,10 @@
   ],
   "custom": {
     "modmenu": {
-      "links": { "modmenu.kofi": "https://ko-fi.com/nobmz" }
+      "links": {
+        "modmenu.website": "https://nuulm.com/jukz",
+        "modmenu.kofi": "https://ko-fi.com/nobmz"
+      }
     }
   },
   "depends": {

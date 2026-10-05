@@ -4,6 +4,11 @@ Every version gets a `## X.Y.Z` section with `- ` bullets. The mod shows the sec
 version you last played in its "jukz was updated" screen, and a GitHub release whose notes are empty
 gets its section as notes. Write them for players, not developers.
 
+## 0.2.1
+
+- Mod Menu support: jukz has its icon, links (website, Ko-fi, source) and a Config button that opens your account screen. Mod Menu is optional.
+- jukz now has an icon.
+
 ## 0.2.0
 
 - Cosmetics: hats, glasses, backpacks and wings worn on your character, plus a badge next to your name in the tab list. All free.

@@ -27,8 +27,9 @@ Text and files ready to paste when creating the project. Icon: `icon.png` (128x1
 4. `cloud-upload.png`: Nobody around? The world is saved to the cloud for the next player
 5. `cosmetics-front.png`: Cosmetics worn on your character, seen by everyone running jukz
 6. `cosmetics-screen.png`: Pick yours with a 3D preview
-7. `world-info.png`: Share code and Access: Open / Closed
-8. `two-networks-relay.png`: Tested across two real networks, one behind CGNAT
+7. `account-screen.png`: Your account in game: plan, cloud worlds and worlds only on this PC
+8. `world-info.png`: Share code and Access: Open / Closed
+9. `two-networks-relay.png`: Tested across two real networks, one behind CGNAT
 
 ## Description
 
@@ -93,7 +94,7 @@ Source, docs and issues: github.com/Nuulz/jukz · Website: nuulm.com/jukz
 ## Steps only the owner can do
 
 1. **Modrinth:** create the project at modrinth.com/dashboard/projects (sign in with GitHub). Paste the fields
-   above, upload the icon and gallery, and upload `jukz-0.2.0.jar` from the GitHub release as version 0.2.0
+   above, upload the icon and gallery, and upload `jukz-0.2.1.jar` from the GitHub release as version 0.2.1
    (Fabric, 1.21.1, with the three dependencies). Submit for review (usually a day or two).
 2. **CurseForge:** create the project at console.curseforge.com (Minecraft Mods), same fields, upload the same
    jar with Fabric + 1.21.1 + Java 21 and the dependencies. Moderation takes longer.

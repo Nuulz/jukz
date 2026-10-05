@@ -64,6 +64,8 @@ Sign in with a Microsoft account and your cloud worlds follow you: start the gam
 launcher instance or a friend's computer, and they come over. Manage it all from one screen in the game -
 the person icon on the title screen.
 
+<p align="center"><img src="docs/screenshots/account-screen.png" alt="The account screen: plan, worlds in your cloud and worlds only on this PC" width="520"></p>
+
 ### 🎩 Cosmetics, free
 Hats, glasses, a mustache, backpacks, wings, and a pixel badge next to your name in the tab list.
 Everyone running jukz sees what you wear. Nothing here is a resource pack.
