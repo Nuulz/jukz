@@ -1,5 +1,6 @@
 package dev.jukz
 
+import dev.jukz.compat.windowHandle
 import dev.jukz.client.GuestSession
 import dev.jukz.client.HostCoordinator
 import dev.jukz.client.CloudWorlds
@@ -16,7 +17,16 @@ import dev.jukz.client.gui.HostInfoScreen
 import dev.jukz.cosmetics.Cosmetics
 import dev.jukz.cosmetics.CosmeticsFeatureRenderer
 import net.fabricmc.fabric.api.client.rendering.v1.LivingEntityFeatureRendererRegistrationCallback
+//? if >=1.21.11 {
+/*import dev.jukz.cosmetics.GuiModelRenderer
+import net.fabricmc.fabric.api.client.rendering.v1.SpecialGuiElementRegistry
+import net.minecraft.client.model.player.PlayerModel
+import net.minecraft.client.renderer.entity.RenderLayerParent
+import net.minecraft.client.renderer.entity.player.AvatarRenderer
+import net.minecraft.client.renderer.entity.state.AvatarRenderState
+*///?} else {
 import net.minecraft.client.renderer.entity.player.PlayerRenderer
+//?}
 import dev.jukz.client.gui.HostLeavingScreen
 import dev.jukz.client.gui.UiHotReload
 import dev.jukz.net.WorldAccessPayload
@@ -59,8 +69,17 @@ object JukzClient : ClientModInitializer {
 
         // 3D cosmetics (hats, face and back pieces) on every player model.
         LivingEntityFeatureRendererRegistrationCallback.EVENT.register { _, renderer, helper, _ ->
+            //? if >=1.21.11 {
+            /*@Suppress("UNCHECKED_CAST")
+            if (renderer is AvatarRenderer<*>) helper.register(CosmeticsFeatureRenderer(renderer as RenderLayerParent<AvatarRenderState, PlayerModel>))
+            *///?} else {
             if (renderer is PlayerRenderer) helper.register(CosmeticsFeatureRenderer(renderer))
+            //?}
         }
+        //? if >=1.21.11 {
+        /*// The player preview's 3D picture (see GuiModelRenderer).
+        SpecialGuiElementRegistry.register { ctx -> GuiModelRenderer(ctx.vertexConsumers()) }
+        *///?}
 
         // The host lets us in: keep the world key (to revive it from the cloud later) and the handoff gate.
         ClientPlayNetworking.registerGlobalReceiver(WorldAccessPayload.ID) { payload, _ ->
@@ -174,7 +193,7 @@ object JukzClient : ClientModInitializer {
         val installed = java.util.concurrent.atomic.AtomicBoolean(false)
         ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { client ->
             if (!installed.compareAndSet(false, true)) return@EndTick
-            val handle = client.window.window
+            val handle = client.windowHandle
             var previous: GLFWWindowCloseCallback? = null
             previous = GLFW.glfwSetWindowCloseCallback(handle, GLFWWindowCloseCallbackI { window ->
                 val screen = client.screen

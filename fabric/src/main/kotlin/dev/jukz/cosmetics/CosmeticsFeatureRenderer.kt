@@ -1,5 +1,64 @@
 package dev.jukz.cosmetics
 
+//? if >=1.21.11 {
+/*import dev.jukz.compat.id
+import dev.jukz.cosmetics.CosmeticCatalog.Slot
+import com.mojang.blaze3d.vertex.PoseStack
+import net.minecraft.client.Minecraft
+import net.minecraft.client.model.player.PlayerModel
+import net.minecraft.client.player.AbstractClientPlayer
+import net.minecraft.client.renderer.SubmitNodeCollector
+import net.minecraft.client.renderer.entity.LivingEntityRenderer
+import net.minecraft.client.renderer.entity.RenderLayerParent
+import net.minecraft.client.renderer.entity.layers.RenderLayer
+import net.minecraft.client.renderer.entity.state.AvatarRenderState
+import net.minecraft.client.renderer.rendertype.RenderTypes
+import net.minecraft.world.item.Items
+
+/**
+ * Draws the 3D cosmetics (hat, face, back) on every player model: in the world, in third person and in
+ * inventory screens. Each piece is attached to its bone (the head, or the body for back pieces), so it
+ * follows looking around and sneaking. Pieces are plain coloured voxels on a white texture, lit like the
+ * rest of the player. A helmet hides the hat and face pieces, and elytra the back piece, so they never
+ * poke through armour. (1.21.9+: layers submit geometry from the render state instead of drawing.)
+ */
+class CosmeticsFeatureRenderer(
+    context: RenderLayerParent<AvatarRenderState, PlayerModel>,
+) : RenderLayer<AvatarRenderState, PlayerModel>(context) {
+
+    override fun submit(matrices: PoseStack, collector: SubmitNodeCollector, light: Int, state: AvatarRenderState, yRot: Float, xRot: Float) {
+        if (state.isInvisible) return
+        // The render state only carries the entity id; mannequins and other avatars aren't players.
+        val player = Minecraft.getInstance().level?.getEntity(state.id) as? AbstractClientPlayer ?: return
+        val loadout = Cosmetics.loadoutFor(player.uuid)
+        if (loadout.size <= 1 && Slot.BADGE in loadout) return
+        val overlay = LivingEntityRenderer.getOverlayCoords(state, 0f)
+        val renderType = RenderTypes.entityTranslucent(WHITE)
+        for ((slot, itemId) in loadout) {
+            if (slot == Slot.BADGE || hiddenBy(slot, state)) continue
+            val model = Cosmetics.catalog.item(itemId)?.model ?: continue
+            matrices.pushPose()
+            val bone = if (slot == Slot.BACK) parentModel.body else parentModel.head
+            bone.translateAndRotate(matrices)
+            matrices.scale(PIXEL, PIXEL, PIXEL) // bone space is in blocks; models are in skin pixels
+            VoxelMesh.animate(model, state.ageInTicks, matrices)
+            collector.submitCustomGeometry(matrices, renderType) { pose, buffer -> VoxelMesh.emit(pose, buffer, model, light, overlay) }
+            matrices.popPose()
+        }
+    }
+
+    private fun hiddenBy(slot: Slot, state: AvatarRenderState): Boolean = when (slot) {
+        Slot.HAT, Slot.FACE -> !state.headEquipment.isEmpty
+        Slot.BACK -> state.chestEquipment.`is`(Items.ELYTRA)
+        Slot.BADGE -> true
+    }
+
+    companion object {
+        private const val PIXEL = 1f / 16f
+        private val WHITE = id("textures/cosmetics/white.png")
+    }
+}
+*///?} else {
 import dev.jukz.cosmetics.CosmeticCatalog.Slot
 import net.minecraft.client.player.AbstractClientPlayer
 import net.minecraft.client.renderer.RenderType
@@ -11,7 +70,7 @@ import net.minecraft.client.model.PlayerModel
 import com.mojang.blaze3d.vertex.PoseStack
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.item.Items
-import net.minecraft.resources.ResourceLocation
+import dev.jukz.compat.Identifier
 
 /**
  * Draws the 3D cosmetics (hat, face, back) on every player model — in the world, in third person and in
@@ -62,6 +121,7 @@ class CosmeticsFeatureRenderer(
 
     companion object {
         private const val PIXEL = 1f / 16f
-        private val WHITE: ResourceLocation = ResourceLocation.fromNamespaceAndPath("jukz", "textures/cosmetics/white.png")
+        private val WHITE: Identifier = Identifier.fromNamespaceAndPath("jukz", "textures/cosmetics/white.png")
     }
 }
+//?}

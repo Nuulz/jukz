@@ -23,7 +23,7 @@ include("fabric")
 
 stonecutter {
     create(":fabric") {
-        versions("1.21.1")
+        versions("1.21.1", "1.21.11")
         vcsVersion = "1.21.1"
     }
 }

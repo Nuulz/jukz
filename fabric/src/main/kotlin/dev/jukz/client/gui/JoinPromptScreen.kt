@@ -1,10 +1,11 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.FocusSource
 import dev.jukz.client.JoinCoordinator
 import dev.jukz.core.model.WorldId
 import io.wispforest.owo.ui.component.TextBoxComponent
 import io.wispforest.owo.ui.container.FlowLayout
-import io.wispforest.owo.ui.core.Component as UiComponent
+import dev.jukz.compat.UIComponent
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
 import org.lwjgl.glfw.GLFW
@@ -30,7 +31,7 @@ class JoinPromptScreen(private val parent: Screen?) : JukzUiScreen("join_prompt"
     override fun init() {
         super.init()
         // Ready to type (or paste) straight away.
-        codeBox?.let { uiAdapter?.rootComponent?.focusHandler()?.focus(it, UiComponent.FocusSource.KEYBOARD_CYCLE) }
+        codeBox?.let { uiAdapter?.rootComponent?.focusHandler()?.focus(it, FocusSource.KEYBOARD_CYCLE) }
     }
 
     private fun join(root: FlowLayout) {
@@ -42,11 +43,22 @@ class JoinPromptScreen(private val parent: Screen?) : JukzUiScreen("join_prompt"
         }
     }
 
+    //? if >=1.21.11 {
+    /*override fun keyPressed(event: net.minecraft.client.input.KeyEvent): Boolean {
+        if (isEnter(event.key())) return true
+        return super.keyPressed(event)
+    }
+    *///?} else {
     override fun keyPressed(keyCode: Int, scanCode: Int, modifiers: Int): Boolean {
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
-            uiAdapter?.rootComponent?.let { join(it) }
-            return true
-        }
+        if (isEnter(keyCode)) return true
         return super.keyPressed(keyCode, scanCode, modifiers)
+    }
+    //?}
+
+    /** Enter joins with the code typed so far. */
+    private fun isEnter(keyCode: Int): Boolean {
+        if (keyCode != GLFW.GLFW_KEY_ENTER && keyCode != GLFW.GLFW_KEY_KP_ENTER) return false
+        uiAdapter?.rootComponent?.let { join(it) }
+        return true
     }
 }

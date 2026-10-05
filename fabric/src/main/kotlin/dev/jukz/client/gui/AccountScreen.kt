@@ -5,7 +5,7 @@ import dev.jukz.client.CloudWorlds.State
 import dev.jukz.client.CloudWorlds.Upload
 import dev.jukz.cosmetics.Cosmetics
 import io.wispforest.owo.ui.component.ButtonComponent
-import io.wispforest.owo.ui.component.Components
+import dev.jukz.compat.UIComponents
 import io.wispforest.owo.ui.component.LabelComponent
 import io.wispforest.owo.ui.container.FlowLayout
 import io.wispforest.owo.ui.core.Color
@@ -140,7 +140,7 @@ class AccountScreen(private val parent: Screen?) : JukzUiScreen("account") {
     }
 
     private fun note(rows: FlowLayout, text: String) {
-        rows.child(Components.label(Component.literal(text)).color(Color.ofArgb(COLOR_SUBTLE)).maxWidth(300))
+        rows.child(UIComponents.label(Component.literal(text)).color(Color.ofArgb(COLOR_SUBTLE)).maxWidth(300))
     }
 
     /** A world row; returns its action box. */
@@ -153,7 +153,7 @@ class AccountScreen(private val parent: Screen?) : JukzUiScreen("account") {
     }
 
     private fun button(text: String, width: Int, onPress: () -> Unit): ButtonComponent =
-        Components.button(Component.literal(text)) { onPress() }.also { it.horizontalSizing(Sizing.fixed(width)) }
+        UIComponents.button(Component.literal(text)) { onPress() }.also { it.horizontalSizing(Sizing.fixed(width)) }
 
     override fun tick() {
         super.tick()

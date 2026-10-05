@@ -273,6 +273,11 @@ listed in `settings.gradle.kts`, each one is the project `:fabric:<version>` (fo
 reads its dependency versions from `fabric/stonecutter.properties.toml`. The code is written in Mojang's official names.
 Code that differs between versions goes in `//? if >=1.21.11 { … }` comments; "Set active project to …" rewrites `src/`
 for the version you are editing (commit with the `vcsVersion` active).
+Names that moved between versions (owo-lib 0.13's `UIComponent`…, Mojang's `Identifier`, NBT getters that return
+`Optional`, account and toast calls) go through `dev.jukz.compat`, so most files are written once with the newest
+names. The 3D bits differ by era: 1.21.9+ layers submit geometry from a render state, and 3D in a GUI (1.21.6+) is
+drawn into a texture (`GuiModelRenderer`, the player preview) or, for the flat-coloured cosmetic icons, projected to
+2D faces (`FlatQuads`).
 
 ### Editing screens (owo-ui, hot reload)
 

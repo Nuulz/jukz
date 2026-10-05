@@ -23,9 +23,26 @@ public abstract class PlayerTabOverlayMixin {
 
     @Inject(method = "getNameForDisplay", at = @At("RETURN"), cancellable = true)
     private void jukz$reserveBadge(PlayerInfo entry, CallbackInfoReturnable<Component> cir) {
+        //? if >=1.21.11 {
+        /*cir.setReturnValue(TabBadge.decorate(cir.getReturnValue(), entry.getProfile().id()));
+        *///?} else {
         cir.setReturnValue(TabBadge.decorate(cir.getReturnValue(), entry.getProfile().getId()));
+        //?}
     }
 
+    //? if >=1.21.11 {
+    /*@WrapOperation(
+        method = "render",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/client/gui/GuiGraphics;drawString(Lnet/minecraft/client/gui/Font;Lnet/minecraft/network/chat/Component;III)V"
+        )
+    )
+    private void jukz$drawBadge(GuiGraphics context, Font renderer, Component text, int x, int y, int color, Operation<Void> original) {
+        original.call(context, renderer, text, x, y, color);
+        TabBadge.draw(context, renderer, text, x, y);
+    }
+    *///?} else {
     @WrapOperation(
         method = "render",
         at = @At(
@@ -38,4 +55,5 @@ public abstract class PlayerTabOverlayMixin {
         TabBadge.draw(context, renderer, text, x, y);
         return width;
     }
+    //?}
 }

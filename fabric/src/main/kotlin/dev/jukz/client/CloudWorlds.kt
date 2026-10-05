@@ -1,5 +1,8 @@
 package dev.jukz.client
 
+import dev.jukz.compat.string
+import dev.jukz.compat.compound
+import dev.jukz.compat.toast
 import com.google.gson.JsonParser
 import dev.jukz.JukzMod
 import dev.jukz.config.JukzConfig
@@ -205,7 +208,7 @@ object CloudWorlds {
 
     private fun levelName(dir: Path): String? = runCatching {
         val root = net.minecraft.nbt.NbtIo.readCompressed(dir.resolve("level.dat"), net.minecraft.nbt.NbtAccounter.unlimitedHeap())
-        root.getCompound("Data").getString("LevelName").takeIf { it.isNotBlank() }
+        root.compound("Data").string("LevelName")?.takeIf { it.isNotBlank() }
     }.getOrNull()
 
     // ---- work (worker thread) -----------------------------------------------------------------
@@ -270,7 +273,7 @@ object CloudWorlds {
 
     private fun toast(title: String, body: String) {
         val client = Minecraft.getInstance()
-        client.execute { SystemToast.addOrUpdate(client.toasts, SystemToast.SystemToastId.PERIODIC_NOTIFICATION, Component.literal(title), Component.literal(body)) }
+        client.execute { client.toast(Component.literal(title), Component.literal(body)) }
     }
 
     private fun request(path: String): HttpRequest.Builder {

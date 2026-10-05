@@ -36,7 +36,11 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 public abstract class MinecraftDisconnectMixin {
 
     @ModifyVariable(
+        //? if >=1.21.11 {
+        /*method = "disconnect(Lnet/minecraft/client/gui/screens/Screen;ZZ)V", // every quit path ends here
+        *///?} else {
         method = "disconnect(Lnet/minecraft/client/gui/screens/Screen;Z)V",
+        //?}
         at = @At("HEAD"),
         argsOnly = true,
         require = 0

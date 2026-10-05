@@ -4,7 +4,7 @@ import net.minecraft.network.RegistryFriendlyByteBuf
 import net.minecraft.network.codec.StreamCodec
 import net.minecraft.network.codec.ByteBufCodecs
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload
-import net.minecraft.resources.ResourceLocation
+import dev.jukz.compat.Identifier
 import net.minecraft.core.UUIDUtil
 import java.util.UUID
 
@@ -18,7 +18,7 @@ data class WorldAccessPayload(val worldId: UUID, val key: String, val gate: Stri
     override fun type(): CustomPacketPayload.Type<WorldAccessPayload> = ID
 
     companion object {
-        val ID: CustomPacketPayload.Type<WorldAccessPayload> = CustomPacketPayload.Type(ResourceLocation.fromNamespaceAndPath("jukz", "world_access"))
+        val ID: CustomPacketPayload.Type<WorldAccessPayload> = CustomPacketPayload.Type(Identifier.fromNamespaceAndPath("jukz", "world_access"))
         val CODEC: StreamCodec<RegistryFriendlyByteBuf, WorldAccessPayload> = StreamCodec.composite(
             UUIDUtil.STREAM_CODEC, WorldAccessPayload::worldId,
             ByteBufCodecs.STRING_UTF8, WorldAccessPayload::key,

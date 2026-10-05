@@ -27,6 +27,19 @@ public abstract class WorldListEntryMixin {
 
     // require = 0: the badge is cosmetic, so a mapping/signature drift degrades (no badge) rather than
     // crashing the world list. Validated in-game.
+    //? if >=1.21.11 {
+    /*@Inject(method = "renderContent", at = @At("TAIL"), require = 0)
+    private void jukz$liveBadge(GuiGraphics context, int mouseX, int mouseY, boolean hovered, float tickDelta, CallbackInfo ci) {
+        net.minecraft.client.gui.layouts.LayoutElement row = (net.minecraft.client.gui.layouts.LayoutElement) (Object) this;
+        WorldListLiveBadge.INSTANCE.render(
+            context, Minecraft.getInstance().font, this.summary.getLevelId(), row.getX(), row.getY(), row.getWidth());
+    }
+
+    @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true, require = 0)
+    private void jukz$badgeClick(net.minecraft.client.input.MouseButtonEvent click, boolean doubled, CallbackInfoReturnable<Boolean> cir) {
+        double mouseX = click.x();
+        double mouseY = click.y();
+    *///?} else {
     @Inject(method = "render", at = @At("TAIL"), require = 0)
     private void jukz$liveBadge(GuiGraphics context, int index, int y, int x, int entryWidth, int entryHeight,
                                 int mouseX, int mouseY, boolean hovered, float tickDelta, CallbackInfo ci) {
@@ -36,6 +49,7 @@ public abstract class WorldListEntryMixin {
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true, require = 0)
     private void jukz$badgeClick(double mouseX, double mouseY, int button, CallbackInfoReturnable<Boolean> cir) {
+    //?}
         // Clicking a row selects it; remember it so the world-list "Copy jukz code" button can act on it.
         WorldListLiveBadge.INSTANCE.noteSelected(this.summary.getLevelId());
         Screen current = Minecraft.getInstance().screen;

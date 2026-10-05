@@ -87,6 +87,12 @@ class IconButton(
         message = tooltip // narration reads it; the text itself isn't drawn (see renderWidget)
     }
 
+    //? if >=1.21.11 {
+    /*override fun renderContents(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
+        renderDefaultSprite(context) // the vanilla button frame, without its label
+        icon()?.let { BadgeRenderer.draw(context, it, x + 2, y + 2, SIZE - 4) }
+    }
+    *///?} else {
     override fun renderWidget(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
         val label = message
         message = Component.empty()
@@ -94,6 +100,7 @@ class IconButton(
         message = label
         icon()?.let { BadgeRenderer.draw(context, it, x + 2, y + 2, SIZE - 4) }
     }
+    //?}
 
     companion object {
         const val SIZE = 20

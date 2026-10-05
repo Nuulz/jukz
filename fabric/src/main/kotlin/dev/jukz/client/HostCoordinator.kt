@@ -1,5 +1,8 @@
 package dev.jukz.client
 
+import dev.jukz.compat.leaveWorld
+import dev.jukz.compat.closeLevel
+import dev.jukz.compat.isOwner
 import dev.jukz.JukzMod
 import dev.jukz.client.gui.SupersededScreen
 import dev.jukz.config.JukzConfig
@@ -90,7 +93,7 @@ object HostCoordinator {
             val message = Component.literal("The host has closed access to this world.")
             server.execute {
                 val kicked = server.playerList.players.toList()
-                    .filterNot { server.isSingleplayerOwner(it.gameProfile) }
+                    .filterNot { server.isOwner(it.gameProfile) }
                 kicked.forEach { it.connection.disconnect(message) }
                 JukzMod.logger.info("jukz: access closed; {} guest(s) disconnected", kicked.size)
             }
@@ -217,8 +220,8 @@ object HostCoordinator {
 
     /** Save and leave the local copy (the vanilla quit-world sequence), then join the live host. */
     private fun leaveAndJoin(client: Minecraft, worldId: WorldId, shortCode: String) {
-        client.level?.disconnect()
-        client.disconnect(GenericMessageScreen(Component.translatable("menu.savingLevel")))
+        client.closeLevel()
+        client.leaveWorld(GenericMessageScreen(Component.translatable("menu.savingLevel")))
         JoinCoordinator.start(worldId, shortCode, TitleScreen())
     }
 

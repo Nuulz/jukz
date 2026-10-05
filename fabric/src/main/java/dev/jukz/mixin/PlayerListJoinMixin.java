@@ -33,15 +33,26 @@ public abstract class PlayerListJoinMixin {
     @Shadow public abstract List<ServerPlayer> getPlayers();
 
     @Inject(method = "canPlayerLogin", at = @At("HEAD"), cancellable = true)
+    //? if >=1.21.11 {
+    /*private void jukz$refuseTakenNames(SocketAddress address, net.minecraft.server.players.NameAndId profile, CallbackInfoReturnable<Component> cir) {
+        GameProfile host = server.getSingleplayerProfile();
+        List<String> names = new ArrayList<>();
+        for (ServerPlayer player : getPlayers()) names.add(player.getGameProfile().name());
+        String joining = profile.name();
+        String hostName = host != null ? host.name() : null;
+    *///?} else {
     private void jukz$refuseTakenNames(SocketAddress address, GameProfile profile, CallbackInfoReturnable<Component> cir) {
         GameProfile host = server.getSingleplayerProfile();
         List<String> names = new ArrayList<>();
         for (ServerPlayer player : getPlayers()) names.add(player.getGameProfile().getName());
+        String joining = profile.getName();
+        String hostName = host != null ? host.getName() : null;
+    //?}
         String reason = GuestAdmission.INSTANCE.refusal(
             server.usesAuthentication(),
             address instanceof LocalAddress,
-            profile.getName(),
-            host != null ? host.getName() : null,
+            joining,
+            hostName,
             names
         );
         if (reason != null) cir.setReturnValue(Component.literal(reason));

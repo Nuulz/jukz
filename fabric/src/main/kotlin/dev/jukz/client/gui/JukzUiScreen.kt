@@ -8,16 +8,16 @@ import io.wispforest.owo.ui.component.ButtonComponent
 import io.wispforest.owo.ui.component.LabelComponent
 import io.wispforest.owo.ui.container.FlowLayout
 import io.wispforest.owo.ui.core.Color
-import io.wispforest.owo.ui.core.Component as UiComponent
+import dev.jukz.compat.UIComponent
 import io.wispforest.owo.ui.core.OwoUIAdapter
-import io.wispforest.owo.ui.core.ParentComponent
+import dev.jukz.compat.ParentUIComponent
 import io.wispforest.owo.ui.core.Positioning
 import io.wispforest.owo.ui.core.Sizing
 import io.wispforest.owo.ui.parsing.UIModel
 import io.wispforest.owo.ui.parsing.UIModelLoader
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.network.chat.Component
-import net.minecraft.resources.ResourceLocation
+import dev.jukz.compat.Identifier
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.extension
@@ -34,9 +34,9 @@ import kotlin.io.path.nameWithoutExtension
  * packaged one (owo reports the error). In a release build none of that is active.
  */
 abstract class JukzUiScreen(modelName: String) :
-    BaseUIModelScreen<FlowLayout>(FlowLayout::class.java, DataSource.asset(ResourceLocation.fromNamespaceAndPath("jukz", modelName))) {
+    BaseUIModelScreen<FlowLayout>(FlowLayout::class.java, DataSource.asset(Identifier.fromNamespaceAndPath("jukz", modelName))) {
 
-    private val modelId = ResourceLocation.fromNamespaceAndPath("jukz", modelName)
+    private val modelId = Identifier.fromNamespaceAndPath("jukz", modelName)
 
     /** The model the current UI was built from. BaseUIModelScreen's `model` is fixed at construction. */
     protected var ui: UIModel? = model
@@ -92,7 +92,11 @@ abstract class JukzUiScreen(modelName: String) :
      */
     override fun renderBackground(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
         if (minecraft?.level == null) renderPanorama(context, delta)
+        //? if >=1.21.11 {
+        /*renderBlurredBackground(context)
+        *///?} else {
         renderBlurredBackground(delta)
+        //?}
         renderMenuBackground(context)
     }
 
@@ -108,19 +112,19 @@ abstract class JukzUiScreen(modelName: String) :
      * Take [target] out of the tree under [root]. Works during [build], before mounting, when owo's
      * `Component.remove()` can't yet (components only learn their parent once mounted).
      */
-    protected fun detach(root: ParentComponent, target: UiComponent): Boolean {
+    protected fun detach(root: ParentUIComponent, target: UIComponent): Boolean {
         for (child in root.children()) {
             if (child === target) {
                 root.removeChild(child)
                 return true
             }
-            if (child is ParentComponent && detach(child, target)) return true
+            if (child is ParentUIComponent && detach(child, target)) return true
         }
         return false
     }
 
     /** Expand one of theme.xml's templates. */
-    protected fun <T : UiComponent> themed(type: Class<T>, template: String, params: Map<String, String> = emptyMap()): T =
+    protected fun <T : UIComponent> themed(type: Class<T>, template: String, params: Map<String, String> = emptyMap()): T =
         ui!!.expandTemplate(type, "$template@jukz:$THEME", params)
 
     protected fun label(root: FlowLayout, id: String): LabelComponent = root.childById(LabelComponent::class.java, id)
@@ -202,7 +206,7 @@ object UiHotReload {
     fun install() {
         val dir = sourceDir ?: return
         val models = Files.list(dir).use { files -> files.filter { it.extension == "xml" }.toList() }
-        models.forEach { UIModelLoader.setHotReloadPath(ResourceLocation.fromNamespaceAndPath("jukz", it.nameWithoutExtension), it) }
+        models.forEach { UIModelLoader.setHotReloadPath(Identifier.fromNamespaceAndPath("jukz", it.nameWithoutExtension), it) }
         JukzMod.logger.info("jukz: owo-ui hot reload on for {} model(s) in {}", models.size, dir)
     }
 

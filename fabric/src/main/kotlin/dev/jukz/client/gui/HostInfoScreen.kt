@@ -5,7 +5,7 @@ import dev.jukz.core.host.HostStatus
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.runtime.HostSession
 import dev.jukz.world.WorldKeyStore
-import io.wispforest.owo.ui.component.Components
+import dev.jukz.compat.UIComponents
 import io.wispforest.owo.ui.component.LabelComponent
 import io.wispforest.owo.ui.container.FlowLayout
 import io.wispforest.owo.ui.core.Color
@@ -41,7 +41,7 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
         val rec = record
         builtFor = rec?.token
         if (rec == null) {
-            rows.child(Components.label(Component.literal("Not hosting this world.")).color(Color.ofArgb(COLOR_SUBTLE)))
+            rows.child(UIComponents.label(Component.literal("Not hosting this world.")).color(Color.ofArgb(COLOR_SUBTLE)))
         } else {
             listOfNotNull(
                 "Share code" to rec.worldId.shortCode(),

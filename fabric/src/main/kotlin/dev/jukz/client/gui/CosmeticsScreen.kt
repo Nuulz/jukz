@@ -1,5 +1,6 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.FocusSource
 import dev.jukz.cosmetics.BadgeRenderer
 import dev.jukz.cosmetics.CosmeticCatalog
 import dev.jukz.cosmetics.CosmeticCatalog.Availability
@@ -8,15 +9,15 @@ import dev.jukz.cosmetics.Cosmetics
 import dev.jukz.cosmetics.Cosmetics.Account
 import dev.jukz.cosmetics.ModelIcon
 import dev.jukz.cosmetics.PlayerPreview
-import io.wispforest.owo.ui.base.BaseComponent
+import dev.jukz.compat.BaseUIComponent
 import io.wispforest.owo.ui.component.ButtonComponent
-import io.wispforest.owo.ui.component.Components
+import dev.jukz.compat.UIComponents
 import io.wispforest.owo.ui.component.LabelComponent
-import io.wispforest.owo.ui.container.Containers
+import dev.jukz.compat.UIContainers
 import io.wispforest.owo.ui.container.FlowLayout
 import io.wispforest.owo.ui.core.Color
 import io.wispforest.owo.ui.core.CursorStyle
-import io.wispforest.owo.ui.core.OwoUIDrawContext
+import dev.jukz.compat.OwoUIGraphics
 import io.wispforest.owo.ui.core.Sizing
 import io.wispforest.owo.ui.core.Surface
 import net.minecraft.client.gui.screens.ConfirmLinkScreen
@@ -67,7 +68,7 @@ class CosmeticsScreen(private val parent: Screen?) : JukzUiScreen("cosmetics") {
         val grid = root.childById(FlowLayout::class.java, "grid")
         val cards = listOf<FlowLayout>(noneCard(signedIn)) + catalog.ofSlot(tab).map { card(it, signedIn) }
         cards.chunked(PER_ROW).forEach { row ->
-            grid.child(Containers.horizontalFlow(Sizing.content(), Sizing.content()).gap(4).also { r -> row.forEach(r::child) })
+            grid.child(UIContainers.horizontalFlow(Sizing.content(), Sizing.content()).gap(4).also { r -> row.forEach(r::child) })
         }
 
         label(root, "hint").text(Component.literal(
@@ -99,10 +100,10 @@ class CosmeticsScreen(private val parent: Screen?) : JukzUiScreen("cosmetics") {
 
         val line = root.childById(FlowLayout::class.java, "preview")
         Cosmetics.wearing(Slot.BADGE)?.let { line.child(ItemIcon(it, 8)) }
-        line.child(Components.label(Component.literal(profile.name)))
+        line.child(UIComponents.label(Component.literal(profile.name)))
     }
 
-    private class PreviewComponent(private val preview: PlayerPreview, private val player: java.util.UUID) : BaseComponent() {
+    private class PreviewComponent(private val preview: PlayerPreview, private val player: java.util.UUID) : BaseUIComponent() {
         private var dragYaw = 0f
 
         init {
@@ -110,24 +111,28 @@ class CosmeticsScreen(private val parent: Screen?) : JukzUiScreen("cosmetics") {
             cursorStyle(CursorStyle.MOVE)
         }
 
-        override fun draw(context: OwoUIDrawContext, mouseX: Int, mouseY: Int, partialTicks: Float, delta: Float) {
+        override fun draw(context: OwoUIGraphics, mouseX: Int, mouseY: Int, partialTicks: Float, delta: Float) {
             val sway = 20f * kotlin.math.sin(System.currentTimeMillis() / 1600.0).toFloat()
             preview.draw(context, x, y, width, height, -25f + sway + dragYaw, Cosmetics.loadoutFor(player))
         }
 
+        //? if >=1.21.11 {
+        /*override fun onMouseDrag(click: net.minecraft.client.input.MouseButtonEvent, deltaX: Double, deltaY: Double): Boolean {
+        *///?} else {
         override fun onMouseDrag(mouseX: Double, mouseY: Double, deltaX: Double, deltaY: Double, button: Int): Boolean {
+        //?}
             dragYaw += deltaX.toFloat() * 2f
             return true
         }
 
-        override fun canFocus(source: io.wispforest.owo.ui.core.Component.FocusSource): Boolean = source == io.wispforest.owo.ui.core.Component.FocusSource.MOUSE_CLICK
+        override fun canFocus(source: FocusSource): Boolean = source == FocusSource.MOUSE_CLICK
     }
 
     private fun noneCard(me: Account.SignedIn?): FlowLayout {
         val card = ui!!.expandTemplate(FlowLayout::class.java, "item-card", mapOf("id" to "none"))
         val wearingNothing = me != null && Cosmetics.wearing(tab) == null
         card.childById(FlowLayout::class.java, "icon-none").child(
-            Components.label(Component.literal("None")).color(Color.ofArgb(COLOR_SUBTLE))
+            UIComponents.label(Component.literal("None")).color(Color.ofArgb(COLOR_SUBTLE))
         )
         card.childById(LabelComponent::class.java, "state-none")
             .text(Component.literal(if (wearingNothing) "Wearing" else ""))
@@ -166,7 +171,11 @@ class CosmeticsScreen(private val parent: Screen?) : JukzUiScreen("cosmetics") {
         card.cursorStyle(CursorStyle.HAND)
         card.mouseEnter().subscribe { card.surface(cardSurface(ACCENT_INFO)) }
         card.mouseLeave().subscribe { card.surface(cardSurface(outline)) }
+        //? if >=1.21.11 {
+        /*card.mouseDown().subscribe { _, _ -> onPick(); true }
+        *///?} else {
         card.mouseDown().subscribe { _, _, _ -> onPick(); true }
+        //?}
     }
 
     private fun save(item: String) {
@@ -196,12 +205,12 @@ class CosmeticsScreen(private val parent: Screen?) : JukzUiScreen("cosmetics") {
     override fun shouldCloseOnEsc(): Boolean = true
 
     /** An item at [px] square: a badge's ASCII art, or a 3D piece turned to show its front and top. */
-    class ItemIcon(private val item: CosmeticCatalog.Item, private val px: Int, private val dimmed: Boolean = false) : BaseComponent() {
+    class ItemIcon(private val item: CosmeticCatalog.Item, private val px: Int, private val dimmed: Boolean = false) : BaseUIComponent() {
         init {
             sizing(Sizing.fixed(px), Sizing.fixed(px))
         }
 
-        override fun draw(context: OwoUIDrawContext, mouseX: Int, mouseY: Int, partialTicks: Float, delta: Float) {
+        override fun draw(context: OwoUIGraphics, mouseX: Int, mouseY: Int, partialTicks: Float, delta: Float) {
             val opacity = if (dimmed) 0.35f else 1f
             if (item.art != null) BadgeRenderer.draw(context, item, x, y, px, opacity)
             else item.model?.let { ModelIcon.draw(context, it, x, y, px, opacity, fromBehind = item.slot == Slot.BACK) }

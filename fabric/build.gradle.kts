@@ -137,6 +137,8 @@ tasks.processResources {
         "minecraft" to sc.properties.get<String>("mod.mc_compat"),
         "java" to "JAVA_$javaVersion",
         "java_major" to javaVersion.toString(),
+        "loader" to dep("deps.fabric_loader"),
+        "owo_min" to dep("mod.owo_min"),
     )
     inputs.properties(props)
     filesMatching("fabric.mod.json") { expand(props) }

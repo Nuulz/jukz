@@ -1,5 +1,9 @@
 package dev.jukz.world
 
+import dev.jukz.compat.putUuid
+import dev.jukz.compat.compound
+import dev.jukz.compat.long
+import dev.jukz.compat.uuid
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.nbt.NbtIo
 import net.minecraft.server.MinecraftServer
@@ -27,7 +31,7 @@ object WorldIdSidecar {
         val path = fileIn(saveRoot)
         if (!Files.exists(path)) return null
         val nbt = NbtIo.read(path) ?: return null
-        return Info(nbt.getUUID(KEY_WORLD_ID), nbt.getLong(KEY_GENERATION))
+        return Info(nbt.uuid(KEY_WORLD_ID) ?: return null, nbt.long(KEY_GENERATION) ?: 0L)
     }
 
     /** Mirror the current id+generation into the sidecar (called while the world is loaded). */
@@ -43,14 +47,14 @@ object WorldIdSidecar {
         val sidecar = runCatching { read(saveRoot)?.generation }.getOrNull()
         val inWorld = runCatching {
             NbtIo.readCompressed(saveRoot.resolve("data").resolve("jukz_world_id.dat"), net.minecraft.nbt.NbtAccounter.unlimitedHeap())
-                .getCompound("data").takeIf { it.contains("generation") }?.getLong("generation")
+                .compound("data").long("generation")
         }.getOrNull()
         return listOfNotNull(sidecar, inWorld).maxOrNull()
     }
 
     fun write(saveRoot: Path, info: Info) {
         val nbt = CompoundTag()
-        nbt.putUUID(KEY_WORLD_ID, info.worldId)
+        nbt.putUuid(KEY_WORLD_ID, info.worldId)
         nbt.putLong(KEY_GENERATION, info.generation)
         Files.createDirectories(saveRoot)
         NbtIo.write(nbt, fileIn(saveRoot))

@@ -1,5 +1,6 @@
 package dev.jukz.sync
 
+import dev.jukz.compat.compound
 import dev.jukz.JukzMod
 import dev.jukz.core.discovery.SnapshotOffer
 import dev.jukz.core.discovery.WorldRecord
@@ -367,7 +368,7 @@ class JGitWorldSync(
         if (!Files.exists(levelDat)) return
         runCatching {
             val root = NbtIo.readCompressed(levelDat, NbtAccounter.unlimitedHeap())
-            val data = root.getCompound("Data")
+            val data = root.compound("Data")
             if (data.contains("Player")) {
                 data.remove("Player")
                 NbtIo.writeCompressed(root, levelDat)

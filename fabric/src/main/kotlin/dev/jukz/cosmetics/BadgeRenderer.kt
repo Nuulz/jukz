@@ -13,13 +13,23 @@ object BadgeRenderer {
 
     fun draw(context: GuiGraphics, art: CosmeticCatalog.Art, x: Int, y: Int, px: Int, opacity: Float = 1f) {
         val matrices = context.pose()
-        matrices.pushPose()
-        matrices.translate(x.toFloat(), y.toFloat(), 0f)
         // A 16x16 badge drawn 8 px tall in the tab list is one art pixel per screen pixel at GUI scale 2.
         val scale = px.toFloat() / art.size
+        //? if >=1.21.11 {
+        /*matrices.pushMatrix()
+        matrices.translate(x.toFloat(), y.toFloat())
+        matrices.scale(scale, scale)
+        *///?} else {
+        matrices.pushPose()
+        matrices.translate(x.toFloat(), y.toFloat(), 0f)
         matrices.scale(scale, scale, 1f)
+        //?}
         for (run in art.runs) context.fill(run.x, run.y, run.x + run.length, run.y + 1, fade(run.argb, opacity))
+        //? if >=1.21.11 {
+        /*matrices.popMatrix()
+        *///?} else {
         matrices.popPose()
+        //?}
     }
 
     private fun fade(argb: Int, opacity: Float): Int {

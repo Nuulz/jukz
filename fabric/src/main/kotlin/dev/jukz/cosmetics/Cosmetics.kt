@@ -1,5 +1,6 @@
 package dev.jukz.cosmetics
 
+import dev.jukz.compat.jukzSessionService
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import dev.jukz.JukzMod
@@ -198,7 +199,7 @@ object Cosmetics {
             }
             body.addProperty("signature", encoder.encodeToString(signer.sign()))
         } else {
-            runCatching { client.minecraftSessionService.joinServer(session.profileId, session.accessToken, challenge.get("serverId").asString) }
+            runCatching { client.jukzSessionService.joinServer(session.profileId, session.accessToken, challenge.get("serverId").asString) }
                 .onFailure { JukzMod.logger.info("jukz: cosmetics sign-in without a Mojang certificate or session ({})", it.message) }
         }
         val answer = call("/session", body, null)

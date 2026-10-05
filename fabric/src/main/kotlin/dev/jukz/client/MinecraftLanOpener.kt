@@ -4,7 +4,8 @@ import dev.jukz.JukzMod
 import dev.jukz.config.JukzConfig
 import dev.jukz.core.host.LanOpener
 import net.minecraft.client.Minecraft
-import net.minecraft.client.User
+import dev.jukz.compat.accountKind
+import dev.jukz.compat.hasRealAccount
 import net.minecraft.client.server.IntegratedServer
 import net.minecraft.world.level.GameType
 import java.net.ServerSocket
@@ -46,12 +47,10 @@ class MinecraftLanOpener(
         // Guests are verified by Mojang like on any server (the jukz relay only moves bytes), unless the
         // host has no real account (dev runs, offline launchers) or opted into offline guests. See
         // GuestAdmission for why offline mode used to be a hole.
-        val premium = client.user.type.let {
-            it == User.Type.MSA || it == User.Type.MOJANG
-        }
+        val premium = client.hasRealAccount
         server.setUsesAuthentication(GuestAdmission.onlineMode(premium, JukzConfig.offlineGuests))
         if (!server.usesAuthentication()) {
-            JukzMod.logger.info("jukz: guests join in offline mode (host account: {}, offline-guests: {})", client.user.type, JukzConfig.offlineGuests)
+            JukzMod.logger.info("jukz: guests join in offline mode (host account: {}, offline-guests: {})", client.accountKind, JukzConfig.offlineGuests)
         }
         return port
     }

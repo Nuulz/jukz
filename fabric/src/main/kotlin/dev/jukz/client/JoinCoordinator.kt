@@ -1,5 +1,6 @@
 package dev.jukz.client
 
+import dev.jukz.compat.leaveWorld
 import dev.jukz.JukzMod
 import dev.jukz.client.gui.AccessClosedScreen
 import dev.jukz.client.gui.HostHandoffScreen
@@ -209,7 +210,7 @@ object JoinCoordinator {
         JukzMod.logger.info("jukz: host of {} closed access — not offering handoff", shortCode)
         client.execute {
             val screen = AccessClosedScreen { client.setScreen(TitleScreen()) }
-            if (client.level != null) client.disconnect(screen) else client.setScreen(screen)
+            if (client.level != null) client.leaveWorld(screen) else client.setScreen(screen)
         }
     }
 
@@ -239,7 +240,7 @@ object JoinCoordinator {
             // If we are still in the host's world (a live handoff), leave it cleanly WITH this prompt
             // as the screen, so the vanilla "Connection lost" never flashes. For a ghost takeover (we
             // were never connected to a world), just show it.
-            if (client.level != null) client.disconnect(screen) else client.setScreen(screen)
+            if (client.level != null) client.leaveWorld(screen) else client.setScreen(screen)
         }
     }
 

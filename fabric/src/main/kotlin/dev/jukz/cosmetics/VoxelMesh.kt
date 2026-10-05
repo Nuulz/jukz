@@ -2,7 +2,6 @@ package dev.jukz.cosmetics
 
 import com.mojang.blaze3d.vertex.VertexConsumer
 import com.mojang.blaze3d.vertex.PoseStack
-import net.minecraft.util.Mth
 import com.mojang.math.Axis
 
 /** Emits a voxel model's faces (in bone pixels) into an entity-format vertex consumer. */
@@ -26,7 +25,7 @@ object VoxelMesh {
     fun animate(model: CosmeticCatalog.Model, ticks: Float, matrices: PoseStack) {
         when (model.animation) {
             CosmeticCatalog.Animation.NONE -> {}
-            CosmeticCatalog.Animation.BOB -> matrices.translate(0f, Mth.sin(ticks * 0.08f) * 0.6f, 0f)
+            CosmeticCatalog.Animation.BOB -> matrices.translate(0f, kotlin.math.sin(ticks * 0.08f) * 0.6f, 0f)
             CosmeticCatalog.Animation.SPIN -> {
                 matrices.translate(model.centerX, 0f, model.centerZ)
                 matrices.mulPose(Axis.YP.rotationDegrees(ticks * 2f))

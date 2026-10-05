@@ -1,5 +1,6 @@
 package dev.jukz
 
+import dev.jukz.compat.isOwner
 import dev.jukz.config.JukzState
 import dev.jukz.core.model.WorldId
 import dev.jukz.net.WorldAccessPayload
@@ -38,7 +39,7 @@ object JukzMod : ModInitializer {
 
         // A player the server let in gets the world key + handoff gate, over the game connection.
         ServerPlayConnectionEvents.JOIN.register { handler, _, server ->
-            if (!server.isSingleplayerOwner(handler.player.gameProfile)) sendWorldAccess(handler.player)
+            if (!server.isOwner(handler.player.gameProfile)) sendWorldAccess(handler.player)
         }
 
         ServerLifecycleEvents.SERVER_STARTING.register { _ ->
@@ -87,6 +88,6 @@ object JukzMod : ModInitializer {
 
     /** Re-send to everyone but the host (a re-announce starts a session with a new gate). */
     fun broadcastWorldAccess(server: MinecraftServer) {
-        server.playerList.players.filterNot { server.isSingleplayerOwner(it.gameProfile) }.forEach(::sendWorldAccess)
+        server.playerList.players.filterNot { server.isOwner(it.gameProfile) }.forEach(::sendWorldAccess)
     }
 }

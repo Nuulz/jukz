@@ -1,9 +1,9 @@
 package dev.jukz.client.gui
 
 import dev.jukz.config.JukzState
-import io.wispforest.owo.ui.base.BaseComponent
+import dev.jukz.compat.BaseUIComponent
 import io.wispforest.owo.ui.container.FlowLayout
-import io.wispforest.owo.ui.core.OwoUIDrawContext
+import dev.jukz.compat.OwoUIGraphics
 import io.wispforest.owo.ui.core.Sizing
 import net.minecraft.client.gui.screens.ConfirmLinkScreen
 import net.minecraft.client.gui.screens.Screen
@@ -44,12 +44,12 @@ class SupportScreen(private val parent: Screen?) : JukzStatusScreen(
         minecraft?.setScreen(parent)
     }
 
-    private class CupIcon : BaseComponent() {
+    private class CupIcon : BaseUIComponent() {
         init {
             sizing(Sizing.fixed(SIZE), Sizing.fixed(SIZE))
         }
 
-        override fun draw(context: OwoUIDrawContext, mouseX: Int, mouseY: Int, partialTicks: Float, delta: Float) {
+        override fun draw(context: OwoUIGraphics, mouseX: Int, mouseY: Int, partialTicks: Float, delta: Float) {
             dev.jukz.cosmetics.BadgeRenderer.draw(context, UiIcons.KOFI, x, y, SIZE)
         }
 
