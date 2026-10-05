@@ -135,8 +135,18 @@ object WorldOpenInterceptor {
         GameVersion(data.compound("Version").string("Name") ?: "an older version", dataVersion)
     }.getOrNull()
 
+    /**
+     * JGit writes its objects read-only. Minecraft 26.x upgrades an older world by moving every file in it,
+     * and fails ("another program accessed the world") on those, so make the snapshot repo writable first.
+     */
+    private fun makeGitWritable(levelName: String) = runCatching {
+        val git = Minecraft.getInstance().levelSource.baseDir.resolve(levelName).resolve(".git").toFile()
+        if (git.isDirectory) git.walkTopDown().forEach { if (!it.canWrite()) it.setWritable(true, true) }
+    }
+
     /** Resume the vanilla local boot, bypassing this interceptor for the re-entrant call. */
     private fun openLocally(levelName: String, onCancel: Runnable) {
+        makeGitWritable(levelName)
         bypass = true
         Minecraft.getInstance().createWorldOpenFlows().openWorld(levelName, onCancel)
     }
