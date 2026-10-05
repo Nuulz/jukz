@@ -127,6 +127,9 @@ object DeviceIdentity {
         return true
     }
 
+    /** Seconds left of a refusal for opening too many worlds (0 when none). */
+    fun limitedForSecs(): Long = ((noticeUntil - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
+
     /** Show the "too many worlds" notice at most once per refusal period. */
     fun noticeLimited(retryAfterSecs: Long) {
         val now = System.currentTimeMillis()

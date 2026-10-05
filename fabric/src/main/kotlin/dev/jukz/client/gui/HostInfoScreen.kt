@@ -1,5 +1,6 @@
 package dev.jukz.client.gui
 
+import dev.jukz.discovery.DeviceIdentity
 import dev.jukz.compat.openScreen
 import dev.jukz.client.HostCoordinator
 import dev.jukz.core.host.HostStatus
@@ -126,9 +127,11 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
     private fun showStatus() {
         val label = statusLabel ?: return
         val refused = record?.let { WorldKeyStore.isRefused(it.worldId) } == true
+        val limited = DeviceIdentity.limitedForSecs()
         val current = when {
             // Playable here and on the LAN, but the rendezvous holds another key for this world.
             refused -> "not online: this copy doesn't hold the world's key" to ACCENT_ERROR
+            limited > 0 -> "not online yet: too many worlds opened · online in ${LimitedScreen.waitText(limited)}" to ACCENT_ERROR
             checking -> "checking…" to COLOR_SUBTLE
             status?.live == true -> "live · heartbeat #${status!!.heartbeatSeq}" to COLOR_LIVE
             else -> "not announced" to ACCENT_ERROR
