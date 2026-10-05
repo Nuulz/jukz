@@ -1,5 +1,6 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.openScreen
 import dev.jukz.compat.FocusSource
 import dev.jukz.cosmetics.BadgeRenderer
 import dev.jukz.cosmetics.CosmeticCatalog
@@ -86,11 +87,11 @@ class CosmeticsScreen(private val parent: Screen?) : JukzUiScreen("cosmetics") {
             // Signed in: the link also verifies the creator account, so rewards reach this Minecraft account.
             Cosmetics.creatorPageUrl { url -> minecraft?.execute { ConfirmLinkScreen.confirmLinkNow(this, url, true) } }
         }.tooltip(Component.literal("Design a cosmetic in Blockbench and send it in. If it gets in, it's yours to keep."))
-        addButton(root, "buttons", Component.literal("My account"), width = 80) { minecraft?.setScreen(AccountScreen(this)) }
+        addButton(root, "buttons", Component.literal("My account"), width = 80) { minecraft?.openScreen(AccountScreen(this)) }
         addButton(root, "buttons", Component.literal("Ko-fi"), width = 50) {
             ConfirmLinkScreen.confirmLinkNow(this, KOFI_URL)
         }
-        addButton(root, "buttons", Component.literal("Done"), width = 80) { minecraft?.setScreen(parent) }
+        addButton(root, "buttons", Component.literal("Done"), width = 80) { minecraft?.openScreen(parent) }
     }
 
     /** You, slowly turning (drag to turn yourself), wearing what you picked; your tab-list line under it. */

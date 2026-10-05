@@ -1,12 +1,13 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.openScreen
 import dev.jukz.JukzMod
 import dev.jukz.runtime.GhostUpload
 import dev.jukz.sync.R2SnapshotStore
 import io.wispforest.owo.ui.component.LabelComponent
 import io.wispforest.owo.ui.container.FlowLayout
 import net.minecraft.client.Minecraft
-import net.minecraft.client.gui.GuiGraphics
+import dev.jukz.compat.GuiGraphics
 import net.minecraft.client.gui.screens.TitleScreen
 import net.minecraft.network.chat.Component
 import java.util.concurrent.atomic.AtomicBoolean
@@ -59,7 +60,7 @@ class UploadingWorldScreen : JukzUiScreen("upload") {
         }
         if (done.get()) {
             GhostUpload.clear()
-            Minecraft.getInstance().setScreen(TitleScreen())
+            Minecraft.getInstance().openScreen(TitleScreen())
             return
         }
         if (escapeOffered && !escapeShown) showEscape()
@@ -133,11 +134,19 @@ class UploadingWorldScreen : JukzUiScreen("upload") {
         else "Uploading…"
     }
 
+    //? if >=26.2 {
+    /*override fun extractRenderState(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
+        val t = total.get()
+        bar?.progress(if (t > 0) sent.get().toDouble() / t else 0.0, COLOR_LIVE)
+        super.extractRenderState(context, mouseX, mouseY, delta)
+    }
+    *///?} else {
     override fun render(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
         val t = total.get()
         bar?.progress(if (t > 0) sent.get().toDouble() / t else 0.0, COLOR_LIVE)
         super.render(context, mouseX, mouseY, delta)
     }
+    //?}
 
     companion object {
         private const val MAX_ATTEMPTS_BEFORE_ESCAPE = 3

@@ -9,7 +9,11 @@ import dev.jukz.world.WorldIdSidecar
 import dev.jukz.world.WorldIdState
 import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
+//? if >=26.2 {
+/*import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLevelEvents
+*///?} else {
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents
+//?}
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking
@@ -35,7 +39,11 @@ object JukzMod : ModInitializer {
 
     override fun onInitialize() {
         JukzState.captureStartup() // before anything writes jukz's config files
+        //? if >=26.2 {
+        /*PayloadTypeRegistry.clientboundPlay().register(WorldAccessPayload.ID, WorldAccessPayload.CODEC)
+        *///?} else {
         PayloadTypeRegistry.playS2C().register(WorldAccessPayload.ID, WorldAccessPayload.CODEC)
+        //?}
 
         // A player the server let in gets the world key + handoff gate, over the game connection.
         ServerPlayConnectionEvents.JOIN.register { handler, _, server ->
@@ -46,7 +54,11 @@ object JukzMod : ModInitializer {
             HostSession.onServerStarting()
         }
 
+        //? if >=26.2 {
+        /*ServerLevelEvents.LOAD.register { server, world ->
+        *///?} else {
         ServerWorldEvents.LOAD.register { server, world ->
+        //?}
             if (world.dimension() == Level.OVERWORLD) {
                 val state = WorldIdState.get(world)
                 WorldIdSidecar.write(server, state)

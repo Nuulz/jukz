@@ -1,5 +1,7 @@
 package dev.jukz.client
 
+import dev.jukz.compat.currentScreen
+import dev.jukz.compat.openScreen
 import net.minecraft.nbt.NbtIo
 import net.minecraft.nbt.NbtAccounter
 import dev.jukz.client.gui.VersionScreen
@@ -62,9 +64,9 @@ object WorldOpenInterceptor {
 
     private fun beginConsult(worldId: WorldId, levelName: String, onCancel: Runnable) {
         val client = Minecraft.getInstance()
-        val parent = client.screen // the world-select screen, to fall back to
+        val parent = client.currentScreen // the world-select screen, to fall back to
         val shortCode = worldId.shortCode()
-        client.setScreen(SearchingHostScreen(shortCode) { openLocally(levelName, onCancel) })
+        client.openScreen(SearchingHostScreen(shortCode) { openLocally(levelName, onCancel) })
 
         Thread {
             val live = try {
@@ -75,7 +77,7 @@ object WorldOpenInterceptor {
             if (live != null && VersionFit.of(currentGame, live.game) != VersionFit.SAME) {
                 // Someone hosts it on another Minecraft version: the game couldn't connect, and opening the
                 // local copy would split the world. Say so instead.
-                client.execute { client.setScreen(VersionScreen.hostOnOtherVersion(live.game ?: GameVersion.LEGACY) { client.setScreen(parent) }) }
+                client.execute { client.openScreen(VersionScreen.hostOnOtherVersion(live.game ?: GameVersion.LEGACY) { client.openScreen(parent) }) }
                 return@Thread
             }
             if (live != null) {
@@ -106,14 +108,14 @@ object WorldOpenInterceptor {
                     val saved = head.game ?: GameVersion.LEGACY
                     when (VersionFit.of(currentGame, head.game)) {
                         VersionFit.SAME -> takeOver()
-                        VersionFit.UPGRADE -> client.setScreen(VersionScreen.upgrade(saved, { client.setScreen(parent) }) { takeOver() })
-                        VersionFit.TOO_NEW -> client.setScreen(VersionScreen.tooNew(saved) { client.setScreen(parent) })
+                        VersionFit.UPGRADE -> client.openScreen(VersionScreen.upgrade(saved, { client.openScreen(parent) }) { takeOver() })
+                        VersionFit.TOO_NEW -> client.openScreen(VersionScreen.tooNew(saved) { client.openScreen(parent) })
                     }
                 } else {
                     // Our own copy: one saved on an older version is upgraded by opening it, so ask first.
                     val saved = localSaveVersion(levelName)
                     if (saved != null && VersionFit.of(currentGame, saved) == VersionFit.UPGRADE) {
-                        client.setScreen(VersionScreen.upgrade(saved, { client.setScreen(parent) }) { openLocally(levelName, onCancel) })
+                        client.openScreen(VersionScreen.upgrade(saved, { client.openScreen(parent) }) { openLocally(levelName, onCancel) })
                     } else {
                         openLocally(levelName, onCancel)
                     }

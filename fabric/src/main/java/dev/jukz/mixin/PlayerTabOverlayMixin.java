@@ -4,7 +4,9 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.jukz.cosmetics.TabBadge;
 import net.minecraft.client.gui.Font;
+//? if <26.2 {
 import net.minecraft.client.gui.GuiGraphics;
+//?}
 import net.minecraft.client.gui.components.PlayerTabOverlay;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.network.chat.Component;
@@ -30,7 +32,19 @@ public abstract class PlayerTabOverlayMixin {
         //?}
     }
 
-    //? if >=1.21.11 {
+    //? if >=26.2 {
+    /*@WrapOperation(
+        method = "extractRenderState",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;text(Lnet/minecraft/client/gui/Font;Lnet/minecraft/network/chat/Component;III)V"
+        )
+    )
+    private void jukz$drawBadge(net.minecraft.client.gui.GuiGraphicsExtractor context, Font renderer, Component text, int x, int y, int color, Operation<Void> original) {
+        original.call(context, renderer, text, x, y, color);
+        TabBadge.draw(context, renderer, text, x, y);
+    }
+    *///?} else if >=1.21.11 {
     /*@WrapOperation(
         method = "render",
         at = @At(

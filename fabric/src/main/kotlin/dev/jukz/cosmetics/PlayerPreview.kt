@@ -1,13 +1,81 @@
 package dev.jukz.cosmetics
 
-//? if >=1.21.11 {
+//? if >=26.2 {
+/*import com.mojang.authlib.GameProfile
+import com.mojang.blaze3d.vertex.PoseStack
+import com.mojang.math.Axis
+import dev.jukz.compat.GuiGraphics
+import dev.jukz.compat.id
+import dev.jukz.cosmetics.CosmeticCatalog.Slot
+import net.minecraft.client.Minecraft
+import net.minecraft.client.model.geom.ModelLayers
+import net.minecraft.client.model.player.PlayerModel
+import net.minecraft.client.renderer.SubmitNodeCollector
+import net.minecraft.client.renderer.entity.state.AvatarRenderState
+import net.minecraft.client.renderer.rendertype.RenderTypes
+import net.minecraft.client.renderer.texture.OverlayTexture
+import net.minecraft.util.LightCoordsUtil
+import net.minecraft.world.entity.player.PlayerModelType
+import net.minecraft.world.entity.player.PlayerSkin
+
+/**
+ * A player model in a GUI wearing a loadout, no entity or world needed, so it works on the title
+ * screen too. Draws the vanilla player model with [profile]'s skin, then each 3D piece on its bone
+ * exactly as [CosmeticsFeatureRenderer] does in the world. (26.x: both are submitted into the picture
+ * that [GuiModelRenderer] draws, like an entity's layers.)
+ */
+class PlayerPreview(private val profile: GameProfile) {
+    private val client = Minecraft.getInstance()
+    private val skin: PlayerSkin = client.skinManager.createLookup(profile, false).get()
+    private val slim = skin.model() == PlayerModelType.SLIM
+    private val model = PlayerModel(client.entityModels.bakeLayer(if (slim) ModelLayers.PLAYER_SLIM else ModelLayers.PLAYER), slim)
+    private val pose = AvatarRenderState() // a player standing still; the model is posed from it when drawn
+
+    /**
+     * Draw the player standing in the [w]×[h] box at ([x], [y]), turned [yaw] degrees from facing
+     * the viewer, wearing [loadout] (slot → item id).
+     */
+    fun draw(context: GuiGraphics, x: Int, y: Int, w: Int, h: Int, yaw: Float, loadout: Map<Slot, String>) {
+        // Model space is in blocks: head top at -0.5, feet at +1.5; tall hats reach about -1.15, so the
+        // box is fitted to that whole span. The picture's origin is its bottom centre.
+        val scale = h * 0.94f / 2.65f
+        GuiModelRenderer.submit(context, x, y, x + w, y + h, scale) { matrices, collector ->
+            matrices.translate(0f, -1.585f, 0f) // feet a little above the bottom edge
+            matrices.mulPose(Axis.XP.rotationDegrees(-8f))
+            matrices.mulPose(Axis.YP.rotationDegrees(yaw)) // the picture flips z, so no half turn to face us
+            drawModel(matrices, collector, loadout)
+        }
+    }
+
+    private fun drawModel(matrices: PoseStack, collector: SubmitNodeCollector, loadout: Map<Slot, String>) {
+        val light = LightCoordsUtil.FULL_BRIGHT
+        collector.submitModel(model, pose, matrices, skin.body().texturePath(), light, OverlayTexture.NO_OVERLAY, 0, null)
+        val ticks = (System.currentTimeMillis() % 1_000_000L) / 50f
+        val renderType = RenderTypes.entityTranslucent(WHITE)
+        for ((slot, itemId) in loadout) {
+            if (slot == Slot.BADGE) continue
+            val piece = Cosmetics.catalog.item(itemId)?.model ?: continue
+            matrices.pushPose()
+            (if (slot == Slot.BACK) model.body else model.head).translateAndRotate(matrices)
+            matrices.scale(1 / 16f, 1 / 16f, 1 / 16f)
+            VoxelMesh.animate(piece, ticks, matrices)
+            collector.submitCustomGeometry(matrices, renderType) { p, buffer -> VoxelMesh.emit(p, buffer, piece, light, OverlayTexture.NO_OVERLAY) }
+            matrices.popPose()
+        }
+    }
+
+    companion object {
+        private val WHITE = id("textures/cosmetics/white.png")
+    }
+}
+*///?} else if >=1.21.11 {
 /*import com.mojang.authlib.GameProfile
 import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.math.Axis
 import dev.jukz.compat.id
 import dev.jukz.cosmetics.CosmeticCatalog.Slot
 import net.minecraft.client.Minecraft
-import net.minecraft.client.gui.GuiGraphics
+import dev.jukz.compat.GuiGraphics
 import net.minecraft.client.model.geom.ModelLayers
 import net.minecraft.client.model.player.PlayerModel
 import net.minecraft.client.renderer.LightTexture
@@ -73,7 +141,7 @@ class PlayerPreview(private val profile: GameProfile) {
 import com.mojang.authlib.GameProfile
 import dev.jukz.cosmetics.CosmeticCatalog.Slot
 import net.minecraft.client.Minecraft
-import net.minecraft.client.gui.GuiGraphics
+import dev.jukz.compat.GuiGraphics
 import net.minecraft.client.player.AbstractClientPlayer
 import com.mojang.blaze3d.platform.Lighting
 import net.minecraft.client.renderer.LightTexture

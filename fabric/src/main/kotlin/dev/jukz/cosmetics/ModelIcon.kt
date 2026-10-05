@@ -2,7 +2,7 @@ package dev.jukz.cosmetics
 
 //? if >=1.21.11 {
 /*import com.mojang.math.Axis
-import net.minecraft.client.gui.GuiGraphics
+import dev.jukz.compat.GuiGraphics
 import org.joml.Matrix3f
 import org.joml.Vector3f
 import java.util.IdentityHashMap
@@ -67,7 +67,7 @@ object ModelIcon {
     }
 }
 *///?} else {
-import net.minecraft.client.gui.GuiGraphics
+import dev.jukz.compat.GuiGraphics
 import com.mojang.blaze3d.platform.Lighting
 import net.minecraft.client.renderer.LightTexture
 import net.minecraft.client.renderer.texture.OverlayTexture

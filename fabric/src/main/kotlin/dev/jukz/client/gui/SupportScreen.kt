@@ -1,5 +1,6 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.openScreen
 import dev.jukz.config.JukzState
 import dev.jukz.compat.BaseUIComponent
 import io.wispforest.owo.ui.container.FlowLayout
@@ -30,7 +31,7 @@ class SupportScreen(private val parent: Screen?) : JukzStatusScreen(
 
     override fun buttons() = listOf(
         StatusButton("Support on Ko-fi", 130) { ConfirmLinkScreen.confirmLinkNow(parent, CosmeticsScreen.KOFI_URL) },
-        StatusButton("Maybe later", 100) { minecraft?.setScreen(parent) },
+        StatusButton("Maybe later", 100) { minecraft?.openScreen(parent) },
     )
 
     override fun build(root: FlowLayout) {
@@ -41,7 +42,7 @@ class SupportScreen(private val parent: Screen?) : JukzStatusScreen(
     override fun shouldCloseOnEsc(): Boolean = true
 
     override fun onClose() {
-        minecraft?.setScreen(parent)
+        minecraft?.openScreen(parent)
     }
 
     private class CupIcon : BaseUIComponent() {

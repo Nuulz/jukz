@@ -3,6 +3,7 @@ package dev.jukz.compat
 
 import com.mojang.authlib.GameProfile
 import com.mojang.authlib.minecraft.MinecraftSessionService
+import dev.jukz.compat.GuiGraphics
 import dev.jukz.core.model.GameVersion
 import net.minecraft.SharedConstants
 import net.minecraft.client.Minecraft
@@ -18,7 +19,9 @@ import net.minecraft.client.User
 
 /** A short system toast (top right) with [title] and [body]. */
 fun Minecraft.toast(title: Component, body: Component) =
-    //? if >=1.21.11 {
+    //? if >=26.2 {
+    /*SystemToast.addOrUpdate(gui.toastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION, title, body)
+    *///?} else if >=1.21.11 {
     /*SystemToast.addOrUpdate(toastManager, SystemToast.SystemToastId.PERIODIC_NOTIFICATION, title, body)
     *///?} else {
     SystemToast.addOrUpdate(toasts, SystemToast.SystemToastId.PERIODIC_NOTIFICATION, title, body)
@@ -85,4 +88,31 @@ fun Minecraft.closeLevel() = level?.disconnect()
 val currentGame: GameVersion by lazy {
     SharedConstants.getCurrentVersion().let { GameVersion(it.name, it.dataVersion.version) }
 }
+//?}
+
+/** Show [screen] (null closes the current one). 26.x moved the screen to `minecraft.gui`. */
+//? if >=26.2 {
+/*fun Minecraft.openScreen(screen: Screen?) = gui.setScreen(screen)
+val Minecraft.currentScreen: Screen? get() = gui.screen()
+val Minecraft.hasOverlay: Boolean get() = gui.overlay() != null
+*///?} else {
+fun Minecraft.openScreen(screen: Screen?) = setScreen(screen)
+val Minecraft.currentScreen: Screen? get() = screen
+val Minecraft.hasOverlay: Boolean get() = overlay != null
+//?}
+
+/** Draw [text] at ([x], [y]) with a shadow. */
+//? if >=26.2 {
+/*fun GuiGraphics.jukzText(font: net.minecraft.client.gui.Font, text: String, x: Int, y: Int, color: Int) = text(font, text, x, y, color)
+*///?} else {
+fun GuiGraphics.jukzText(font: net.minecraft.client.gui.Font, text: String, x: Int, y: Int, color: Int) { drawString(font, text, x, y, color) }
+//?}
+
+/** The widgets (buttons) of [screen], to add jukz's own next to vanilla's. */
+//? if >=26.2 {
+/*fun screenWidgets(screen: Screen): MutableList<net.minecraft.client.gui.components.AbstractWidget> =
+    net.fabricmc.fabric.api.client.screen.v1.Screens.getWidgets(screen)
+*///?} else {
+fun screenWidgets(screen: Screen): MutableList<net.minecraft.client.gui.components.AbstractWidget> =
+    net.fabricmc.fabric.api.client.screen.v1.Screens.getButtons(screen)
 //?}

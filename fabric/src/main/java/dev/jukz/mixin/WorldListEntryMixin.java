@@ -2,7 +2,9 @@ package dev.jukz.mixin;
 
 import dev.jukz.client.gui.WorldListLiveBadge;
 import net.minecraft.client.Minecraft;
+//? if <26.2 {
 import net.minecraft.client.gui.GuiGraphics;
+//?}
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.worldselection.WorldSelectionList;
 import net.minecraft.world.level.storage.LevelSummary;
@@ -27,7 +29,14 @@ public abstract class WorldListEntryMixin {
 
     // require = 0: the badge is cosmetic, so a mapping/signature drift degrades (no badge) rather than
     // crashing the world list. Validated in-game.
-    //? if >=1.21.11 {
+    //? if >=26.2 {
+    /*@Inject(method = "extractContent", at = @At("TAIL"), require = 0)
+    private void jukz$liveBadge(net.minecraft.client.gui.GuiGraphicsExtractor context, int mouseX, int mouseY, boolean hovered, float tickDelta, CallbackInfo ci) {
+        net.minecraft.client.gui.layouts.LayoutElement row = (net.minecraft.client.gui.layouts.LayoutElement) (Object) this;
+        WorldListLiveBadge.INSTANCE.render(
+            context, Minecraft.getInstance().font, this.summary.getLevelId(), row.getX(), row.getY(), row.getWidth());
+    }
+    *///?} else if >=1.21.11 {
     /*@Inject(method = "renderContent", at = @At("TAIL"), require = 0)
     private void jukz$liveBadge(GuiGraphics context, int mouseX, int mouseY, boolean hovered, float tickDelta, CallbackInfo ci) {
         net.minecraft.client.gui.layouts.LayoutElement row = (net.minecraft.client.gui.layouts.LayoutElement) (Object) this;
@@ -35,7 +44,9 @@ public abstract class WorldListEntryMixin {
             context, Minecraft.getInstance().font, this.summary.getLevelId(), row.getX(), row.getY(), row.getWidth());
     }
 
-    @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true, require = 0)
+    *///?}
+    //? if >=1.21.11 {
+    /*@Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true, require = 0)
     private void jukz$badgeClick(net.minecraft.client.input.MouseButtonEvent click, boolean doubled, CallbackInfoReturnable<Boolean> cir) {
         double mouseX = click.x();
         double mouseY = click.y();
@@ -52,7 +63,11 @@ public abstract class WorldListEntryMixin {
     //?}
         // Clicking a row selects it; remember it so the world-list "Copy jukz code" button can act on it.
         WorldListLiveBadge.INSTANCE.noteSelected(this.summary.getLevelId());
+        //? if >=26.2 {
+        /*Screen current = Minecraft.getInstance().gui.screen();
+        *///?} else {
         Screen current = Minecraft.getInstance().screen;
+        //?}
         if (WorldListLiveBadge.INSTANCE.handleClick(this.summary.getLevelId(), mouseX, mouseY, current)) {
             cir.setReturnValue(true);
         }

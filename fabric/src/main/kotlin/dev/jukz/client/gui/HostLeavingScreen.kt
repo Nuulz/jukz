@@ -1,5 +1,6 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.openScreen
 import dev.jukz.client.GuestSession
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.TitleScreen
@@ -20,7 +21,7 @@ class HostLeavingScreen : JukzStatusScreen(
     override fun buttons() = listOf(
         StatusButton("Cancel") {
             GuestSession.leave()
-            Minecraft.getInstance().setScreen(TitleScreen())
+            Minecraft.getInstance().openScreen(TitleScreen())
         },
     )
 }

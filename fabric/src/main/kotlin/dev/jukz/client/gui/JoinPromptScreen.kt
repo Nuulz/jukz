@@ -1,5 +1,6 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.openScreen
 import dev.jukz.compat.FocusSource
 import dev.jukz.client.JoinCoordinator
 import dev.jukz.core.model.WorldId
@@ -25,7 +26,7 @@ class JoinPromptScreen(private val parent: Screen?) : JukzUiScreen("join_prompt"
             onChanged().subscribe { code = it }
         }
         addButton(root, "buttons", Component.literal("Join")) { join(root) }
-        addButton(root, "buttons", Component.literal("Back")) { minecraft?.setScreen(parent) }
+        addButton(root, "buttons", Component.literal("Back")) { minecraft?.openScreen(parent) }
     }
 
     override fun init() {

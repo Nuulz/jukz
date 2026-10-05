@@ -1,5 +1,6 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.jukzText
 import dev.jukz.client.JoinCoordinator
 import dev.jukz.core.discovery.WorldRecord
 import dev.jukz.core.discovery.WorldRegistry
@@ -9,7 +10,7 @@ import dev.jukz.world.WorldIdSidecar
 import kotlinx.coroutines.runBlocking
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.Font
-import net.minecraft.client.gui.GuiGraphics
+import dev.jukz.compat.GuiGraphics
 import net.minecraft.client.gui.screens.Screen
 import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
@@ -108,7 +109,7 @@ object WorldListLiveBadge {
         val label = record.playerCount.toString()
         val labelX = cxp - font.width(label) / 2
         val labelY = cyp + RADIUS + 2
-        context.drawString(font, label, labelX, labelY, COLOR_LIVE)
+        context.jukzText(font, label, labelX, labelY, COLOR_LIVE)
 
         badgeBounds[worldId] = intArrayOf(cxp - RADIUS, cyp - RADIUS, cxp + RADIUS + 1, labelY + font.lineHeight)
     }

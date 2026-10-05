@@ -1,5 +1,8 @@
 package dev.jukz
 
+import dev.jukz.compat.hasOverlay
+import dev.jukz.compat.currentScreen
+import dev.jukz.compat.openScreen
 import dev.jukz.compat.windowHandle
 import dev.jukz.client.GuestSession
 import dev.jukz.client.HostCoordinator
@@ -16,10 +19,18 @@ import net.minecraft.client.gui.screens.TitleScreen
 import dev.jukz.client.gui.HostInfoScreen
 import dev.jukz.cosmetics.Cosmetics
 import dev.jukz.cosmetics.CosmeticsFeatureRenderer
+//? if >=26.2 {
+/*import net.fabricmc.fabric.api.client.rendering.v1.LivingEntityRenderLayerRegistrationCallback
+*///?} else {
 import net.fabricmc.fabric.api.client.rendering.v1.LivingEntityFeatureRendererRegistrationCallback
+//?}
 //? if >=1.21.11 {
 /*import dev.jukz.cosmetics.GuiModelRenderer
+//? if >=26.2 {
+/*import net.fabricmc.fabric.api.client.rendering.v1.PictureInPictureRendererRegistry
+*///?} else {
 import net.fabricmc.fabric.api.client.rendering.v1.SpecialGuiElementRegistry
+//?}
 import net.minecraft.client.model.player.PlayerModel
 import net.minecraft.client.renderer.entity.RenderLayerParent
 import net.minecraft.client.renderer.entity.player.AvatarRenderer
@@ -42,7 +53,7 @@ import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
-import net.fabricmc.fabric.api.client.screen.v1.Screens
+import dev.jukz.compat.screenWidgets
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.DisconnectedScreen
 import net.minecraft.client.gui.screens.PauseScreen
@@ -68,7 +79,11 @@ object JukzClient : ClientModInitializer {
         UiHotReload.install() // dev runs only: owo-ui models are read live from src/
 
         // 3D cosmetics (hats, face and back pieces) on every player model.
+        //? if >=26.2 {
+        /*LivingEntityRenderLayerRegistrationCallback.EVENT.register { _, renderer, helper, _ ->
+        *///?} else {
         LivingEntityFeatureRendererRegistrationCallback.EVENT.register { _, renderer, helper, _ ->
+        //?}
             //? if >=1.21.11 {
             /*@Suppress("UNCHECKED_CAST")
             if (renderer is AvatarRenderer<*>) helper.register(CosmeticsFeatureRenderer(renderer as RenderLayerParent<AvatarRenderState, PlayerModel>))
@@ -78,7 +93,11 @@ object JukzClient : ClientModInitializer {
         }
         //? if >=1.21.11 {
         /*// The player preview's 3D picture (see GuiModelRenderer).
+        //? if >=26.2 {
+        /*PictureInPictureRendererRegistry.register { GuiModelRenderer() }
+        *///?} else {
         SpecialGuiElementRegistry.register { ctx -> GuiModelRenderer(ctx.vertexConsumers()) }
+        //?}
         *///?}
 
         // The host lets us in: keep the world key (to revive it from the cloud later) and the handoff gate.
@@ -91,29 +110,29 @@ object JukzClient : ClientModInitializer {
             when (screen) {
                 is JoinMultiplayerScreen -> {
                     val button = Button.builder(Component.literal("Play together")) {
-                        client.setScreen(JoinPromptScreen(screen))
+                        client.openScreen(JoinPromptScreen(screen))
                     }.bounds(scaledWidth - 160, 6, 150, 20).build()
-                    Screens.getButtons(screen).add(button)
+                    screenWidgets(screen).add(button)
                     val cosmetics = Button.builder(Component.literal("Cosmetics")) {
-                        client.setScreen(CosmeticsScreen(screen))
+                        client.openScreen(CosmeticsScreen(screen))
                     }.bounds(10, 6, 90, 20).build()
-                    Screens.getButtons(screen).add(cosmetics)
+                    screenWidgets(screen).add(cosmetics)
                 }
 
                 is PauseScreen -> {
                     if (client.hasSingleplayerServer()) replaceOpenToLanButton(screen)
                     // Change cosmetics without leaving the world (host or guest): bottom-left corner, clear
                     // of World info (top-left) and of toasts (top-right).
-                    Screens.getButtons(screen).add(IconButton(8, scaledHeight - IconButton.SIZE - 8, UiIcons::jukz, Component.literal("jukz cosmetics")) {
-                        client.setScreen(CosmeticsScreen(screen))
+                    screenWidgets(screen).add(IconButton(8, scaledHeight - IconButton.SIZE - 8, UiIcons::jukz, Component.literal("jukz cosmetics")) {
+                        client.openScreen(CosmeticsScreen(screen))
                     })
                 }
 
                 is SelectWorldScreen -> {
                     addCopyCodeButton(screen, scaledWidth, scaledHeight)
                     // Your account and your worlds on other PCs: top-right, clear of the search box.
-                    Screens.getButtons(screen).add(Button.builder(Component.literal("My account")) {
-                        client.setScreen(AccountScreen(screen))
+                    screenWidgets(screen).add(Button.builder(Component.literal("My account")) {
+                        client.openScreen(AccountScreen(screen))
                     }.bounds(scaledWidth - 84, 4, 80, 20).build())
                 }
 
@@ -125,18 +144,18 @@ object JukzClient : ClientModInitializer {
         // (with Ko-fi), an update gets what's new.
         var versionChecked = false
         ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { client ->
-            val title = client.screen as? TitleScreen ?: return@EndTick
-            if (versionChecked || client.overlay != null) return@EndTick
+            val title = client.currentScreen as? TitleScreen ?: return@EndTick
+            if (versionChecked || client.hasOverlay) return@EndTick
             versionChecked = true
             Cosmetics.ensureSignedIn() // on the menu already: your cloud worlds and cosmetics are ready sooner
             if (!JukzState.versionChanged()) return@EndTick
-            client.setScreen(if (JukzState.firstRun()) SupportScreen(title) else UpdateScreen(title, JukzState.lastVersion()))
+            client.openScreen(if (JukzState.firstRun()) SupportScreen(title) else UpdateScreen(title, JukzState.lastVersion()))
         })
 
         // Worlds from your other PCs (premium accounts): brought over once you're signed in, while you're in
         // the menus — never in the middle of a world.
         ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { client ->
-            if (client.level == null && client.screen is TitleScreen) CloudWorlds.bringNewOnce()
+            if (client.level == null && client.currentScreen is TitleScreen) CloudWorlds.bringNewOnce()
         })
 
         // Every jukz world is permanently shareable: opening it (when nobody else hosts it) puts it
@@ -163,8 +182,8 @@ object JukzClient : ClientModInitializer {
             if (GuestSession.isActive) {
                 GuestSession.markDisconnected()
                 client.execute {
-                    if (GuestSession.recentlyEngaged() && client.screen is DisconnectedScreen) {
-                        client.setScreen(HostLeavingScreen())
+                    if (GuestSession.recentlyEngaged() && client.currentScreen is DisconnectedScreen) {
+                        client.openScreen(HostLeavingScreen())
                     }
                 }
             }
@@ -180,9 +199,9 @@ object JukzClient : ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { client ->
             if (client.level == null &&
                 GhostUpload.pending() != null &&
-                client.screen !is UploadingWorldScreen
+                client.currentScreen !is UploadingWorldScreen
             ) {
-                client.setScreen(UploadingWorldScreen())
+                client.openScreen(UploadingWorldScreen())
             }
         })
 
@@ -196,7 +215,7 @@ object JukzClient : ClientModInitializer {
             val handle = client.windowHandle
             var previous: GLFWWindowCloseCallback? = null
             previous = GLFW.glfwSetWindowCloseCallback(handle, GLFWWindowCloseCallbackI { window ->
-                val screen = client.screen
+                val screen = client.currentScreen
                 if (screen is UploadingWorldScreen && screen.isUploading()) {
                     GLFW.glfwSetWindowShouldClose(window, false) // veto
                     JukzMod.logger.info("jukz: window close vetoed — world still uploading")
@@ -218,12 +237,17 @@ object JukzClient : ClientModInitializer {
      * both sides resolve through the same Language, so it is locale-independent.
      */
     private fun replaceOpenToLanButton(screen: PauseScreen) {
-        val buttons = Screens.getButtons(screen)
+        val buttons = screenWidgets(screen)
+        //? if >=26.2 {
+        /*// 26.x: "Multiplayer options" (shown as Open to LAN), which could switch the sharing jukz relies on off.
+        val lanLabel = Component.translatable("menu.multiplayerOptions.button").string
+        *///?} else {
         val lanLabel = Component.translatable("menu.shareToLan").string
+        //?}
         val lan = buttons.firstOrNull { it.message.string == lanLabel }
 
         val info = Button.builder(Component.literal("World info (jukz)")) {
-            Minecraft.getInstance().setScreen(HostInfoScreen(screen))
+            Minecraft.getInstance().openScreen(HostInfoScreen(screen))
         }
         if (lan != null) {
             lan.visible = false
@@ -254,7 +278,7 @@ object JukzClient : ClientModInitializer {
                 else -> Component.literal("Click a world first")
             }
         }.bounds(4, copyButtonY(scaledWidth, scaledHeight), COPY_BUTTON_WIDTH, 20).build()
-        Screens.getButtons(screen).add(button)
+        screenWidgets(screen).add(button)
     }
 
     private const val COPY_BUTTON_WIDTH = 110
@@ -265,17 +289,17 @@ object JukzClient : ClientModInitializer {
      * Options button, found by its label.
      */
     private fun addTitleButtons(screen: TitleScreen) {
-        val buttons = Screens.getButtons(screen)
+        val buttons = screenWidgets(screen)
         val optionsLabel = Component.translatable("menu.options").string
         val options = buttons.firstOrNull { it.message.string == optionsLabel } ?: return
         val y = options.y
         val left = options.x - 24 - 24 // past vanilla's language button
         val right = options.x + 200 + 4 + 24 // past vanilla's accessibility button
         buttons.add(IconButton(left - 24, y, { UiIcons.ACCOUNT }, Component.literal("Your jukz account")) {
-            Minecraft.getInstance().setScreen(AccountScreen(screen))
+            Minecraft.getInstance().openScreen(AccountScreen(screen))
         })
         buttons.add(IconButton(left, y, UiIcons::jukz, Component.literal("jukz cosmetics")) {
-            Minecraft.getInstance().setScreen(CosmeticsScreen(screen))
+            Minecraft.getInstance().openScreen(CosmeticsScreen(screen))
         })
         buttons.add(IconButton(right, y, { UiIcons.KOFI }, Component.literal("Support jukz on Ko-fi")) {
             ConfirmLinkScreen.confirmLinkNow(screen, CosmeticsScreen.KOFI_URL)

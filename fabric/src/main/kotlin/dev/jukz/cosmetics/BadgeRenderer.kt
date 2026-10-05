@@ -1,6 +1,6 @@
 package dev.jukz.cosmetics
 
-import net.minecraft.client.gui.GuiGraphics
+import dev.jukz.compat.GuiGraphics
 
 /**
  * Draws a badge's ASCII art as a [px]-sized square at ([x], [y]), in GUI pixels; [opacity] < 1 fades it

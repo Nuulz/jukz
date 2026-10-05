@@ -1,5 +1,6 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.openScreen
 import dev.jukz.core.model.VersionFit
 import dev.jukz.core.model.GameVersion
 import dev.jukz.compat.currentGame
@@ -70,7 +71,7 @@ class AccountScreen(private val parent: Screen?) : JukzUiScreen("account") {
         if (account is Cosmetics.Account.Failed) {
             addButton(root, "buttons", Component.literal("Try again"), width = 70) { Cosmetics.ensureSignedIn(force = true); rebuild() }
         }
-        addButton(root, "buttons", Component.literal("Cosmetics"), width = 70) { minecraft?.setScreen(CosmeticsScreen(this)) }
+        addButton(root, "buttons", Component.literal("Cosmetics"), width = 70) { minecraft?.openScreen(CosmeticsScreen(this)) }
         addButton(root, "buttons", Component.literal("Website"), width = 64) {
             Cosmetics.accountPageUrl { url -> minecraft?.execute { ConfirmLinkScreen.confirmLinkNow(this, url, true) } }
         }.tooltip(Component.literal("nuulm.com/jukz/cuenta: your password, the plans, and \"delete my data\""))
@@ -190,7 +191,7 @@ class AccountScreen(private val parent: Screen?) : JukzUiScreen("account") {
 
     /** Back to a fresh world list, so worlds brought meanwhile show up in it. */
     override fun onClose() {
-        minecraft?.setScreen(if (parent is SelectWorldScreen) SelectWorldScreen(TitleScreen()) else parent)
+        minecraft?.openScreen(if (parent is SelectWorldScreen) SelectWorldScreen(TitleScreen()) else parent)
     }
 
     companion object {

@@ -5,6 +5,12 @@
 
 package dev.jukz.compat
 
+//? if >=26.2 {
+/*typealias GuiGraphics = net.minecraft.client.gui.GuiGraphicsExtractor
+*///?} else {
+typealias GuiGraphics = net.minecraft.client.gui.GuiGraphics
+//?}
+
 //? if >=1.21.11 {
 /*typealias Identifier = net.minecraft.resources.Identifier
 typealias UIComponent = io.wispforest.owo.ui.core.UIComponent

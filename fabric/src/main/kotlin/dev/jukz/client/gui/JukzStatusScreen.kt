@@ -1,7 +1,7 @@
 package dev.jukz.client.gui
 
 import io.wispforest.owo.ui.container.FlowLayout
-import net.minecraft.client.gui.GuiGraphics
+import dev.jukz.compat.GuiGraphics
 import net.minecraft.network.chat.Component
 
 /**
@@ -38,10 +38,17 @@ abstract class JukzStatusScreen(
         buttons.forEach { addButton(root, "buttons", Component.literal(it.text), it.width, it.onPress) }
     }
 
+    //? if >=26.2 {
+    /*override fun extractRenderState(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
+        bar?.indeterminate(accentColor) // before drawing, so this frame shows the new position
+        super.extractRenderState(context, mouseX, mouseY, delta)
+    }
+    *///?} else {
     override fun render(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
         bar?.indeterminate(accentColor) // before drawing, so this frame shows the new position
         super.render(context, mouseX, mouseY, delta)
     }
+    //?}
 
     override fun shouldCloseOnEsc(): Boolean = false
 }

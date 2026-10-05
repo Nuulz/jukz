@@ -1,7 +1,7 @@
 package dev.jukz.cosmetics
 
 import net.minecraft.client.gui.Font
-import net.minecraft.client.gui.GuiGraphics
+import dev.jukz.compat.GuiGraphics
 import net.minecraft.network.chat.FormattedText
 import net.minecraft.network.chat.Style
 import net.minecraft.network.chat.Component

@@ -1,5 +1,6 @@
 package dev.jukz.client
 
+import dev.jukz.compat.openScreen
 import dev.jukz.core.join.JoinConfig
 import dev.jukz.client.gui.VersionScreen
 import dev.jukz.core.model.VersionFit
@@ -86,10 +87,10 @@ object JoinCoordinator {
         val onCancel = {
             cancelled.set(true)
             controller.close()
-            client.execute { client.setScreen(parent) }
+            client.execute { client.openScreen(parent) }
         }
 
-        client.setScreen(SearchingHostScreen(shortCode, onCancel))
+        client.openScreen(SearchingHostScreen(shortCode, onCancel))
 
         Thread {
             val result = try {
@@ -121,19 +122,19 @@ object JoinCoordinator {
                         client.execute {
                             when (VersionFit.of(currentGame, head.game)) {
                                 VersionFit.SAME -> showGhostTakeover(client, worldId, shortCode, parent, ghost, head.commit)
-                                VersionFit.UPGRADE -> client.setScreen(VersionScreen.upgrade(saved, { client.setScreen(parent) }) {
+                                VersionFit.UPGRADE -> client.openScreen(VersionScreen.upgrade(saved, { client.openScreen(parent) }) {
                                     showGhostTakeover(client, worldId, shortCode, parent, ghost, head.commit)
                                 })
-                                VersionFit.TOO_NEW -> client.setScreen(VersionScreen.tooNew(saved) { client.setScreen(parent) })
+                                VersionFit.TOO_NEW -> client.openScreen(VersionScreen.tooNew(saved) { client.openScreen(parent) })
                             }
                         }
                     } else {
                         JukzMod.logger.info("jukz: cloud ghost for {} is not newer than the local copy — keeping local", shortCode)
                         client.execute {
-                            client.setScreen(
+                            client.openScreen(
                                 ShouldHostScreen(
                                     "No live host was found for $shortCode.",
-                                    onBack = { client.setScreen(parent) },
+                                    onBack = { client.openScreen(parent) },
                                 ),
                             )
                         }
@@ -165,10 +166,10 @@ object JoinCoordinator {
             is JoinResult.Connected ->
                 JukzMod.logger.info("jukz: joined host at {}:{}", result.host, result.port)
             JoinResult.HostUnavailable ->
-                client.setScreen(
+                client.openScreen(
                     ShouldHostScreen(
                         "No live host was found for $shortCode.",
-                        onBack = { client.setScreen(parent) },
+                        onBack = { client.openScreen(parent) },
                     ),
                 )
             // The host we tried to join was already a ghost: offer the takeover with whatever it left.
@@ -176,13 +177,13 @@ object JoinCoordinator {
             is JoinResult.ShouldHost ->
                 showHandoff(client, worldId, shortCode, parent, result.record?.snapshot, target = null, generation = result.record?.hostGeneration ?: 0L, dialer = DirectChannelDialer(), intent = TakeoverIntent.GHOST)
             is JoinResult.WrongVersion ->
-                client.setScreen(VersionScreen.hostOnOtherVersion(result.host) { client.setScreen(parent) })
+                client.openScreen(VersionScreen.hostOnOtherVersion(result.host) { client.openScreen(parent) })
             is JoinResult.Failed ->
-                client.setScreen(
+                client.openScreen(
                     NatErrorScreen(
                         result.reason,
                         onRetry = { start(worldId, shortCode, parent) },
-                        onHostLocally = { client.setScreen(parent) },
+                        onHostLocally = { client.openScreen(parent) },
                     ),
                 )
         }
@@ -226,8 +227,8 @@ object JoinCoordinator {
         if (!engaged) return
         JukzMod.logger.info("jukz: host of {} closed access — not offering handoff", shortCode)
         client.execute {
-            val screen = AccessClosedScreen { client.setScreen(TitleScreen()) }
-            if (client.level != null) client.leaveWorld(screen) else client.setScreen(screen)
+            val screen = AccessClosedScreen { client.openScreen(TitleScreen()) }
+            if (client.level != null) client.leaveWorld(screen) else client.openScreen(screen)
         }
     }
 
@@ -252,12 +253,12 @@ object JoinCoordinator {
                 onHostNow = { beginTakeover(client, worldId, shortCode, parent, prefetch, intent) },
                 // Declining still pulled the host's pack (the host counted it as a completed handoff and
                 // left WITHOUT a cloud backup), so back it up to the cloud rather than drop the only copy.
-                onBack = { GuestSession.leave(); backupDeclinedSnapshot(worldId, generation, prefetch); client.setScreen(parent) },
+                onBack = { GuestSession.leave(); backupDeclinedSnapshot(worldId, generation, prefetch); client.openScreen(parent) },
             )
             // If we are still in the host's world (a live handoff), leave it cleanly WITH this prompt
             // as the screen, so the vanilla "Connection lost" never flashes. For a ghost takeover (we
             // were never connected to a world), just show it.
-            if (client.level != null) client.leaveWorld(screen) else client.setScreen(screen)
+            if (client.level != null) client.leaveWorld(screen) else client.openScreen(screen)
         }
     }
 
@@ -294,9 +295,9 @@ object JoinCoordinator {
         val screen = HostHandoffScreen(
             snapshotApplied = true,
             onHostNow = { beginTakeover(client, worldId, shortCode, parent, prefetch, intent = TakeoverIntent.GHOST) },
-            onBack = { discardPrefetch(prefetch); client.setScreen(parent) },
+            onBack = { discardPrefetch(prefetch); client.openScreen(parent) },
         )
-        client.setScreen(screen)
+        client.openScreen(screen)
     }
 
     /**
@@ -439,7 +440,7 @@ object JoinCoordinator {
         intent: TakeoverIntent,
     ) {
         GuestSession.leave() // the old guest session is done; we are about to become the host
-        client.setScreen(SearchingHostScreen(shortCode) {}) // "preparing" spinner; no cancel mid-takeover
+        client.openScreen(SearchingHostScreen(shortCode) {}) // "preparing" spinner; no cancel mid-takeover
         Thread {
             val savesDir = client.levelSource.baseDir
             val existing = WorldSaveLocator.findLevelName(savesDir, worldId.uuid)
@@ -454,10 +455,10 @@ object JoinCoordinator {
             if (existing == null && !applied) {
                 JukzMod.logger.warn("jukz: no local copy of {} and no snapshot to pull; cannot take over", shortCode)
                 client.execute {
-                    client.setScreen(
+                    client.openScreen(
                         ShouldHostScreen(
                             "Couldn't get a copy of $shortCode to host.",
-                            onBack = { client.setScreen(parent) },
+                            onBack = { client.openScreen(parent) },
                         ),
                     )
                 }

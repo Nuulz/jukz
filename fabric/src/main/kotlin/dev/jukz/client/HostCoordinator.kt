@@ -1,5 +1,6 @@
 package dev.jukz.client
 
+import dev.jukz.compat.openScreen
 import dev.jukz.core.host.HostConfig
 import dev.jukz.compat.currentGame
 import dev.jukz.compat.leaveWorld
@@ -211,10 +212,10 @@ object HostCoordinator {
         val client = Minecraft.getInstance()
         val shortCode = current.worldId.shortCode()
         client.execute {
-            client.setScreen(
+            client.openScreen(
                 SupersededScreen(
                     shortCode,
-                    onKeepPlaying = { client.setScreen(null) },
+                    onKeepPlaying = { client.openScreen(null) },
                     onJoinInstead = { leaveAndJoin(client, current.worldId, shortCode) },
                 ),
             )

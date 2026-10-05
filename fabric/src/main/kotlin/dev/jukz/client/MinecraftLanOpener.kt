@@ -43,7 +43,11 @@ class MinecraftLanOpener(
         if (client.player == null) return null
         val gameMode = client.gameMode?.playerMode ?: GameType.SURVIVAL
         val port = ServerSocket(0).use { it.localPort }
+        //? if >=26.2 {
+        /*if (!server.publishServer(net.minecraft.server.MinecraftServer.MultiplayerScope.LAN, gameMode, allowCheats, port)) return null
+        *///?} else {
         if (!server.publishServer(gameMode, allowCheats, port)) return null
+        //?}
         // Guests are verified by Mojang like on any server (the jukz relay only moves bytes), unless the
         // host has no real account (dev runs, offline launchers) or opted into offline guests. See
         // GuestAdmission for why offline mode used to be a hole.

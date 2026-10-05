@@ -1,5 +1,6 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.openScreen
 import dev.jukz.client.HostCoordinator
 import dev.jukz.core.host.HostStatus
 import dev.jukz.core.model.ClaimToken
@@ -65,7 +66,7 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
             record?.let { minecraft?.keyboardHandler?.clipboard = it.worldId.shortCode() }
         }
         addButton(root, "buttons", Component.literal("Refresh"), width = 100) { refresh() }
-        addButton(root, "buttons", Component.literal("Done"), width = 100) { minecraft?.setScreen(parent) }
+        addButton(root, "buttons", Component.literal("Done"), width = 100) { minecraft?.openScreen(parent) }
 
         // Self-heal: every jukz world is auto-hosted on open, but if that hasn't taken (or failed),
         // kick it off now so opening this panel always ends with the world online.

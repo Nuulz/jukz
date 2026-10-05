@@ -45,10 +45,12 @@ object WorldIdSidecar {
      */
     fun generation(saveRoot: Path): Long? {
         val sidecar = runCatching { read(saveRoot)?.generation }.getOrNull()
-        val inWorld = runCatching {
-            NbtIo.readCompressed(saveRoot.resolve("data").resolve("jukz_world_id.dat"), net.minecraft.nbt.NbtAccounter.unlimitedHeap())
-                .compound("data").long("generation")
-        }.getOrNull()
+        val inWorld = WorldIdState.FILES.firstNotNullOfOrNull { file ->
+            runCatching {
+                NbtIo.readCompressed(saveRoot.resolve(file), net.minecraft.nbt.NbtAccounter.unlimitedHeap())
+                    .compound("data").long("generation")
+            }.getOrNull()
+        }
         return listOfNotNull(sidecar, inWorld).maxOrNull()
     }
 

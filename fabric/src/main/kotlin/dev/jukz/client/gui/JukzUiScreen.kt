@@ -15,7 +15,7 @@ import io.wispforest.owo.ui.core.Positioning
 import io.wispforest.owo.ui.core.Sizing
 import io.wispforest.owo.ui.parsing.UIModel
 import io.wispforest.owo.ui.parsing.UIModelLoader
-import net.minecraft.client.gui.GuiGraphics
+import dev.jukz.compat.GuiGraphics
 import net.minecraft.network.chat.Component
 import dev.jukz.compat.Identifier
 import java.nio.file.Files
@@ -90,6 +90,13 @@ abstract class JukzUiScreen(modelName: String) :
      * Vanilla's own backdrop — the menu panorama, or the blurred world in-game — behind the panel.
      * owo's base screen turns it off in favour of component surfaces; jukz keeps the familiar look.
      */
+    //? if >=26.2 {
+    /*override fun extractBackground(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
+        if (minecraft?.level == null) extractPanorama(context, delta)
+        extractBlurredBackground(context)
+        extractMenuBackground(context)
+    }
+    *///?} else {
     override fun renderBackground(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
         if (minecraft?.level == null) renderPanorama(context, delta)
         //? if >=1.21.11 {
@@ -99,6 +106,7 @@ abstract class JukzUiScreen(modelName: String) :
         //?}
         renderMenuBackground(context)
     }
+    //?}
 
     // ---- shared building blocks (all from theme.xml) ---------------------------------------------
 

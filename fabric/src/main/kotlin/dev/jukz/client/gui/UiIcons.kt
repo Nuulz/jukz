@@ -3,7 +3,7 @@ package dev.jukz.client.gui
 import dev.jukz.cosmetics.BadgeRenderer
 import dev.jukz.cosmetics.CosmeticCatalog
 import dev.jukz.cosmetics.Cosmetics
-import net.minecraft.client.gui.GuiGraphics
+import dev.jukz.compat.GuiGraphics
 import net.minecraft.client.gui.components.Tooltip
 import net.minecraft.client.gui.components.Button
 import net.minecraft.network.chat.Component
@@ -87,7 +87,12 @@ class IconButton(
         message = tooltip // narration reads it; the text itself isn't drawn (see renderWidget)
     }
 
-    //? if >=1.21.11 {
+    //? if >=26.2 {
+    /*override fun extractContents(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
+        extractDefaultSprite(context) // the vanilla button frame, without its label
+        icon()?.let { BadgeRenderer.draw(context, it, x + 2, y + 2, SIZE - 4) }
+    }
+    *///?} else if >=1.21.11 {
     /*override fun renderContents(context: GuiGraphics, mouseX: Int, mouseY: Int, delta: Float) {
         renderDefaultSprite(context) // the vanilla button frame, without its label
         icon()?.let { BadgeRenderer.draw(context, it, x + 2, y + 2, SIZE - 4) }

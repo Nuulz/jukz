@@ -1,5 +1,6 @@
 package dev.jukz.client.gui
 
+import dev.jukz.compat.openScreen
 import dev.jukz.config.Changelog
 import dev.jukz.config.JukzState
 import io.wispforest.owo.ui.component.LabelComponent
@@ -41,13 +42,13 @@ class UpdateScreen(private val parent: Screen?, private val previous: String?) :
             ConfirmLinkScreen.confirmLinkNow(this, "$RELEASES/tag/v$version")
         }
         addButton(root, "buttons", Component.literal("Ko-fi"), width = 60) { ConfirmLinkScreen.confirmLinkNow(this, CosmeticsScreen.KOFI_URL) }
-        addButton(root, "buttons", Component.literal("Continue"), width = 100) { minecraft?.setScreen(parent) }
+        addButton(root, "buttons", Component.literal("Continue"), width = 100) { minecraft?.openScreen(parent) }
     }
 
     override fun shouldCloseOnEsc(): Boolean = true
 
     override fun onClose() {
-        minecraft?.setScreen(parent)
+        minecraft?.openScreen(parent)
     }
 
     companion object {
