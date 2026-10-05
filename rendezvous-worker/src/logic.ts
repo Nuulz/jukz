@@ -178,11 +178,21 @@ export function shouldWithdraw(existing: Entry | undefined, token: Token, now: n
 }
 
 /**
- * Snapshot upload fence: reject only a STRICTLY older generation. Equal is allowed so a host can retry
- * its own upload after a transient failure (see rendezvous/src/snapshot.rs).
+ * Snapshot upload fence, keyed by (generation, commit). A strictly older generation is rejected. An equal
+ * generation is allowed only from the same commit (a host retrying its own upload after a transient
+ * failure): a split-brain leaves two forks sharing a generation on different commits, and the loser must
+ * not overwrite the canonical copy. An empty commit (older client, or none recorded) degrades to the
+ * generation-only check.
  */
-export function fenceAllows(current: number | undefined, generation: number): boolean {
-  return current === undefined || generation >= current;
+export function fenceAllows(
+  current: number | undefined,
+  generation: number,
+  currentCommit = "",
+  commit = "",
+): boolean {
+  if (current === undefined || generation > current) return true;
+  if (generation < current) return false;
+  return !currentCommit || !commit || currentCommit === commit;
 }
 
 /** jukz ConnectionType discriminators (CONTROL / DATA / SNAPSHOT): the only first bytes the relay carries. */

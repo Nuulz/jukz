@@ -213,16 +213,19 @@ export class RendezvousHub extends DurableObject<Env> {
     return new Response(null, { status: 204 });
   }
 
-  /** Snapshot upload fence (per world, durable): 200 when this generation may upload, 409 when stale. */
+  /** Snapshot upload fence (per world, durable): 200 when this (generation, commit) may upload, 409 when stale. */
   private async fence(request: Request): Promise<Response> {
     const w = await this.ownedWrite(request, "snapshot-upload");
     if ("refusal" in w) return w.refusal;
     const { body, worldId } = w;
     const generation = Number(body.generation);
     if (!Number.isSafeInteger(generation)) throw new BadRequest("generation must be an integer");
+    const commit = typeof body.commit === "string" ? body.commit : "";
     const current = await this.ctx.storage.get<number>(`f:${worldId}`);
-    if (!fenceAllows(current, generation)) return json(409, { status: "stale" });
+    const currentCommit = (await this.ctx.storage.get<string>(`fc:${worldId}`)) ?? "";
+    if (!fenceAllows(current, generation, currentCommit, commit)) return json(409, { status: "stale" });
     await this.ctx.storage.put(`f:${worldId}`, generation);
+    await this.ctx.storage.put(`fc:${worldId}`, commit);
     await w.commit();
     return json(200, { status: "ok" });
   }

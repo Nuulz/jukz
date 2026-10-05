@@ -90,6 +90,12 @@ test("snapshot fence rejects only strictly older generations", () => {
   assert.equal(fenceAllows(5, 5), true); // a host retrying its own upload
   assert.equal(fenceAllows(5, 6), true);
   assert.equal(fenceAllows(5, 4), false);
+  // split-brain: same generation, different commit → the losing fork may not overwrite
+  assert.equal(fenceAllows(5, 5, "aaa", "bbb"), false);
+  assert.equal(fenceAllows(5, 5, "aaa", "aaa"), true); // same-commit retry
+  assert.equal(fenceAllows(5, 5, "", "bbb"), true); // nothing recorded yet
+  assert.equal(fenceAllows(5, 5, "aaa", ""), true); // older client: generation-only
+  assert.equal(fenceAllows(5, 6, "aaa", "bbb"), true);
 });
 
 test("rate limiter allows N per minute per ip, then resets", () => {

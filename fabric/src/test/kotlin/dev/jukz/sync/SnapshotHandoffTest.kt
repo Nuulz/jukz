@@ -281,6 +281,7 @@ class SnapshotHandoffTest {
         WorldIdSidecar.write(dir, WorldIdSidecar.Info(worldId.uuid, 41)) // a deliberately stale sidecar
         GhostUpload.clear()
         try {
+            HostSession.onServerStarting() // clean per-world state (this close is not a superseded fork)
             GhostUpload.markArmed() // JukzMod armed it; no controller was ever installed
             HostSession.onServerStopping(dir, worldId, 42L) {}
 

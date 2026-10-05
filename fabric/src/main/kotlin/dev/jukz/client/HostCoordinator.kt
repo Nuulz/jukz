@@ -176,6 +176,7 @@ object HostCoordinator {
             is HostResult.Hosting ->
                 JukzMod.logger.info("jukz: auto-hosting {} on port {}", result.shortCode, result.port)
             is HostResult.Superseded -> {
+                HostSession.markSupersededFork() // our open lost the election — don't back this fork up
                 JukzMod.logger.info("jukz: another host already owns this world — asking the player")
                 promptSuperseded(result.current)
             }

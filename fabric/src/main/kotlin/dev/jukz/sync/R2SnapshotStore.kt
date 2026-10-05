@@ -69,7 +69,7 @@ object R2SnapshotStore {
         return runCatching {
             // Signing is inside the catch too: a rendezvous blip (connection refused) must fail this
             // attempt so the caller retries, not kill the upload thread mid-"retrying" screen.
-            val urls = signUpload(base, worldId, generation, pack.size) ?: return UploadResult.Retry
+            val urls = signUpload(base, worldId, generation, head, pack.size) ?: return UploadResult.Retry
             putBytes(urls.packUrl, pack, onProgress)
             // The head object carries the fencing generation alongside the commit id ("<gen> <commit>"),
             // so a direct-open can compare it to the local copy without downloading the whole pack.
@@ -173,9 +173,10 @@ object R2SnapshotStore {
 
     // ---- helpers -------------------------------------------------------------------------
 
-    private fun signUpload(base: String, worldId: WorldId, generation: Long, size: Int): GhostUrls? {
-        // The size lets the rendezvous refuse a backup over the limit before any byte is sent.
-        val body = """{"worldId":"${worldId.uuid}","generation":$generation,"size":$size}"""
+    private fun signUpload(base: String, worldId: WorldId, generation: Long, commit: String, size: Int): GhostUrls? {
+        // The size lets the rendezvous refuse a backup over the limit before any byte is sent; the commit
+        // lets it refuse a same-generation fork from overwriting the canonical copy (split-brain fence).
+        val body = """{"worldId":"${worldId.uuid}","generation":$generation,"commit":"$commit","size":$size}"""
         val builder = signed(URI.create("$base/v1/snapshot/upload-url"))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body))

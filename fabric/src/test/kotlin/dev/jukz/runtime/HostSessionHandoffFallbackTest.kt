@@ -107,4 +107,25 @@ class HostSessionHandoffFallbackTest {
             GhostUpload.clear()
         }
     }
+
+    @Test
+    fun `a superseded fork is not backed up to the cloud on close`() {
+        // A host that lost the lease (or whose open lost the announce) holds a divergent fork, not the
+        // canonical world. Backing it up would re-pollute R2 with a stale sibling — the 2026-06-13
+        // split-brain. So even an otherwise-eligible (armed) close must skip the upload once superseded.
+        val dir = worldDir(generation = 45)
+        GhostUpload.clear()
+        try {
+            HostSession.onServerStarting() // clean per-world state
+            GhostUpload.markArmed() // the world is otherwise eligible for a cloud backup
+            HostSession.markSupersededFork() // ...but we lost the host election — our copy is a fork
+
+            HostSession.onServerStopping(dir, world, 45L) {}
+
+            assertNull(GhostUpload.pending(), "a superseded fork must not re-pollute the cloud")
+        } finally {
+            GhostUpload.clear()
+            HostSession.onServerStarting() // reset the singleton flag for other tests
+        }
+    }
 }

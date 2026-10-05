@@ -35,6 +35,12 @@ object HostSession {
     @Volatile
     private var serverStopped = false
 
+    // True once the open world is a superseded fork: we lost the host election (heartbeat CAS failed, or
+    // our announce was rejected at open). That copy is a divergent sibling, not the canonical world, so it
+    // must never be handed off or backed up to the cloud (the seed of the 2026-06-13 split-brain).
+    @Volatile
+    private var supersededFork = false
+
     val isHosting: Boolean get() = controller != null
 
     /** Guests connected over a live control channel right now (0 when not hosting). */
@@ -62,6 +68,7 @@ object HostSession {
     /** Reset the stopped flag at the start of each new world so the next announce can install. */
     fun onServerStarting() {
         serverStopped = false
+        supersededFork = false
     }
 
     /**
@@ -103,12 +110,18 @@ object HostSession {
      * (the seed of the 2026-06-13 incident). Safe to call when not hosting. The caller (HostCoordinator)
      * then offers the player the live winner via [dev.jukz.client.HostCoordinator] supersession prompt.
      */
+    /** Mark the open world as a losing fork so its close never backs it up. Cleared by [onServerStarting]. */
+    fun markSupersededFork() {
+        supersededFork = true
+    }
+
     fun stopHostingSuperseded() {
         val c = controller ?: return
         runCatching { c.close() } // withdraw (CAS on our own token) + stop heartbeat + close the server
         runCatching { onWithdraw() } // tear down any relay control link
         controller = null
         onWithdraw = {}
+        markSupersededFork() // our copy is a losing fork — block any cloud backup on the world's close
         JukzMod.logger.info("jukz: stopped hosting — superseded by a newer host")
     }
 
@@ -126,7 +139,7 @@ object HostSession {
         flushSave: () -> Unit = {},
     ) {
         val c = controller
-        if (saveDir != null) {
+        if (saveDir != null && !supersededFork) {
             if (c != null && c.connectedGuestCount() > 0) {
                 runCatching { flushSave() } // force the world to disk first so the snapshot is current
                 val handedOff = runCatching { offerSnapshotForHandoff(c, saveDir) }.getOrDefault(false)
