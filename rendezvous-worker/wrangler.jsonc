@@ -37,7 +37,7 @@
     "GUARD_IP_PER_MIN": "60",
     "GUARD_REGISTRATIONS_PER_HOUR": "10",
     "GUARD_POW_BITS": "22",
-    "GUARD_REQUIRE_DEVICE": "false"
+    "GUARD_REQUIRE_DEVICE": "true"
   },
   // Daily cleanup of expired cloud backups (see limits.ts and cleanup() in index.ts), 08:00 UTC.
   "triggers": { "crons": ["0 8 * * *"] },

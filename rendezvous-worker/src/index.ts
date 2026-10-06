@@ -7,6 +7,7 @@
 //  - /v1/creators/*                                                                (creators page, creators.ts)
 //  - /v1/account/worlds                                                           (a player's cloud worlds)
 //  - POST /v1/device/{challenge,register}                                          (anti-abuse, guard.ts)
+//  - GET  /v1/admin/relay-stats                                                    (relay usage, x-jukz-admin)
 //  - GET  /healthz
 // State lives in Durable Objects sharded by world (`world:<id>`: record + snapshot fence) and by relay
 // session (`relay:<shard>`), so one world's traffic never queues another's. Snapshot bytes never touch
@@ -18,7 +19,8 @@ import { CosmeticsStore, cosmeticsStore, handleCosmetics, sessionPlayer } from "
 import { corsHeaders, handleCreators } from "./creators.ts";
 import { Guard, guardWorldCall, handleDevice } from "./guard.ts";
 import { INTENT_HEADER } from "./guard-logic.ts";
-import { CLIENT_IP_HEADER, type Env, RendezvousHub } from "./hub.ts";
+import { CLIENT_IP_HEADER, type Env, RELAY_STATS_NAME, RendezvousHub } from "./hub.ts";
+import { adminTokenMatches } from "./cosmetics-logic.ts";
 import { BadRequest, parseWorldId, relayShard, shardOfNonce, parseGameHeader } from "./logic.ts";
 import { LIMITS, checkUpload, dayKey, expired, parseTier, tierOf, usageSubject } from "./limits.ts";
 import { signBlobUrl, verifyBlobUrl, URL_TTL_SECS } from "./signing.ts";
@@ -59,6 +61,12 @@ export default {
     }
     if (path === "/v1/snapshot/fence" || path.startsWith("/v1/snapshot/may-download/")) {
       return error(404, "not found"); // hub-internal, never public
+    }
+
+    if (path === "/v1/admin/relay-stats" && request.method === "GET") {
+      // Relay usage (relay-stats.ts); 404 without the admin token, like the cosmetics admin routes.
+      if (!adminTokenMatches(env.COSMETICS_ADMIN_TOKEN, request.headers.get("x-jukz-admin"))) return error(404, "not found");
+      return hub(env, RELAY_STATS_NAME).fetch(`https://hub/internal/relay-stats${url.search}`);
     }
 
     if (path.startsWith("/v1/cosmetics/")) {

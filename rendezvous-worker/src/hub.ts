@@ -21,6 +21,17 @@ import {
   relayShard,
   shouldWithdraw,
 } from "./logic.ts";
+import {
+  KEEP_DAYS,
+  KEEP_SESSION_DAYS,
+  type SessionTotals,
+  type StreamDelta,
+  type Totals,
+  addDelta,
+  addToSession,
+  emptyTotals,
+  parseDeltas,
+} from "./relay-stats.ts";
 
 export interface Env {
   HUB: DurableObjectNamespace<RendezvousHub>;
@@ -56,6 +67,9 @@ export const CLIENT_IP_HEADER = "x-jukz-client-ip";
 const KEEPALIVE_MS = 45_000;
 /** Cap on guest bytes buffered while the host's work connection is still opening. */
 const MAX_PENDING_BYTES = 1 << 20;
+/** The hub instance that aggregates relay usage (see relay-stats.ts). */
+export const RELAY_STATS_NAME = "relay-stats";
+const DAY_MS = 24 * 60 * 60_000;
 
 type Attachment =
   | { role: "host"; session: string }
@@ -79,6 +93,8 @@ export class RendezvousHub extends DurableObject<Env> {
   private readonly limiter: RateLimiter;
   /** Guest frames that arrived before the host's work conn for that nonce (in-memory, short-lived). */
   private readonly pending = new Map<number, { frames: ArrayBuffer[]; bytes: number }>();
+  /** Relay traffic per stream (nonce) not yet reported to the aggregate. */
+  private readonly traffic = new Map<number, { session: string; msgs: number; bytes: number; openedAt: number }>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -93,6 +109,8 @@ export class RendezvousHub extends DurableObject<Env> {
       if (path === "/v1/relay/host") return this.relayHost(url);
       if (path === "/v1/relay/connect") return this.relayConnect(url);
       if (path === "/v1/relay/work") return this.relayWork(url);
+      if (path === "/internal/relay-stats/add" && request.method === "POST") return await this.statsAdd(request);
+      if (path === "/internal/relay-stats" && request.method === "GET") return await this.statsRead(url);
 
       const limited = this.rateLimit(request);
       if (limited) return limited;
@@ -340,6 +358,10 @@ export class RendezvousHub extends DurableObject<Env> {
       ws.serializeAttachment({ ...att, validated: true });
     }
     const peer = this.peerOf(att);
+    const t = this.traffic.get(att.nonce) ?? { session: att.session, msgs: 0, bytes: 0, openedAt: Date.now() };
+    t.msgs += 1;
+    t.bytes += message.byteLength;
+    this.traffic.set(att.nonce, t);
     if (peer) {
       peer.send(message);
       return;
@@ -376,6 +398,72 @@ export class RendezvousHub extends DurableObject<Env> {
     this.pending.delete(att.nonce);
     const peer = this.peerOf(att);
     if (peer) safeClose(peer, 1000, "peer closed");
+    const t = this.traffic.get(att.nonce);
+    this.traffic.delete(att.nonce);
+    if (t) this.ctx.waitUntil(this.report([{ ...t, closed: true }]));
+  }
+
+  // ---- relay usage (relay-stats.ts) -------------------------------------------------------------
+
+  /** Sends deltas to the aggregate; counting must never break the relay, so failures are only logged. */
+  private async report(deltas: StreamDelta[]) {
+    if (deltas.length === 0) return;
+    try {
+      const stats = this.env.HUB.get(this.env.HUB.idFromName(RELAY_STATS_NAME));
+      await stats.fetch("https://hub/internal/relay-stats/add", { method: "POST", body: JSON.stringify(deltas) });
+    } catch (e) {
+      console.log(`relay stats report failed: ${e}`);
+    }
+  }
+
+  /** Live streams' traffic so far (counters reset, streams stay open). */
+  private drainLive(): StreamDelta[] {
+    const out: StreamDelta[] = [];
+    for (const t of this.traffic.values()) {
+      if (t.msgs === 0) continue;
+      out.push({ session: t.session, msgs: t.msgs, bytes: t.bytes, closed: false, openedAt: t.openedAt });
+      t.msgs = 0;
+      t.bytes = 0;
+    }
+    return out;
+  }
+
+  private async statsAdd(request: Request): Promise<Response> {
+    const deltas = parseDeltas(await request.json());
+    const now = Date.now();
+    const day = `d:${new Date(now).toISOString().slice(0, 10)}`;
+    const total = (await this.ctx.storage.get<Totals>(day)) ?? emptyTotals();
+    const sessions = new Map<string, SessionTotals | undefined>();
+    for (const d of deltas) {
+      addDelta(total, d);
+      const key = `s:${d.session}`;
+      if (!sessions.has(key)) sessions.set(key, await this.ctx.storage.get<SessionTotals>(key));
+      sessions.set(key, addToSession(sessions.get(key), d, now));
+    }
+    await this.ctx.storage.put({ [day]: total, ...Object.fromEntries(sessions) });
+    return json(200, { status: "ok" });
+  }
+
+  /** Days (newest first) plus the heaviest recent sessions; prunes what is past keeping. */
+  private async statsRead(url: URL): Promise<Response> {
+    const now = Date.now();
+    const days = [...(await this.ctx.storage.list<Totals>({ prefix: "d:" }))];
+    const oldDay = `d:${new Date(now - KEEP_DAYS * DAY_MS).toISOString().slice(0, 10)}`;
+    const sessions = [...(await this.ctx.storage.list<SessionTotals>({ prefix: "s:" }))];
+    const stale = [
+      ...days.filter(([k]) => k < oldDay).map(([k]) => k),
+      ...sessions.filter(([, s]) => s.last < now - KEEP_SESSION_DAYS * DAY_MS).map(([k]) => k),
+    ];
+    for (let i = 0; i < stale.length; i += 128) await this.ctx.storage.delete(stale.slice(i, i + 128));
+    const top = Math.min(Number(url.searchParams.get("top")) || 20, 200);
+    return json(200, {
+      days: days.filter(([k]) => k >= oldDay).reverse().map(([k, t]) => ({ day: k.slice(2), ...t })),
+      sessions: sessions
+        .filter(([, s]) => s.last >= now - KEEP_SESSION_DAYS * DAY_MS)
+        .sort(([, a], [, b]) => b.bytes - a.bytes)
+        .slice(0, top)
+        .map(([k, s]) => ({ session: k.slice(2, 10), ...s, minutes: Math.round((s.last - s.first) / 60_000) })),
+    });
   }
 
   // ---- housekeeping -----------------------------------------------------------------------------
@@ -386,6 +474,7 @@ export class RendezvousHub extends DurableObject<Env> {
 
   /** Keep idle host links warm and sweep expired world records; re-arms only while there is work. */
   async alarm(): Promise<void> {
+    await this.report(this.drainLive());
     const hosts = this.sockets("host");
     for (const h of hosts) {
       try {
@@ -398,7 +487,7 @@ export class RendezvousHub extends DurableObject<Env> {
     const worlds = await this.ctx.storage.list<Entry>({ prefix: "w:" });
     const expired = [...worlds].filter(([, e]) => e.expiresAt <= now).map(([k]) => k);
     if (expired.length) await this.ctx.storage.delete(expired);
-    if (hosts.length > 0 || worlds.size > expired.length) await this.ctx.storage.setAlarm(now + KEEPALIVE_MS);
+    if (hosts.length > 0 || this.traffic.size > 0 || worlds.size > expired.length) await this.ctx.storage.setAlarm(now + KEEPALIVE_MS);
   }
 }
 
