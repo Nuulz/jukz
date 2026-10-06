@@ -21,4 +21,9 @@ class ForwardingEndpointResolver(
         runCatching { forwarder.open(port) } // best-effort: a missing/failed gateway must not fail the host
         return delegate.resolve(port)
     }
+
+    override fun resolveAll(port: Int): List<Endpoint> {
+        runCatching { forwarder.open(port) }
+        return delegate.resolveAll(port)
+    }
 }

@@ -33,7 +33,8 @@ import java.util.concurrent.CountDownLatch
  * DATA path is a dumb pump, so the client's end-to-end encryption and online-mode auth are preserved.
  */
 class HostConnectionServer(
-    private val bindHost: String = "0.0.0.0",
+    /** null = the wildcard address, dual-stack where the OS allows it (IPv4 and IPv6 guests alike). */
+    private val bindHost: String? = null,
     private val connectGameTimeoutMs: Int = 4_000,
     private val bufferSize: Int = 8 * 1024,
 ) : ConnectionServer {
@@ -59,7 +60,7 @@ class HostConnectionServer(
     override fun start(worldId: WorldId, token: ClaimToken, gameEndpoint: Endpoint, heartbeatSeq: () -> Long): Int {
         session = Session(worldId, token, gameEndpoint, heartbeatSeq)
         val s = ServerSocket()
-        s.bind(InetSocketAddress(bindHost, 0))
+        s.bind(if (bindHost == null) InetSocketAddress(0) else InetSocketAddress(bindHost, 0))
         server = s
         running = true
         Thread({ acceptLoop(s) }, "jukz-host-accept").apply { isDaemon = true }.start()

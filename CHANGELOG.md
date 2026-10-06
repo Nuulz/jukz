@@ -4,6 +4,11 @@ Every version gets a `## X.Y.Z` section with `- ` bullets. The mod shows the sec
 version you last played in its "jukz was updated" screen, and a GitHub release whose notes are empty
 gets its section as notes. Write them for players, not developers.
 
+## 0.4.4
+
+- Faster connections over IPv6: if you and the host both have IPv6, you now connect directly instead of going through the relay, with less lag. Nothing to set up.
+- jukz 0.3.0 and older can no longer play online: update to keep playing.
+
 ## 0.4.3
 
 - Your character stays yours: when a friend took over the world, they could load in with the previous host's inventory and position (Minecraft 26.2 stores the owner differently). Fixed.

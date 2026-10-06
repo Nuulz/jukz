@@ -84,6 +84,35 @@ class HostJoinLoopbackTest {
     }
 
     @Test
+    fun `a guest reaches the dual-stack host over IPv6 when the IPv4 address is dead`() = runBlocking {
+        val game = EchoServer().also { it.start() }
+        val registry = InMemoryWorldRegistry(SystemClock)
+        val host = HostController(
+            registry = registry,
+            lanOpener = LanOpener { game.port },
+            connectionServer = HostConnectionServer(), // wildcard bind, as in the game
+            endpointResolver = object : EndpointResolver {
+                override fun resolve(port: Int) = Endpoint("127.0.0.1", 1) // nothing listens: refused
+                override fun resolveAll(port: Int) = listOf(resolve(port), Endpoint("::1", port))
+            },
+            nodeId = node(7),
+            clock = SystemClock,
+        )
+        val hosting = assertInstanceOf(HostResult.Hosting::class.java, host.host(world, generation = 4))
+        assertEquals(listOf(Endpoint("127.0.0.1", 1), Endpoint("::1", hosting.port)), registry.lookup(world)!!.endpoints)
+
+        val handoff = CapturingHandoff()
+        val joiner = JoinController(registry, DirectChannelDialer(DirectTcpTransport()), handoff, SystemClock, config)
+        assertInstanceOf(JoinResult.Connected::class.java, joiner.join(world))
+        // ...and the same wildcard listener still takes IPv4.
+        Socket("127.0.0.1", hosting.port).close()
+
+        joiner.close()
+        host.close()
+        game.close()
+    }
+
+    @Test
     fun `host hands off to a connected guest over the live control channel`() = runBlocking {
         val game = EchoServer().also { it.start() }
         val registry = InMemoryWorldRegistry(SystemClock)

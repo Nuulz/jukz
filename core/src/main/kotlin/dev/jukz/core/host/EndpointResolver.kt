@@ -14,4 +14,11 @@ import dev.jukz.core.model.Endpoint
  */
 fun interface EndpointResolver {
     fun resolve(port: Int): Endpoint
+
+    /**
+     * Every address a guest may dial, best first (what the host announces). Defaults to [resolve]
+     * alone; [dev.jukz.transport.LocalEndpointResolver] adds the host's global IPv6 addresses, which
+     * need no port forwarding, so an IPv6 guest connects directly instead of through the relay.
+     */
+    fun resolveAll(port: Int): List<Endpoint> = listOf(resolve(port))
 }

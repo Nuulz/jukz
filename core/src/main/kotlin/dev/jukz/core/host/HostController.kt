@@ -70,9 +70,9 @@ class HostController(
             val listenPort = connectionServer.start(worldId, token, Endpoint("127.0.0.1", gamePort)) {
                 record?.heartbeatSeq ?: 0L
             }
-            val endpoint = endpointResolver.resolve(listenPort)
+            val endpoints = endpointResolver.resolveAll(listenPort).distinct().take(MAX_OWN_ENDPOINTS)
             val relayOffer = runCatching { relayRegistrar.register(listenPort) }.getOrNull()
-            val candidate = WorldRecord(worldId, token, listOf(endpoint), heartbeatSeq = 0)
+            val candidate = WorldRecord(worldId, token, endpoints, heartbeatSeq = 0)
                 .copy(playerCount = playerCount(), relay = relayOffer, game = config.game)
             when (val result = registry.publishIfNewer(candidate)) {
                 is PublishResult.Published -> {
@@ -225,5 +225,7 @@ class HostController(
 
     private companion object {
         private val RNG = SecureRandom()
+        /** Own addresses announced; the rendezvous may append the observed public IP (8 max in all). */
+        const val MAX_OWN_ENDPOINTS = 4
     }
 }
