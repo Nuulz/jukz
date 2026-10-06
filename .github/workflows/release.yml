@@ -84,3 +84,52 @@ jobs:
               gh release edit "$TAG" --notes-file notes.md
             fi
           fi
+
+  # The same jars on Modrinth and CurseForge, one version per Minecraft version. Needs, in the repo's
+  # Settings → Secrets and variables → Actions: secrets MODRINTH_TOKEN and CURSEFORGE_TOKEN, variables
+  # MODRINTH_ID and CURSEFORGE_ID (the project ids). A store whose token or id is missing is skipped.
+  stores:
+    needs: jar
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mc: ["1.21.1", "1.21.11", "26.2"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Jar and notes
+        id: f
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${TAG#v}"
+          mkdir -p dist
+          gh release download "$TAG" -p "jukz-${version}+${{ matrix.mc }}.jar" -D dist
+          awk -v v="## $version" '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+          case "${{ matrix.mc }}" in 2[6-9].*) java=25 ;; *) java=21 ;; esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "java=$java" >> "$GITHUB_OUTPUT"
+
+      - uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          modrinth-id: ${{ vars.MODRINTH_ID }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          curseforge-id: ${{ vars.CURSEFORGE_ID }}
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: dist/*.jar
+          name: jukz ${{ steps.f.outputs.version }} for ${{ matrix.mc }}
+          version: ${{ steps.f.outputs.version }}+${{ matrix.mc }}
+          version-type: release
+          changelog-file: notes.md
+          loaders: fabric
+          game-versions: ${{ matrix.mc }}
+          java: ${{ steps.f.outputs.java }}
+          dependencies: |
+            fabric-api(required){modrinth:P7dR8mSH}{curseforge:306612}
+            fabric-language-kotlin(required){modrinth:Ha28R6CL}{curseforge:308769}
+            owo-lib(required){modrinth:ccKDOlHs}{curseforge:532610}
+            modmenu(optional){modrinth:mOgUt4GM}{curseforge:308702}
+          fail-mode: warn
