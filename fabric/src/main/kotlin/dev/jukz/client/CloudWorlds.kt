@@ -259,6 +259,9 @@ object CloudWorlds {
             }
         }.onFailure { JukzMod.logger.warn("jukz: couldn't bring cloud world {} ({})", world.name, it.message) }.isSuccess
         states[world.worldId] = if (ok) State.HERE else State.FAILED
+        // A backup that's gone from the cloud (expired) is dropped from the account by the server: refetch
+        // the list so the world disappears instead of failing forever.
+        if (!ok) runCatching { refreshNow() }
         if (ok) Seen.add(world.worldId)
         else toast("Couldn't bring ${world.name}", "Try again from your jukz account (the person icon).")
         return ok

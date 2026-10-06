@@ -48,14 +48,12 @@ class MinecraftLanOpener(
         *///?} else {
         if (!server.publishServer(gameMode, allowCheats, port)) return null
         //?}
-        // Guests are verified by Mojang like on any server (the jukz relay only moves bytes), unless the
-        // host has no real account (dev runs, offline launchers) or opted into offline guests. See
-        // GuestAdmission for why offline mode used to be a hole.
-        val premium = client.hasRealAccount
-        server.setUsesAuthentication(GuestAdmission.onlineMode(premium, JukzConfig.offlineGuests))
-        if (!server.usesAuthentication()) {
-            JukzMod.logger.info("jukz: guests join in offline mode (host account: {}, offline-guests: {})", client.accountKind, JukzConfig.offlineGuests)
-        }
+        // Hybrid login (see GuestAdmission): Mojang is always asked, so premium guests keep their real
+        // profile whoever hosts; guests without an account get in only when allowed.
+        server.setUsesAuthentication(true)
+        GuestAdmission.allowUnverifiedGuests = GuestAdmission.allowUnverified(client.hasRealAccount, JukzConfig.offlineGuests)
+        JukzMod.logger.info("jukz: guests verified by Mojang; without an account: {} (host account: {}, offline-guests: {})",
+            if (GuestAdmission.allowUnverifiedGuests) "allowed" else "refused", client.accountKind, JukzConfig.offlineGuests)
         return port
     }
 }

@@ -13,6 +13,7 @@
 // a Durable Object: the Worker signs short-lived URLs pointing back at itself and streams them to/from
 // R2 via the binding, so no S3 credentials exist anywhere.
 
+import { liveWorlds } from "./cloud-worlds";
 import { CosmeticsStore, cosmeticsStore, handleCosmetics, sessionPlayer } from "./cosmetics.ts";
 import { corsHeaders, handleCreators } from "./creators.ts";
 import { Guard, guardWorldCall, handleDevice } from "./guard.ts";
@@ -208,10 +209,12 @@ async function handleAccount(request: Request, env: Env, url: URL): Promise<Resp
   const store = cosmeticsStore(env);
   if (request.method === "GET" && url.pathname === "/v1/account/summary") {
     // The in-game account screen: everything at once, with the limits of this (signed-in) plan.
-    return json(200, { ...(await store.playerSummary(player, dayKey(Date.now()))), tier: "account", limits: LIMITS });
+    const summary = await store.playerSummary(player, dayKey(Date.now()));
+    const worlds = await liveWorlds(env, summary.worlds, (id) => store.forgetWorld(player, id));
+    return json(200, { ...summary, worlds, tier: "account", limits: LIMITS });
   }
   if (request.method === "GET" && url.pathname === "/v1/account/worlds") {
-    return json(200, { worlds: await store.accountWorlds(player) });
+    return json(200, { worlds: await liveWorlds(env, await store.accountWorlds(player), (id) => store.forgetWorld(player, id)) });
   }
   const m = url.pathname.match(/^\/v1\/account\/worlds\/([^/]+)\/(download|forget)$/);
   if (request.method === "POST" && m) {
@@ -223,6 +226,9 @@ async function handleAccount(request: Request, env: Env, url: URL): Promise<Resp
     }
     const key = env.SNAPSHOT_SIGNING_KEY;
     if (!key) return error(503, "snapshot store disabled");
+    if ((await liveWorlds(env, [{ worldId }], (id) => store.forgetWorld(player, id))).length === 0) {
+      return error(410, "this world's backup is no longer in the cloud");
+    }
     console.log(`account world download world=${worldId}`);
     return json(200, {
       packUrl: await signBlobUrl(publicOrigin(env, url), key, "get", worldId, "pack"),

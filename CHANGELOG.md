@@ -4,6 +4,14 @@ Every version gets a `## X.Y.Z` section with `- ` bullets. The mod shows the sec
 version you last played in its "jukz was updated" screen, and a GitHub release whose notes are empty
 gets its section as notes. Write them for players, not developers.
 
+## 0.4.3
+
+- Your character stays yours: when a friend took over the world, they could load in with the previous host's inventory and position (Minecraft 26.2 stores the owner differently). Fixed.
+- Players with and without a Microsoft account in the same world: whoever hosts, players with an account always join as themselves, with their own inventory and skin. Friends without one still get in when the host allows it, and can't take the name of a player with an account.
+- New Settings in the hub (also Mod Menu's Config button): let friends without an account in, play over the internet or only on your network, and the relay testing switch. No more editing jukz.properties by hand.
+- If a friend without an account is turned away, the host now gets a notice, and World info has a switch to let them in right away, no restart.
+- My cloud no longer lists worlds whose backup has expired.
+
 ## 0.4.2
 
 - Cosmetics without a Mojang account: you can now wear every free hat, face piece, back piece and badge. They stay on your PC and go to the friends you play with through jukz, over the game connection, like your skin. Paid and special items still need a Microsoft account.

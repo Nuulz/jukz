@@ -1,6 +1,9 @@
 package dev.jukz.client.gui
 
 import dev.jukz.client.CloudWorlds
+import dev.jukz.client.GuestAdmission
+import dev.jukz.compat.hasRealAccount
+import dev.jukz.config.JukzConfig
 import dev.jukz.client.CloudWorlds.State
 import dev.jukz.client.CloudWorlds.Upload
 import dev.jukz.compat.BaseUIComponent
@@ -56,7 +59,7 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
 
     enum class Section(val label: String, val icon: CosmeticCatalog.Art) {
         PROFILE("Profile", HubIcons.PERSON), COSMETICS("Cosmetics", HubIcons.PALETTE_ICON), SKIN("Skin", HubIcons.PENCIL),
-        WORLDS("Worlds", HubIcons.GLOBE)
+        WORLDS("Worlds", HubIcons.GLOBE), SETTINGS("Settings", HubIcons.GEAR)
     }
 
     private var tab = Slot.HAT
@@ -107,6 +110,7 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
             Section.COSMETICS -> buildCosmetics(root, content)
             Section.WORLDS -> buildWorlds(root, content)
             Section.SKIN -> buildSkin(root, content)
+            Section.SETTINGS -> buildSettings(root, content)
         }
     }
 
@@ -685,6 +689,54 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
         }
         hint(root, "Forgetting a world only takes it off the list; nothing is deleted.")
     }
+
+    // ---- settings -------------------------------------------------------------------------------
+
+    /** `config/jukz.properties`, without opening the file. Each change is saved at once. */
+    private fun buildSettings(root: FlowLayout, content: FlowLayout) {
+        status(root, "Saved as you change them.", COLOR_SUBTLE)
+        section(content, "guests", "Who can join your worlds")
+        val premium = minecraft?.hasRealAccount == true
+        val offline = JukzConfig.offlineGuests || !premium
+        toggleRow(content, "offline", "Friends without a Microsoft account",
+            when {
+                !premium -> "Always on: you're playing without an account yourself."
+                offline -> "On. They join under a name nobody can check, so only for friends you trust."
+                else -> "Off. Only players Mojang verifies can join, like on a normal server."
+            }, offline, enabled = premium) { on ->
+            JukzConfig.set(JukzConfig.KEY_OFFLINE_GUESTS, on.toString())
+            GuestAdmission.allowUnverifiedGuests = GuestAdmission.allowUnverified(premium, on)
+        }
+
+        section(content, "network", "Connection")
+        val rendezvous = JukzConfig.rendezvousSetting
+        val custom = rendezvous.isNotEmpty() && !rendezvous.equals("none", ignoreCase = true)
+        val lanOnly = rendezvous.equals("none", ignoreCase = true)
+        val actions = row(content, "rendezvous", "Play over the internet",
+            when {
+                custom -> "Your own server: $rendezvous"
+                lanOnly -> "Off: only people on your network see your worlds. Applies after a restart."
+                else -> "On, through jukz.nuulm.com. Applies after a restart."
+            }, if (lanOnly) COLOR_SUBTLE else COLOR_LIVE)
+        if (custom) actions.child(button("Use jukz", 50) { JukzConfig.set(JukzConfig.KEY_RENDEZVOUS_URL, ""); rebuild() }
+            .tooltip(Component.literal("Go back to the public jukz server.")))
+        else actions.child(switch(!lanOnly) { on -> JukzConfig.set(JukzConfig.KEY_RENDEZVOUS_URL, if (on) "" else "none") })
+        toggleRow(content, "relay", "Always use the relay",
+            "For testing: skip direct connections even when they'd work. Leave off.", JukzConfig.forceRelay) { on ->
+            JukzConfig.set(JukzConfig.KEY_FORCE_RELAY, on.toString())
+        }
+        hint(root, "Everything here lives in config/jukz.properties, if you'd rather edit it by hand.")
+    }
+
+    private fun toggleRow(content: FlowLayout, id: String, name: String, info: String, on: Boolean, enabled: Boolean = true, change: (Boolean) -> Unit) {
+        val switch = switch(on, change)
+        switch.active = enabled
+        row(content, id, name, info, if (on) COLOR_LIVE else COLOR_SUBTLE).child(switch)
+    }
+
+    /** An On/Off button; pressing it flips the setting and redraws the section. */
+    private fun switch(on: Boolean, change: (Boolean) -> Unit): ButtonComponent =
+        button(if (on) "On" else "Off", 34) { change(!on); rebuild() }.also { if (on) it.renderer(JukzSurface.primary()) }
 
     /** A world row; returns its action box. */
     private fun row(content: FlowLayout, id: String, name: String, info: String, infoColor: Int): FlowLayout {

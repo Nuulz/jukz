@@ -18,10 +18,10 @@ import java.util.Properties
 object JukzConfig {
 
     private const val FILE_NAME = "jukz.properties"
-    private const val KEY_RENDEZVOUS_URL = "rendezvous.url"
+    const val KEY_RENDEZVOUS_URL = "rendezvous.url"
     private const val KEY_RENDEZVOUS_AUTH_TOKEN = "rendezvous.auth-token"
-    private const val KEY_FORCE_RELAY = "jukz.force-relay"
-    private const val KEY_OFFLINE_GUESTS = "jukz.offline-guests"
+    const val KEY_FORCE_RELAY = "jukz.force-relay"
+    const val KEY_OFFLINE_GUESTS = "jukz.offline-guests"
 
     /** Public rendezvous server used when no override is configured. */
     const val DEFAULT_RENDEZVOUS_URL = "https://jukz.nuulm.com"
@@ -44,11 +44,11 @@ object JukzConfig {
         #   in normal use. Requires a configured rendezvous.
         #
         # jukz.offline-guests
-        #   Let guests without a Microsoft account join (offline mode). Only for groups that trust each
-        #   other: in offline mode the game can't check who anyone is, so a guest could join under the
-        #   name of a player who isn't online and take their inventory (jukz refuses names already in
-        #   the world, so nobody gets kicked out of their own character).
-        #   Off by default: guests are verified by Mojang, like on a normal server.
+        #   Also let guests without a Microsoft account join. Players with an account are always
+        #   verified by Mojang and keep their own character and skin; guests without one join under
+        #   their name, which nobody can check — so another player without an account could join
+        #   under it later (never under the host's name or the name of someone in the world, and never
+        #   as a player with an account). Off by default. Hosts without an account always allow them.
         #
         rendezvous.url=
         rendezvous.auth-token=
@@ -95,6 +95,23 @@ object JukzConfig {
      */
     val offlineGuests: Boolean
         get() = properties.getProperty(KEY_OFFLINE_GUESTS)?.trim().equals("true", ignoreCase = true)
+
+    /** Setting [value] for [key] in the file (the Settings screen); the rest of the file is kept as written. */
+    fun set(key: String, value: String) {
+        properties.setProperty(key, value)
+        val file = configFile()
+        runCatching {
+            val lines = if (Files.exists(file)) Files.readAllLines(file) else TEMPLATE.lines()
+            val line = "$key=$value"
+            var found = false
+            val updated = lines.map { if (it.trimStart().startsWith("$key=") || it.trim() == key) { found = true; line } else it }
+            Files.createDirectories(file.parent)
+            Files.write(file, if (found) updated else updated + line)
+        }.onFailure { JukzMod.logger.warn("jukz: could not save {} ({})", file, it.message) }
+    }
+
+    /** The raw `rendezvous.url` value: blank (the public server), "none" (LAN only) or a custom URL. */
+    val rendezvousSetting: String get() = properties.getProperty(KEY_RENDEZVOUS_URL)?.trim() ?: ""
 
     internal fun configFile(): Path = FabricLoader.getInstance().configDir.resolve(FILE_NAME)
 

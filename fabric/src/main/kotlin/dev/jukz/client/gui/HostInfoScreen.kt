@@ -3,6 +3,9 @@ package dev.jukz.client.gui
 import dev.jukz.discovery.DeviceIdentity
 import dev.jukz.compat.openScreen
 import dev.jukz.client.HostCoordinator
+import dev.jukz.client.GuestAdmission
+import dev.jukz.compat.hasRealAccount
+import dev.jukz.config.JukzConfig
 import dev.jukz.core.host.HostStatus
 import dev.jukz.core.model.ClaimToken
 import dev.jukz.runtime.HostSession
@@ -63,6 +66,15 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
 
         // Access toggle (F4-D): open/close the world to guests. Reads the per-world flag for its label.
         wireButton(root, "access-button", accessLabel()) { toggleAccess() }
+        // Guests without a Microsoft account (see GuestAdmission). A host without one always lets them in.
+        val premium = minecraft?.hasRealAccount == true
+        if (premium) wireButton(root, "guests-button", guestsLabel()) {
+            val on = !JukzConfig.offlineGuests
+            JukzConfig.set(JukzConfig.KEY_OFFLINE_GUESTS, on.toString())
+            GuestAdmission.allowUnverifiedGuests = GuestAdmission.allowUnverified(true, on)
+            rebuild()
+        }.tooltip(Component.literal("Let friends without a Microsoft account join. Nobody can check their name, so only for friends you trust."))
+        else detach(root, root.childById(dev.jukz.compat.UIComponent::class.java, "guests-button"))
         addButton(root, "buttons", Component.literal("Copy code"), width = 100) {
             record?.let { minecraft?.keyboardHandler?.clipboard = it.worldId.shortCode() }
         }
@@ -85,6 +97,9 @@ class HostInfoScreen(private val parent: Screen?) : JukzUiScreen("host_info") {
         return row to valueLabel
     }
 
+
+    private fun guestsLabel(): Component =
+        Component.literal(if (JukzConfig.offlineGuests) "Friends without account: Allowed" else "Friends without account: Not allowed")
 
     /** "Access: Open" / "Access: Closed", read from the per-world flag at build time. */
     private fun accessLabel(): Component {

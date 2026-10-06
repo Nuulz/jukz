@@ -9,34 +9,46 @@ import org.junit.jupiter.api.Test
 class GuestAdmissionTest {
 
     @Test
-    fun `a host with a real account keeps Mojang verification unless they opt out`() {
-        assertTrue(GuestAdmission.onlineMode(hostHasPremiumAccount = true, offlineGuestsOptIn = false))
-        assertFalse(GuestAdmission.onlineMode(hostHasPremiumAccount = true, offlineGuestsOptIn = true))
+    fun `guests without an account are allowed only when the host has none or opted in`() {
+        assertFalse(GuestAdmission.allowUnverified(hostHasPremiumAccount = true, offlineGuestsOptIn = false))
+        assertTrue(GuestAdmission.allowUnverified(hostHasPremiumAccount = true, offlineGuestsOptIn = true))
+        assertTrue(GuestAdmission.allowUnverified(hostHasPremiumAccount = false, offlineGuestsOptIn = false))
     }
 
     @Test
-    fun `a host without a real account (dev runs, offline launchers) can only host offline`() {
-        assertFalse(GuestAdmission.onlineMode(hostHasPremiumAccount = false, offlineGuestsOptIn = false))
+    fun `a verified guest is left to vanilla, even under a name already in the world`() {
+        assertNull(GuestAdmission.refusal(true, false, false, "HostA", "HostA", listOf("HostA")))
     }
 
     @Test
-    fun `online mode leaves every login to vanilla`() {
-        assertNull(GuestAdmission.refusal(true, false, "HostA", "HostA", listOf("HostA")))
+    fun `an unverified guest is refused when the host doesn't allow them`() {
+        assertEquals(GuestAdmission.ACCOUNT_REQUIRED, GuestAdmission.refusal(false, false, false, "GuestC", "HostA", emptyList()))
     }
 
     @Test
-    fun `offline mode refuses the host's name, in any case`() {
-        assertEquals(GuestAdmission.NAME_TAKEN, GuestAdmission.refusal(false, false, "hosta", "HostA", emptyList()))
+    fun `an unverified guest can't take the host's name, in any case`() {
+        assertEquals(GuestAdmission.NAME_TAKEN, GuestAdmission.refusal(false, true, false, "hosta", "HostA", emptyList()))
     }
 
     @Test
-    fun `offline mode refuses a name already in the world, so nobody gets kicked`() {
-        assertEquals(GuestAdmission.NAME_TAKEN, GuestAdmission.refusal(false, false, "HostA", "GuestB", listOf("GuestB", "HostA")))
+    fun `an unverified guest can't take a name already in the world, so nobody gets kicked`() {
+        assertEquals(GuestAdmission.NAME_TAKEN, GuestAdmission.refusal(false, true, false, "HostA", "GuestB", listOf("GuestB", "HostA")))
     }
 
     @Test
-    fun `offline mode lets a new name in, and never refuses the host's own connection`() {
-        assertNull(GuestAdmission.refusal(false, false, "GuestC", "HostA", listOf("HostA")))
-        assertNull(GuestAdmission.refusal(false, true, "HostA", "HostA", listOf("HostA")))
+    fun `an unverified guest with a new name gets in, and the host's own connection is never refused`() {
+        assertNull(GuestAdmission.refusal(false, true, false, "GuestC", "HostA", listOf("HostA")))
+        assertNull(GuestAdmission.refusal(false, false, true, "HostA", "HostA", listOf("HostA")))
+    }
+
+    @Test
+    fun `the host hears of a refused guest once a minute, not on every retry`() {
+        val heard = mutableListOf<String>()
+        GuestAdmission.onRefusedUnverified = { heard += it }
+        GuestAdmission.refusedUnverified("Retry", now = 1_000)
+        GuestAdmission.refusedUnverified("retry", now = 30_000)
+        GuestAdmission.refusedUnverified("Retry", now = 61_001)
+        assertEquals(listOf("Retry", "Retry"), heard)
+        GuestAdmission.onRefusedUnverified = {}
     }
 }

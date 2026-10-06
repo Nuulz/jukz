@@ -85,6 +85,9 @@ object HubIcons {
     val CHECK = icon(
         "..ggggg..", ".g.....g.", "g......gg", "g.....g.g", "g.g..g..g",
         "g..gg...g", "g.......g", ".g.....g.", "..ggggg..")
+    val GEAR = icon(
+        "....W....", ".W.WWW.W.", "..WWWWW..", ".WWW.WWW.", "WWW...WWW",
+        ".WWW.WWW.", "..WWWWW..", ".W.WWW.W.", "....W....")
     val LOCK = icon(
         "...GGG...", "..G...G..", "..G...G..", ".GGGGGGG.", ".GGGGGGG.",
         ".GGG.GGG.", ".GGG.GGG.", ".GGGGGGG.", ".........")

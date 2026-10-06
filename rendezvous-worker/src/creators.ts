@@ -14,6 +14,7 @@
 //    POST /admin/submissions/<id>/reward {item}  review (x-jukz-admin)
 // Page sessions: x-jukz-creator-token. State: the CosmeticsStore Durable Object; files: R2 CREATIONS.
 
+import { liveWorlds } from "./cloud-worlds";
 import { adminTokenMatches } from "./cosmetics-logic.ts";
 import { cosmeticsStore } from "./cosmetics.ts";
 import {
@@ -123,7 +124,8 @@ export async function handleCreators(request: Request, env: Env, url: URL): Prom
 
     // ---- the account page (nuulm.com/jukz/cuenta) ----
     if (request.method === "GET" && path === "/account") {
-      return json(200, { ...(await store.accountSummary(account, dayKey(Date.now()))), limits: LIMITS });
+      const summary = await store.accountSummary(account, dayKey(Date.now()));
+      return json(200, { ...summary, worlds: await liveWorlds(env, summary.worlds), limits: LIMITS });
     }
     if (request.method === "POST" && path === "/account/password") {
       await store.setPassword(account, String((await body()).password ?? ""));

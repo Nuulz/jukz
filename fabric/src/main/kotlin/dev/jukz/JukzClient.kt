@@ -88,6 +88,16 @@ object JukzClient : ClientModInitializer {
 
         // Anti-abuse: a premium session raises the limits; a refusal while opening a world is a toast.
         DeviceIdentity.sessionToken = { Cosmetics.sessionToken() }
+        // A guest without a Microsoft account was turned away: tell the host where to let them in.
+        dev.jukz.client.GuestAdmission.onRefusedUnverified = { name ->
+            val client = Minecraft.getInstance()
+            client.execute {
+                client.toast(
+                    Component.literal("$name couldn't join"),
+                    Component.literal("No Microsoft account. To let them in: pause › World info."),
+                )
+            }
+        }
         DeviceIdentity.onLimited = { secs ->
             val client = Minecraft.getInstance()
             client.execute {

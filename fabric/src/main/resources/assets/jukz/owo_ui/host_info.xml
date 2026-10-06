@@ -25,6 +25,10 @@
                     <id>access-button</id>
                     <width>150</width>
                 </template>
+                <template name="button@jukz:theme">
+                    <id>guests-button</id>
+                    <width>200</width>
+                </template>
                 <template name="button-row@jukz:theme">
                     <id>buttons</id>
                 </template>

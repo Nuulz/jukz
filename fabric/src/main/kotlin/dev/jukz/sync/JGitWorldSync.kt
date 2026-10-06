@@ -354,7 +354,8 @@ class JGitWorldSync(
     }
 
     /**
-     * Drop the singleplayer-owner player data baked into the snapshot's `level.dat` (`Data.Player`).
+     * Drop the singleplayer-owner player data baked into the snapshot's `level.dat` (`Data.Player`, or
+     * `Data.singleplayer_uuid` on 26.x).
      * Minecraft loads that compound for whoever opens the world as host (`PlayerList.load`
      * reads `SaveProperties.getPlayerData()` for `isHost` players, only falling back to
      * `playerdata/<uuid>.dat` when it is null). Without this, the player taking over would inherit the
@@ -369,10 +370,13 @@ class JGitWorldSync(
         runCatching {
             val root = NbtIo.readCompressed(levelDat, NbtAccounter.unlimitedHeap())
             val data = root.compound("Data")
-            if (data.contains("Player")) {
-                data.remove("Player")
+            // Up to 1.21.x the owner's player is inlined as `Player`; 26.x instead names it by
+            // `singleplayer_uuid` and loads `players/data/<that uuid>.dat` for whoever hosts — so both go.
+            val keys = listOf("Player", "singleplayer_uuid").filter { data.contains(it) }
+            if (keys.isNotEmpty()) {
+                keys.forEach { data.remove(it) }
                 NbtIo.writeCompressed(root, levelDat)
-                JukzMod.logger.info("jukz: cleared inherited host player from snapshot level.dat")
+                JukzMod.logger.info("jukz: cleared inherited host player ({}) from snapshot level.dat", keys.joinToString())
             }
         }.onFailure { JukzMod.logger.warn("jukz: could not strip inherited host player ({})", it.message) }
     }
