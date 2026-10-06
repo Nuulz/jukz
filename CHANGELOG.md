@@ -4,6 +4,14 @@ Every version gets a `## X.Y.Z` section with `- ` bullets. The mod shows the sec
 version you last played in its "jukz was updated" screen, and a GitHub release whose notes are empty
 gets its section as notes. Write them for players, not developers.
 
+## 0.4.0
+
+- New jukz hub: your profile, cosmetics, skin and cloud worlds in one window that fills the screen, with a side menu and you in 3D on every section. A new pixel look across all jukz screens.
+- Profile as a dashboard: your name, storage, today's uploads with a bar, retention, cosmetics and creations. Cards take you where they're about.
+- Cosmetics: point at a card to try it on before wearing it.
+- Change your skin in game (Hub → Skin): choose a PNG or drop one on the window, pick classic or slim arms and preview it. With a Mojang account it changes your real skin; without one, it stays on your PC and goes only to the friends you play with through jukz, over the game connection. No jukz server stores it.
+- On a small window or a big GUI scale the hub switches to a compact layout.
+
 ## 0.3.1
 
 - jukz now runs on Minecraft 1.21.11 and 26.2 too (one jar per Minecraft version; 26.2 needs Java 25).

@@ -45,6 +45,8 @@ import net.minecraft.client.renderer.entity.player.PlayerRenderer
 import dev.jukz.client.gui.HostLeavingScreen
 import dev.jukz.client.gui.UiHotReload
 import dev.jukz.net.WorldAccessPayload
+import dev.jukz.net.SkinPayload
+import dev.jukz.skins.LocalSkins
 import dev.jukz.world.WorldKeyStore
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
 import dev.jukz.client.gui.JoinPromptScreen
@@ -181,7 +183,13 @@ object JukzClient : ClientModInitializer {
         // local player has actually spawned (SERVER_STARTED is ~1s too early and NPEs). A guest join
         // to a remote host has no integrated server (client.singleplayerServer == null), so this correctly fires
         // only for locally-opened worlds.
+        // Skins chosen in the hub: ours (saved on this PC) and friends' (over the game connection).
+        LocalSkins.init()
+        ClientPlayNetworking.registerGlobalReceiver(SkinPayload.ID) { payload, _ -> LocalSkins.receive(payload) }
+        ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { LocalSkins.tick() })
+
         ClientPlayConnectionEvents.JOIN.register { _, _, client ->
+            LocalSkins.shareSoon()
             client.singleplayerServer?.let { HostCoordinator.autoHost(it) }
             Cosmetics.ensureSignedIn() // registers us, so others see our tab-list badge
         }
@@ -196,6 +204,7 @@ object JukzClient : ClientModInitializer {
         // never flashes); this reactive handler is a fallback for the case where that injection does not
         // apply (require = 0). It is a no-op when the mixin already replaced the screen.
         ClientPlayConnectionEvents.DISCONNECT.register { _, client ->
+            LocalSkins.forgetFriends()
             if (GuestSession.isActive) {
                 GuestSession.markDisconnected()
                 client.execute {

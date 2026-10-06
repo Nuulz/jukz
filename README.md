@@ -61,10 +61,15 @@ Quit alone? The world is backed up to the cloud, and whoever opens it next conti
 
 ### 💻 Your worlds on every PC
 Sign in with a Microsoft account and your cloud worlds follow you: start the game on another PC, a new
-launcher instance or a friend's computer, and they come over. Manage it all from one screen in the game -
-the person icon on the title screen.
+launcher instance or a friend's computer, and they come over.
 
-<p align="center"><img src="docs/screenshots/account-screen.png" alt="The account screen: plan, worlds in your cloud and worlds only on this PC" width="520"></p>
+### 🧭 One hub for everything
+Your profile, cosmetics, skin and cloud worlds live in one window, the jukz hub (the person or cube icon
+on the title screen, the cube in the pause menu, or Mod Menu → Config). A side menu picks the section,
+you stand on the right in 3D on every one of them, and it fills your screen. On a small window or a big
+GUI scale it switches to a compact layout: icons in the menu, names in tooltips.
+
+<p align="center"><img src="docs/screenshots/hub-profile.png" alt="The jukz hub: profile with uploads, retention, storage and cosmetics" width="720"></p>
 
 ### 🎩 Cosmetics, free
 Hats, glasses, a mustache, backpacks, wings, and a pixel badge next to your name in the tab list.
@@ -80,11 +85,11 @@ Everyone running jukz sees what you wear. Nothing here is a resource pack.
 <td>…and wings or the jukz backpack.</td>
 </tr>
 <tr>
-<td><img src="docs/screenshots/cosmetics-screen.png" alt="The cosmetics screen with a 3D preview"></td>
+<td><img src="docs/screenshots/hub-cosmetics.png" alt="The cosmetics section of the hub with a 3D preview"></td>
 <td><img src="docs/screenshots/cosmetics-tab.png" alt="Badges in the tab list"></td>
 </tr>
 <tr>
-<td>Pick yours with a live 3D preview (drag to turn).</td>
+<td>Point at a card to try it on, click to wear it (drag yourself to turn).</td>
 <td>Everyone's badge shows in the tab list.</td>
 </tr>
 </table>
@@ -92,6 +97,28 @@ Everyone running jukz sees what you wear. Nothing here is a resource pack.
 **Want to make one?** Design it in [Blockbench](https://www.blockbench.net/) and send it at
 [nuulm.com/jukz/crear](https://nuulm.com/jukz/crear). If it gets in, it's free for everyone with your name
 on it, and it stays yours if the shop ever starts charging.
+
+### 🧑‍🎨 Your skin, even without a Mojang account
+Hub → **Skin**: choose a PNG (or drop one on the window), pick classic or slim arms, and see it on
+yourself before applying.
+
+- **Mojang account:** jukz changes your real skin, the same way minecraft.net does. Your session token goes
+  to Mojang only. You see it at once; friends see it when their game reloads your profile.
+- **No Mojang account:** the skin stays on your PC. When you play through jukz, your game hands it to the
+  host over the game connection and the host passes it to everyone in the world. No jukz server stores
+  it, and it's gone from the host's memory when the world closes. Friends with jukz see it in the world
+  and in the tab list.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/hub-skin.png" alt="The skin section: choose a PNG, classic or slim arms, apply"></td>
+<td width="50%"><img src="docs/screenshots/skin-p2p.png" alt="An offline player seeing a friend's custom skin"></td>
+</tr>
+<tr>
+<td>Choose, preview, apply.</td>
+<td>Two offline players: Ana sees the skin Beto picked, sent from his PC to hers.</td>
+</tr>
+</table>
 
 ### 🔒 You decide who gets in
 Close access from the pause menu and the world turns private. Guests are checked by Mojang like on a normal

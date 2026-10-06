@@ -1,0 +1,239 @@
+<!--
+  The jukz hub: your account, your cosmetics and your cloud worlds in one window (title screen icons,
+  Singleplayer → "My account", Multiplayer / pause → "Cosmetics", Mod Menu). HubScreen.kt fills the side
+  menu, the open section's content and the 3D preview; the pixel look (bevels, buttons, cards) comes from
+  JukzSurface.kt, the text styles from theme.xml.
+
+  Grows with the window (HubScreen asks JukzUiScreen for a full-size panel); the side menu and the
+  preview keep their width, the open section takes the rest.
+-->
+<owo-ui xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/wisp-forest/owo-lib/1.21/owo-ui.xsd">
+    <components>
+        <flow-layout direction="vertical">
+            <children>
+                <!-- Top bar: the gok- dots, the brand, who you are. -->
+                <flow-layout direction="horizontal" id="top">
+                    <children>
+                        <flow-layout direction="horizontal" id="dots">
+                            <children/>
+                            <gap>1</gap>
+                        </flow-layout>
+                        <template name="brand@jukz:theme"/>
+                        <flow-layout direction="horizontal">
+                            <children/>
+                            <sizing>
+                                <horizontal method="expand">100</horizontal>
+                            </sizing>
+                        </flow-layout>
+                        <flow-layout direction="horizontal" id="who-icon">
+                            <children/>
+                        </flow-layout>
+                        <label id="who">
+                            <color>#FF8A96B3</color>
+                        </label>
+                    </children>
+                    <sizing>
+                        <horizontal method="fill">100</horizontal>
+                    </sizing>
+                    <gap>3</gap>
+                    <vertical-alignment>center</vertical-alignment>
+                </flow-layout>
+
+                <flow-layout direction="horizontal">
+                    <children>
+                        <!-- Sections, then Ko-fi and Done at the bottom (filled from code). -->
+                        <flow-layout direction="vertical" id="side">
+                            <children/>
+                            <sizing>
+                                <horizontal method="fixed">100</horizontal>
+                                <vertical method="fill">100</vertical>
+                            </sizing>
+                            <gap>5</gap>
+                            <padding>
+                                <all>6</all>
+                            </padding>
+                        </flow-layout>
+
+                        <!-- The open section. -->
+                        <flow-layout direction="vertical" id="main">
+                            <children>
+                                <flow-layout direction="horizontal" id="heading-row">
+                                    <children>
+                                        <flow-layout direction="horizontal" id="heading-icon">
+                                            <children/>
+                                        </flow-layout>
+                                        <template name="title@jukz:theme">
+                                            <id>heading</id>
+                                        </template>
+                                    </children>
+                                    <gap>6</gap>
+                                    <vertical-alignment>center</vertical-alignment>
+                                </flow-layout>
+                                <label id="status">
+                                    <color>#FFB0B0B0</color>
+                                    <max-width>600</max-width>
+                                </label>
+                                <flow-layout direction="horizontal" id="tabs">
+                                    <children/>
+                                    <gap>5</gap>
+                                </flow-layout>
+                                <scroll direction="vertical">
+                                    <flow-layout direction="vertical" id="content">
+                                        <children/>
+                                        <sizing>
+                                            <horizontal method="fill">100</horizontal>
+                                        </sizing>
+                                        <gap>8</gap>
+                                        <padding>
+                                            <right>5</right>
+                                        </padding>
+                                    </flow-layout>
+                                    <sizing>
+                                        <horizontal method="fill">100</horizontal>
+                                        <vertical method="expand">100</vertical>
+                                    </sizing>
+                                    <scrollbar-thiccness>3</scrollbar-thiccness>
+                                </scroll>
+                                <label id="hint">
+                                    <color>#FF808080</color>
+                                    <max-width>600</max-width>
+                                </label>
+                                <flow-layout direction="horizontal" id="buttons">
+                                    <children/>
+                                    <gap>6</gap>
+                                </flow-layout>
+                            </children>
+                            <sizing>
+                                <horizontal method="expand">100</horizontal>
+                                <vertical method="fill">100</vertical>
+                            </sizing>
+                            <gap>7</gap>
+                            <padding>
+                                <all>10</all>
+                            </padding>
+                        </flow-layout>
+
+                        <!-- You, in 3D, on every section: wearing your picks, or trying on what you point at. -->
+                        <flow-layout direction="vertical" id="preview-column">
+                            <children>
+                                <flow-layout direction="vertical" id="model">
+                                    <children/>
+                                    <sizing>
+                                        <horizontal method="fill">100</horizontal>
+                                        <vertical method="expand">100</vertical>
+                                    </sizing>
+                                    <horizontal-alignment>center</horizontal-alignment>
+                                    <vertical-alignment>center</vertical-alignment>
+                                </flow-layout>
+                                <flow-layout direction="horizontal" id="nameplate">
+                                    <children/>
+                                    <gap>6</gap>
+                                    <vertical-alignment>center</vertical-alignment>
+                                    <padding>
+                                        <vertical>2</vertical>
+                                        <horizontal>4</horizontal>
+                                    </padding>
+                                    <surface>
+                                        <flat>#80000000</flat>
+                                    </surface>
+                                </flow-layout>
+                                <label id="trying">
+                                    <color>#FFEED49F</color>
+                                    <max-width>120</max-width>
+                                    <horizontal-text-alignment>center</horizontal-text-alignment>
+                                </label>
+                            </children>
+                            <sizing>
+                                <horizontal method="fixed">130</horizontal>
+                                <vertical method="fill">100</vertical>
+                            </sizing>
+                            <horizontal-alignment>center</horizontal-alignment>
+                            <gap>6</gap>
+                            <padding>
+                                <all>8</all>
+                            </padding>
+                        </flow-layout>
+                    </children>
+                    <sizing>
+                        <horizontal method="fill">100</horizontal>
+                        <vertical method="expand">100</vertical>
+                    </sizing>
+                    <gap>10</gap>
+                </flow-layout>
+            </children>
+            <gap>10</gap>
+        </flow-layout>
+    </components>
+
+    <templates>
+        <!-- A list heading ("In your cloud", "Only on this PC"). -->
+        <template name="section">
+            <label id="{{id}}">
+                <color>#FF7FB2FF</color>
+                <shadow>true</shadow>
+                <margins>
+                    <top>3</top>
+                </margins>
+            </label>
+        </template>
+
+        <!-- One world: its name, a status line, and buttons added from code. Surface set from code. -->
+        <template name="world-row">
+            <flow-layout direction="horizontal" id="row-{{id}}">
+                <children>
+                    <flow-layout direction="vertical">
+                        <children>
+                            <label id="name-{{id}}">
+                                <color>#FFFFFFFF</color>
+                                <shadow>true</shadow>
+                            </label>
+                            <label id="info-{{id}}">
+                                <color>#FF808080</color>
+                                <max-width>400</max-width>
+                            </label>
+                        </children>
+                        <sizing>
+                            <horizontal method="expand">100</horizontal>
+                        </sizing>
+                        <gap>2</gap>
+                    </flow-layout>
+                    <flow-layout direction="horizontal" id="actions-{{id}}">
+                        <children/>
+                        <gap>3</gap>
+                        <vertical-alignment>center</vertical-alignment>
+                    </flow-layout>
+                </children>
+                <sizing>
+                    <horizontal method="fill">100</horizontal>
+                </sizing>
+                <gap>4</gap>
+                <padding>
+                    <all>5</all>
+                </padding>
+                <vertical-alignment>center</vertical-alignment>
+            </flow-layout>
+        </template>
+
+        <!-- One item: icon on top, its state under it. Surface (bevel, tone) set from code. -->
+        <template name="item-card">
+            <flow-layout direction="vertical" id="card-{{id}}">
+                <children>
+                    <flow-layout direction="horizontal" id="icon-{{id}}">
+                        <children/>
+                    </flow-layout>
+                    <label id="state-{{id}}">
+                        <color>#FF808080</color>
+                    </label>
+                </children>
+                <sizing>
+                    <horizontal method="fixed">68</horizontal>
+                    <vertical method="fixed">64</vertical>
+                </sizing>
+                <horizontal-alignment>center</horizontal-alignment>
+                <vertical-alignment>center</vertical-alignment>
+                <gap>6</gap>
+            </flow-layout>
+        </template>
+    </templates>
+</owo-ui>

@@ -2,6 +2,7 @@ package dev.jukz.cosmetics
 
 //? if >=26.2 {
 /*import com.mojang.authlib.GameProfile
+import dev.jukz.compat.Identifier
 import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.math.Axis
 import dev.jukz.compat.GuiGraphics
@@ -24,10 +25,11 @@ import net.minecraft.world.entity.player.PlayerSkin
  * exactly as [CosmeticsFeatureRenderer] does in the world. (26.x: both are submitted into the picture
  * that [GuiModelRenderer] draws, like an entity's layers.)
  */
-class PlayerPreview(private val profile: GameProfile) {
+class PlayerPreview(private val profile: GameProfile, private val override: Pair<Identifier, Boolean>? = null) {
     private val client = Minecraft.getInstance()
     private val skin: PlayerSkin = client.skinManager.createLookup(profile, false).get()
-    private val slim = skin.model() == PlayerModelType.SLIM
+    private val slim = override?.second ?: (skin.model() == PlayerModelType.SLIM)
+    private val texture = override?.first ?: skin.body().texturePath()
     private val model = PlayerModel(client.entityModels.bakeLayer(if (slim) ModelLayers.PLAYER_SLIM else ModelLayers.PLAYER), slim)
     private val pose = AvatarRenderState() // a player standing still; the model is posed from it when drawn
 
@@ -49,7 +51,7 @@ class PlayerPreview(private val profile: GameProfile) {
 
     private fun drawModel(matrices: PoseStack, collector: SubmitNodeCollector, loadout: Map<Slot, String>) {
         val light = LightCoordsUtil.FULL_BRIGHT
-        collector.submitModel(model, pose, matrices, skin.body().texturePath(), light, OverlayTexture.NO_OVERLAY, 0, null)
+        collector.submitModel(model, pose, matrices, texture, light, OverlayTexture.NO_OVERLAY, 0, null)
         val ticks = (System.currentTimeMillis() % 1_000_000L) / 50f
         val renderType = RenderTypes.entityTranslucent(WHITE)
         for ((slot, itemId) in loadout) {
@@ -70,6 +72,7 @@ class PlayerPreview(private val profile: GameProfile) {
 }
 *///?} else if >=1.21.11 {
 /*import com.mojang.authlib.GameProfile
+import dev.jukz.compat.Identifier
 import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.math.Axis
 import dev.jukz.compat.id
@@ -91,10 +94,11 @@ import net.minecraft.world.entity.player.PlayerSkin
  * exactly as [CosmeticsFeatureRenderer] does in the world. (1.21.6+: 3D in a GUI is drawn into its own
  * texture by [GuiModelRenderer], then placed on the screen.)
  */
-class PlayerPreview(private val profile: GameProfile) {
+class PlayerPreview(private val profile: GameProfile, private val override: Pair<Identifier, Boolean>? = null) {
     private val client = Minecraft.getInstance()
     private val skin: PlayerSkin = client.skinManager.createLookup(profile, false).get()
-    private val slim = skin.model() == PlayerModelType.SLIM
+    private val slim = override?.second ?: (skin.model() == PlayerModelType.SLIM)
+    private val texture = override?.first ?: skin.body().texturePath()
     private val model = PlayerModel(client.entityModels.bakeLayer(if (slim) ModelLayers.PLAYER_SLIM else ModelLayers.PLAYER), slim).apply {
         // A relaxed stance instead of arms glued to the sides (the sleeves are the arms' children).
         leftArm.zRot = -0.12f; rightArm.zRot = 0.12f
@@ -118,7 +122,7 @@ class PlayerPreview(private val profile: GameProfile) {
 
     private fun drawModel(matrices: PoseStack, buffers: MultiBufferSource, loadout: Map<Slot, String>) {
         val light = LightTexture.FULL_BRIGHT
-        model.renderToBuffer(matrices, buffers.getBuffer(RenderTypes.entityTranslucent(skin.body().texturePath())), light, OverlayTexture.NO_OVERLAY)
+        model.renderToBuffer(matrices, buffers.getBuffer(RenderTypes.entityTranslucent(texture)), light, OverlayTexture.NO_OVERLAY)
         val ticks = (System.currentTimeMillis() % 1_000_000L) / 50f
         val buffer = buffers.getBuffer(RenderTypes.entityTranslucent(WHITE))
         for ((slot, itemId) in loadout) {
@@ -158,12 +162,14 @@ import com.mojang.math.Axis
  * screen too. Draws the vanilla player model with [profile]'s skin, then each 3D piece on its bone
  * exactly as [CosmeticsFeatureRenderer] does in the world.
  */
-class PlayerPreview(private val profile: GameProfile) {
+class PlayerPreview(private val profile: GameProfile, private val override: Pair<Identifier, Boolean>? = null) {
     private val client = Minecraft.getInstance()
     private val skin: PlayerSkin = client.skinManager.getInsecureSkin(profile)
+    private val slim = override?.second ?: (skin.model() == PlayerSkin.Model.SLIM)
+    private val texture = override?.first ?: skin.texture()
     private val model = PlayerModel<AbstractClientPlayer>(
-        client.entityModels.bakeLayer(if (skin.model() == PlayerSkin.Model.SLIM) ModelLayers.PLAYER_SLIM else ModelLayers.PLAYER),
-        skin.model() == PlayerSkin.Model.SLIM,
+        client.entityModels.bakeLayer(if (slim) ModelLayers.PLAYER_SLIM else ModelLayers.PLAYER),
+        slim,
     ).apply {
         young = false // entity models start out as babies until an entity sets this
         // A relaxed stance instead of arms glued to the sides.
@@ -188,7 +194,7 @@ class PlayerPreview(private val profile: GameProfile) {
         Lighting.setupForEntityInInventory()
         val consumers = context.bufferSource()
         val light = LightTexture.FULL_BRIGHT
-        model.renderToBuffer(matrices, consumers.getBuffer(RenderType.entityTranslucent(skin.texture())), light, OverlayTexture.NO_OVERLAY, -1)
+        model.renderToBuffer(matrices, consumers.getBuffer(RenderType.entityTranslucent(texture)), light, OverlayTexture.NO_OVERLAY, -1)
         val ticks = (System.currentTimeMillis() % 1_000_000L) / 50f
         val buffer = consumers.getBuffer(RenderType.entityTranslucent(WHITE))
         for ((slot, id) in loadout) {

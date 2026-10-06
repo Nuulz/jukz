@@ -10,7 +10,9 @@
     "WorldOpenFlowsMixin",
     "MinecraftDisconnectMixin",
     "PlayerTabOverlayMixin",
-    "WorldListEntryMixin"
+    "WorldListEntryMixin",
+    "PlayerInfoSkinMixin",
+    "AbstractClientPlayerSkinMixin"
   ],
   "injectors": {
     "defaultRequire": 1

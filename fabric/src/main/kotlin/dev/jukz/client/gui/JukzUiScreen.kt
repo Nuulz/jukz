@@ -38,6 +38,9 @@ abstract class JukzUiScreen(modelName: String) :
 
     private val modelId = Identifier.fromNamespaceAndPath("jukz", modelName)
 
+    /** A window-filling panel (the hub) instead of one sized to its content (dialogs). */
+    protected open val fullSize: Boolean get() = false
+
     /** The model the current UI was built from. BaseUIModelScreen's `model` is fixed at construction. */
     protected var ui: UIModel? = model
         private set
@@ -52,11 +55,22 @@ abstract class JukzUiScreen(modelName: String) :
      */
     override fun createAdapter(): OwoUIAdapter<FlowLayout> {
         val content = ui!!.createAdapterWithoutScreen(0, 0, 0, 0, FlowLayout::class.java).rootComponent
-        content.sizing(Sizing.content(), Sizing.content())
         val frame = themed(FlowLayout::class.java, "screen")
-        frame.childById(FlowLayout::class.java, "panel").child(content)
+        val panel = frame.childById(FlowLayout::class.java, "panel").child(content).surface(JukzSurface.window())
+        if (fullSize) {
+            content.sizing(Sizing.fill(100), Sizing.fill(100))
+            panel.sizing(Sizing.fill(94), Sizing.fill(92))
+        } else {
+            content.sizing(Sizing.content(), Sizing.content())
+        }
         frame.sizing(Sizing.fill(100), Sizing.fill(100))
         return OwoUIAdapter.create(this) { _, _ -> frame }
+    }
+
+    /** After every build (and rebuild): plain buttons get the jukz pixel look. */
+    override fun init() {
+        super.init()
+        uiAdapter?.rootComponent?.let(JukzSurface::restyle)
     }
 
     override fun tick() {

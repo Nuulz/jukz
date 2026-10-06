@@ -4,6 +4,8 @@ import dev.jukz.compat.isOwner
 import dev.jukz.config.JukzState
 import dev.jukz.core.model.WorldId
 import dev.jukz.net.WorldAccessPayload
+import dev.jukz.net.SkinPayload
+import dev.jukz.skins.SharedSkins
 import dev.jukz.runtime.HostSession
 import dev.jukz.world.WorldIdSidecar
 import dev.jukz.world.WorldIdState
@@ -44,10 +46,24 @@ object JukzMod : ModInitializer {
         *///?} else {
         PayloadTypeRegistry.playS2C().register(WorldAccessPayload.ID, WorldAccessPayload.CODEC)
         //?}
+        // Player-chosen skins travel both ways over the game connection (see SharedSkins).
+        //? if >=26.2 {
+        /*PayloadTypeRegistry.clientboundPlay().register(SkinPayload.ID, SkinPayload.CODEC)
+        PayloadTypeRegistry.serverboundPlay().register(SkinPayload.ID, SkinPayload.CODEC)
+        *///?} else {
+        PayloadTypeRegistry.playS2C().register(SkinPayload.ID, SkinPayload.CODEC)
+        PayloadTypeRegistry.playC2S().register(SkinPayload.ID, SkinPayload.CODEC)
+        //?}
+        ServerPlayNetworking.registerGlobalReceiver(SkinPayload.ID) { payload, context ->
+            val player = context.player()
+            player.level().server?.let { SharedSkins.receive(it, player, payload) }
+        }
+        ServerPlayConnectionEvents.DISCONNECT.register { handler, _ -> SharedSkins.forget(handler.player.uuid) }
 
         // A player the server let in gets the world key + handoff gate, over the game connection.
         ServerPlayConnectionEvents.JOIN.register { handler, _, server ->
             if (!server.isOwner(handler.player.gameProfile)) sendWorldAccess(handler.player)
+            SharedSkins.greet(handler.player)
         }
 
         ServerLifecycleEvents.SERVER_STARTING.register { _ ->
@@ -67,6 +83,7 @@ object JukzMod : ModInitializer {
         }
 
         ServerLifecycleEvents.SERVER_STOPPING.register { server ->
+            SharedSkins.clear()
             HostSession.markServerStopped()
             // Hand the save dir to the session so it can hand off to any connected guest (over the live
             // control channel) before withdrawing. Whether a guest is connected is read from the
