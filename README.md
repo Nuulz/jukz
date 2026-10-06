@@ -20,7 +20,7 @@ When the host leaves, someone else takes over. When everyone leaves, the world w
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-orange?style=for-the-badge" /></a>
 </p>
 
-<img src="docs/screenshots/playing.png" alt="Two players in the same world, joined through jukz" width="760">
+<img src="docs/gifs/playing.gif" alt="Two players in the same world, joined through jukz" width="760">
 
 </div>
 
@@ -35,11 +35,11 @@ data, because jukz brings its own relay.
 
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/world-list.png" alt="The world list with a green dot on a world someone is hosting"></td>
+<td width="50%"><img src="docs/gifs/join.gif" alt="Pasting a share code: jukz looks for the host and joins the world"></td>
 <td width="50%"><img src="docs/screenshots/searching.png" alt="Opening a world: looking for a live host"></td>
 </tr>
 <tr>
-<td>A <b>green dot</b> in your world list means a friend is playing it right now. Click it to join.</td>
+<td>Paste a friend's code: jukz finds who is hosting and drops you into their world.</td>
 <td>Opening a world first checks if anyone is already in it. If so, you join instead of splitting the world.</td>
 </tr>
 </table>
@@ -50,11 +50,11 @@ Quit alone? The world is backed up to the cloud, and whoever opens it next conti
 
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/host-left.png" alt="The host left: a guest can take over"></td>
-<td width="50%"><img src="docs/screenshots/cloud-upload.png" alt="Saving the world to the cloud"></td>
+<td width="50%"><img src="docs/gifs/host-left.gif" alt="The host left: a guest can take over"></td>
+<td width="50%"><img src="docs/gifs/cloud.gif" alt="Saving the world to the cloud"></td>
 </tr>
 <tr>
-<td>The host left with you inside: take over and keep playing.</td>
+<td>The host left with you inside: one click on <b>Host now</b> and you keep playing.</td>
 <td>Nobody around? Your world is saved to the cloud for next time.</td>
 </tr>
 </table>
@@ -69,11 +69,13 @@ on the title screen, the cube in the pause menu, or Mod Menu → Config). A side
 you stand on the right in 3D on every one of them, and it fills your screen. On a small window or a big
 GUI scale it switches to a compact layout: icons in the menu, names in tooltips.
 
-<p align="center"><img src="docs/screenshots/hub-profile.png" alt="The jukz hub: profile with uploads, retention, storage and cosmetics" width="720"></p>
+<p align="center"><img src="docs/gifs/hub-profile.gif" alt="The jukz hub: profile with uploads, retention, storage and cosmetics" width="720"></p>
 
 ### 🎩 Cosmetics, free
 Hats, glasses, a mustache, backpacks, wings, and a pixel badge next to your name in the tab list.
 Everyone running jukz sees what you wear. Nothing here is a resource pack.
+
+<p align="center"><img src="docs/gifs/cosmetics-world.gif" alt="Two players in the world wearing a crown with wings and a top hat" width="720"></p>
 
 <table>
 <tr>
@@ -85,7 +87,7 @@ Everyone running jukz sees what you wear. Nothing here is a resource pack.
 <td>…and wings or the jukz backpack.</td>
 </tr>
 <tr>
-<td><img src="docs/screenshots/hub-cosmetics.png" alt="The cosmetics section of the hub with a 3D preview"></td>
+<td><img src="docs/gifs/hub-cosmetics.gif" alt="The cosmetics section of the hub with a 3D preview"></td>
 <td><img src="docs/screenshots/cosmetics-tab.png" alt="Badges in the tab list"></td>
 </tr>
 <tr>
