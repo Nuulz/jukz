@@ -4,6 +4,12 @@ Every version gets a `## X.Y.Z` section with `- ` bullets. The mod shows the sec
 version you last played in its "jukz was updated" screen, and a GitHub release whose notes are empty
 gets its section as notes. Write them for players, not developers.
 
+## 0.4.1
+
+Patch for 0.4.0.
+
+- Fixed: on a PC whose clock is off (for example, a few hours behind), the world never went online, nobody could join by code, and the cloud backup failed when closing the world. jukz already corrected the clock for part of its requests; now it does for all of them.
+
 ## 0.4.0
 
 - New jukz hub: your profile, cosmetics, skin and cloud worlds in one window that fills the screen, with a side menu and you in 3D on every section. A new pixel look across all jukz screens.
