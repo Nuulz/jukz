@@ -68,6 +68,36 @@ object JoinCoordinator {
      */
     enum class TakeoverIntent { LIVE_HANDOFF, GHOST }
 
+    /**
+     * We're in a jukz world we entered through Minecraft's own LAN list, so no jukz session watches the
+     * host: open one in the background (no screens, the game stays connected) so a handoff reaches us.
+     */
+    /** A jukz join is connecting the game right now; its session is installed once it returns. */
+    @Volatile private var joining = false
+
+    fun attachIfMissing(worldId: WorldId) {
+        val client = Minecraft.getInstance()
+        if (joining || GuestSession.isActive || client.singleplayerServer != null) return
+        val dialer = defaultDialer()
+        val shortCode = worldId.shortCode()
+        val controller = JoinController(
+            Discovery.registry, dialer, MinecraftGameHandoff { null }, SystemClock,
+            JoinConfig(game = currentGame),
+            onHostLost = { wid, offer, target, gen -> onHostLeaving(client, wid, shortCode, offer, target, gen, dialer) },
+            onHostClosed = { onHostClosedAccess(client, shortCode) },
+        )
+        GuestSession.install(controller)
+        Thread {
+            val result = runCatching { runBlocking { controller.attach(worldId) } }.getOrElse { JoinResult.Failed(it.message ?: it.toString()) }
+            if (result is JoinResult.Connected) {
+                JukzMod.logger.info("jukz: joined {} from the LAN list — watching the host for a handoff", shortCode)
+            } else {
+                JukzMod.logger.info("jukz: joined {} from the LAN list but couldn't reach its host for handoffs ({})", shortCode, result)
+                controller.close()
+            }
+        }.apply { name = "jukz-attach"; isDaemon = true }.start()
+    }
+
     fun start(
         worldId: WorldId,
         shortCode: String,
@@ -94,15 +124,17 @@ object JoinCoordinator {
         client.openScreen(SearchingHostScreen(shortCode, onCancel))
 
         Thread {
+            joining = true
             val result = try {
                 runBlocking { controller.join(worldId) }
             } catch (e: Throwable) {
                 JoinResult.Failed(e.message ?: e.toString())
             }
-            if (cancelled.get()) return@Thread
+            if (cancelled.get()) { joining = false; return@Thread }
             // Track the live session so leaving the world (a normal disconnect) tears the controller
             // down — otherwise its handoff watcher outlives the visit and pops a stale "Host now".
             if (result is JoinResult.Connected) GuestSession.install(controller)
+            joining = false
             if (result is JoinResult.HostUnavailable) {
                 // The rendezvous signs download URLs without checking R2 for the object (it stays
                 // stateless), so a non-null sign response does NOT mean a snapshot exists. Probe the

@@ -7,6 +7,11 @@ import dev.jukz.JukzMod
 import dev.jukz.config.JukzConfig
 import dev.jukz.cosmetics.CosmeticCatalog.Item
 import dev.jukz.cosmetics.CosmeticCatalog.Slot
+import dev.jukz.net.LoadoutPayload
+import dev.jukz.skins.MojangSkins
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
+import net.fabricmc.loader.api.FabricLoader
+import java.nio.file.Files
 import net.minecraft.client.Minecraft
 import java.net.URI
 import java.net.http.HttpClient
@@ -32,6 +37,10 @@ import java.util.concurrent.TimeUnit
  *   certificate Mojang gives every Microsoft account (the server-style `joinServer` / `hasJoined`
  *   handshake is the fallback), which also registers you, so others see what you wear. [equip] changes
  *   one slot.
+ * - **No Mojang account:** there is nothing to sign in with, so the picks are kept on this PC
+ *   (`config/jukz/cosmetics.txt`) and travel like a local skin: over the game connection to the host,
+ *   which passes them on ([LoadoutPayload], [SharedLoadouts]). Only free items; seen by the friends you
+ *   play with through jukz.
  *
  * Every item is free today. Paid ones are already modelled end to end (prices, owned vs locked), so
  * selling one later is a catalog change plus an entitlement grant on the Worker — no mod update.
@@ -74,10 +83,135 @@ object Cosmetics {
 
     val enabled: Boolean get() = JukzConfig.rendezvousUrl != null
 
+    // ---- without a Mojang account -------------------------------------------------------------
+
+    private val localFile = FabricLoader.getInstance().configDir.resolve("jukz").resolve("cosmetics.txt")
+
+    /** Your picks when playing without a Mojang account (saved on this PC). */
+    @Volatile private var localPicks: Map<Slot, String> = runCatching {
+        if (Files.exists(localFile)) parsePicks(LoadoutPayload.decode(Files.readString(localFile).trim())) else emptyMap()
+    }.getOrDefault(emptyMap())
+
+    /** What friends without a Mojang account wear, as their host passed it on (this world only). */
+    private val friends = ConcurrentHashMap<UUID, Map<Slot, String>>()
+    /** Where friends moved their pieces, as their host passed it on (this world only). */
+    private val friendFits = ConcurrentHashMap<UUID, Map<Slot, CosmeticFit>>()
+
+    private val fitFile = FabricLoader.getInstance().configDir.resolve("jukz").resolve("cosmetics-fit.txt")
+
+    /** Where you moved your pieces (saved on this PC, any account). */
+    @Volatile private var myFits: Map<Slot, CosmeticFit> = runCatching {
+        if (Files.exists(fitFile)) parseFits(LoadoutPayload.decode(Files.readString(fitFile).trim()), prefixed = false) else emptyMap()
+    }.getOrDefault(emptyMap())
+
+    fun myFit(slot: Slot): CosmeticFit = myFits[slot] ?: CosmeticFit.NONE
+
+    fun fitFor(player: UUID, slot: Slot): CosmeticFit =
+        if (player == Minecraft.getInstance().gameProfile?.id) myFit(slot) else friendFits[player]?.get(slot) ?: CosmeticFit.NONE
+
+    /** Move your piece in [slot]: saved on this PC and sent to the world you're in. */
+    fun setFit(slot: Slot, fit: CosmeticFit) {
+        val fits = if (fit.isZero) myFits - slot else myFits + (slot to fit)
+        runCatching {
+            Files.createDirectories(fitFile.parent)
+            Files.writeString(fitFile, LoadoutPayload.encode(fits.mapKeys { it.key.key }.mapValues { it.value.encode() }))
+        }.onFailure { JukzMod.logger.warn("jukz: couldn't save cosmetic positions: {}", it.message) }
+        myFits = fits
+        share()
+    }
+
+    private fun parseFits(raw: Map<String, String>, prefixed: Boolean): Map<Slot, CosmeticFit> = raw.mapNotNull { (k, v) ->
+        if (prefixed && !k.startsWith("~")) return@mapNotNull null
+        val slot = Slot.of(k.removePrefix("~")) ?: return@mapNotNull null
+        if (slot == Slot.BADGE) return@mapNotNull null
+        CosmeticFit.decode(v)?.takeUnless { it.isZero }?.let { slot to it }
+    }.toMap()
+
+    /** No Mojang account (so no sign-in): cosmetics are kept on this PC and shared over the game connection. */
+    val local: Boolean get() {
+        MojangSkins.check()
+        return account !is Account.SignedIn && MojangSkins.account == MojangSkins.Account.OFFLINE
+    }
+
+    /** Whether you can change what you wear right now. */
+    val canWear: Boolean get() = enabled && (account is Account.SignedIn || local)
+
+    /** Whether you can wear [item]: owned when signed in; any free item without a Mojang account. */
+    fun owns(item: Item): Boolean = when (val me = account) {
+        is Account.SignedIn -> item.id in me.owned
+        else -> local && item.availability == CosmeticCatalog.Availability.FREE
+    }
+
+    private fun myPicks(): Map<Slot, String>? = (account as? Account.SignedIn)?.picks ?: localPicks.takeIf { local }
+
+    /** Until when (ms) to keep trying to send your picks after joining: the host's channels arrive late. */
+    @Volatile private var shareUntil = 0L
+
+    fun shareSoon() {
+        shareUntil = System.currentTimeMillis() + 15_000
+    }
+
+    /** Every client tick: finish a pending [shareSoon]. */
+    fun tick() {
+        if (shareUntil == 0L) return
+        if (System.currentTimeMillis() > shareUntil) { shareUntil = 0L; return }
+        if (share()) shareUntil = 0L
+    }
+
+    /**
+     * Send where you moved your pieces, and your picks too without a Mojang account, to the world you're
+     * in if its host runs jukz; true when sent (or there's nothing to send).
+     */
+    private fun share(): Boolean {
+        val local = local
+        if (!local && account !is Account.SignedIn && MojangSkins.account == MojangSkins.Account.CHECKING) return false
+        if (!local && myFits.isEmpty()) return true
+        val me = Minecraft.getInstance().gameProfile?.id ?: return false
+        if (!ClientPlayNetworking.canSend(LoadoutPayload.ID)) return false
+        val data = myFits.entries.associate { "~${it.key.key}" to it.value.encode() } +
+            (if (local) localPicks.mapKeys { it.key.key } + ("!" to "1") else emptyMap())
+        ClientPlayNetworking.send(LoadoutPayload(me, data))
+        return true
+    }
+
+    /** A friend's positions (and picks, without a Mojang account) arrived over the game connection. */
+    fun receive(payload: LoadoutPayload) {
+        if (payload.owner == Minecraft.getInstance().gameProfile?.id) return
+        friendFits[payload.owner] = parseFits(payload.loadout, prefixed = true)
+        if (payload.loadout["!"] == "1") friends[payload.owner] = parsePicks(payload.loadout)
+    }
+
+    fun forgetFriends() {
+        friends.clear()
+        friendFits.clear()
+    }
+
+    /** Known slots only, and only free items (nobody gets a paid or special one this way). */
+    private fun parsePicks(raw: Map<String, String>): Map<Slot, String> = raw.mapNotNull { (k, v) ->
+        val slot = Slot.of(k) ?: return@mapNotNull null
+        val ok = v == NO_BADGE || catalog.item(v)?.let { it.slot == slot && it.availability == CosmeticCatalog.Availability.FREE } == true
+        if (ok) slot to v else null
+    }.toMap()
+
+    private fun equipLocal(slot: Slot, item: String, done: (String?) -> Unit) {
+        val picks = localPicks + (slot to item)
+        runCatching {
+            Files.createDirectories(localFile.parent)
+            Files.writeString(localFile, LoadoutPayload.encode(picks.mapKeys { it.key.key }))
+        }.onFailure { return done("couldn't save: ${it.message}") }
+        localPicks = picks
+        Minecraft.getInstance().execute { share() }
+        done(null)
+    }
+
+    // ---- loadouts -----------------------------------------------------------------------------
+
     /** What [player] wears (slot → item id; empty = nothing, or not known yet — a lookup is then queued). */
     fun loadoutFor(player: UUID): Map<Slot, String> {
         if (!enabled) return emptyMap()
         (account as? Account.SignedIn)?.takeIf { it.id == player }?.let { return visible(it.picks) }
+        if (player == Minecraft.getInstance().gameProfile?.id && local) return visible(localPicks)
+        friends[player]?.let { return visible(it) }
         val entry = known[player]
         if (entry == null || System.currentTimeMillis() - entry.at > TTL_MS) queued += player
         return entry?.loadout ?: emptyMap()
@@ -88,8 +222,8 @@ object Cosmetics {
 
     /** What you wear in [slot] right now (your pick, or the default badge), or null. */
     fun wearing(slot: Slot): Item? {
-        val me = account as? Account.SignedIn ?: return null
-        return catalog.item(visible(me.picks)[slot])
+        val picks = myPicks() ?: return null
+        return catalog.item(visible(picks)[slot])
     }
 
     /** Picks as others see them: the badge defaults to the catalog's; "none" and unknown ids drop out. */
@@ -128,6 +262,7 @@ object Cosmetics {
 
     /** Put [item] (or [NO_BADGE]) in [slot]; [done] runs on the worker thread with an error message or null. */
     fun equip(slot: Slot, item: String, done: (String?) -> Unit = {}) {
+        if (account !is Account.SignedIn && local) return equipLocal(slot, item, done)
         val current = account as? Account.SignedIn ?: return done("not signed in")
         worker.execute {
             val error = runCatching {

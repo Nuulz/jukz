@@ -5,6 +5,7 @@ import dev.jukz.compat.currentScreen
 import dev.jukz.compat.openScreen
 import dev.jukz.compat.windowHandle
 import dev.jukz.client.GuestSession
+import dev.jukz.client.JoinCoordinator
 import dev.jukz.client.HostCoordinator
 import dev.jukz.client.CloudWorlds
 import dev.jukz.client.gui.AccountScreen
@@ -45,6 +46,7 @@ import net.minecraft.client.renderer.entity.player.PlayerRenderer
 import dev.jukz.client.gui.HostLeavingScreen
 import dev.jukz.client.gui.UiHotReload
 import dev.jukz.net.WorldAccessPayload
+import dev.jukz.net.LoadoutPayload
 import dev.jukz.net.SkinPayload
 import dev.jukz.skins.LocalSkins
 import dev.jukz.world.WorldKeyStore
@@ -121,6 +123,9 @@ object JukzClient : ClientModInitializer {
         // The host lets us in: keep the world key (to revive it from the cloud later) and the handoff gate.
         ClientPlayNetworking.registerGlobalReceiver(WorldAccessPayload.ID) { payload, _ ->
             WorldKeyStore.rememberFromHost(WorldId.of(payload.worldId), payload.key)
+            // Entered through Minecraft's own LAN list instead of jukz: watch the host now, so the
+            // world can still be handed to us. (install() keeps the gate, so set it after.)
+            JoinCoordinator.attachIfMissing(WorldId.of(payload.worldId))
             GuestSession.onWorldAccess(payload.gate)
         }
 
@@ -186,10 +191,12 @@ object JukzClient : ClientModInitializer {
         // Skins chosen in the hub: ours (saved on this PC) and friends' (over the game connection).
         LocalSkins.init()
         ClientPlayNetworking.registerGlobalReceiver(SkinPayload.ID) { payload, _ -> LocalSkins.receive(payload) }
-        ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { LocalSkins.tick() })
+        ClientPlayNetworking.registerGlobalReceiver(LoadoutPayload.ID) { payload, _ -> Cosmetics.receive(payload) }
+        ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { LocalSkins.tick(); Cosmetics.tick() })
 
         ClientPlayConnectionEvents.JOIN.register { _, _, client ->
             LocalSkins.shareSoon()
+            Cosmetics.shareSoon()
             client.singleplayerServer?.let { HostCoordinator.autoHost(it) }
             Cosmetics.ensureSignedIn() // registers us, so others see our tab-list badge
         }
@@ -205,6 +212,7 @@ object JukzClient : ClientModInitializer {
         // apply (require = 0). It is a no-op when the mixin already replaced the screen.
         ClientPlayConnectionEvents.DISCONNECT.register { _, client ->
             LocalSkins.forgetFriends()
+            Cosmetics.forgetFriends()
             if (GuestSession.isActive) {
                 GuestSession.markDisconnected()
                 client.execute {

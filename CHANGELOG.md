@@ -4,6 +4,12 @@ Every version gets a `## X.Y.Z` section with `- ` bullets. The mod shows the sec
 version you last played in its "jukz was updated" screen, and a GitHub release whose notes are empty
 gets its section as notes. Write them for players, not developers.
 
+## 0.4.2
+
+- Cosmetics without a Mojang account: you can now wear every free hat, face piece, back piece and badge. They stay on your PC and go to the friends you play with through jukz, over the game connection, like your skin. Paid and special items still need a Microsoft account.
+- Move your cosmetics: in the hub, ▲▼ raise or lower the piece you're wearing and ◀▶ bring it closer to or farther from you, half a pixel per click. Your friends see it where you put it.
+- Fixed: joining a friend from Minecraft's own LAN list (instead of through jukz) didn't count you as a guest, so when the host left, the world went to the cloud instead of passing to you.
+
 ## 0.4.1
 
 Patch for 0.4.0.

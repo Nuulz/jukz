@@ -17,6 +17,7 @@ import dev.jukz.cosmetics.CosmeticCatalog
 import dev.jukz.cosmetics.CosmeticCatalog.Availability
 import dev.jukz.cosmetics.CosmeticCatalog.Slot
 import dev.jukz.cosmetics.Cosmetics
+import dev.jukz.cosmetics.CosmeticFit
 import dev.jukz.cosmetics.Cosmetics.Account
 import dev.jukz.cosmetics.ModelIcon
 import dev.jukz.cosmetics.PlayerPreview
@@ -313,12 +314,14 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
 
     private fun buildCosmetics(root: FlowLayout, content: FlowLayout) {
         val account = Cosmetics.account
-        val me = account as? Account.SignedIn
+        val me = Cosmetics.canWear
+        val local = Cosmetics.local
         val (message, color) = when {
             !Cosmetics.enabled -> "Cosmetics need the rendezvous server (rendezvous.url is \"none\")." to ACCENT_ERROR
             saveError != null -> "Couldn't save: $saveError" to ACCENT_ERROR
+            local -> "No Mojang account: what you wear goes to the friends you play with through jukz." to ACCENT_ACTION
             account is Account.Failed -> "Couldn't sign in: ${account.reason}" to ACCENT_ERROR
-            me != null -> "Point at something to try it on, click to wear it." to COLOR_SUBTLE
+            me -> "Point at something to try it on, click to wear it." to COLOR_SUBTLE
             else -> "Signing in with your Minecraft account…" to COLOR_SUBTLE
         }
         status(root, message, color)
@@ -339,14 +342,34 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
             content.child(UIContainers.horizontalFlow(Sizing.content(), Sizing.content()).gap(CARD_GAP).also { r -> row.forEach(r::child) })
         }
 
-        hint(root,
-            if (tab == Slot.BADGE) "Your badge sits left of your name in the tab list, for everyone running jukz."
-            else "Everyone running jukz sees what you wear. All cosmetics are free for now.")
-        if (account is Account.Failed) retryButton(root)
+        val fitting = me && tab != Slot.BADGE && Cosmetics.wearing(tab) != null
+        val fit = Cosmetics.myFit(tab)
+        hint(root, when {
+            tab == Slot.BADGE -> "Your badge sits left of your name in the tab list, for everyone running jukz."
+            fitting -> "Position: up ${fit.up} · out ${fit.out} px. ▲▼ move it up or down, ◀▶ closer to or farther from you."
+            else -> "Everyone running jukz sees what you wear. All cosmetics are free for now."
+        })
+        if (account is Account.Failed && !local) retryButton(root)
+        if (fitting) fitButtons(root, fit)
         actionButton(root, "Make your own", HubIcons.PENCIL, 112) {
             // Signed in: the link also verifies the creator account, so rewards reach this Minecraft account.
             Cosmetics.creatorPageUrl { url -> minecraft?.execute { ConfirmLinkScreen.confirmLinkNow(this, url, true) } }
         }.tooltip(Component.literal("Design a cosmetic in Blockbench and send it in. If it gets in, it's yours to keep."))
+    }
+
+    /** Lunar-style nudges for the worn piece of this tab: up/down and closer/farther, half a pixel a click. */
+    private fun fitButtons(root: FlowLayout, fit: CosmeticFit) {
+        fun nudge(label: String, tip: String, change: (CosmeticFit) -> CosmeticFit) =
+            addButton(root, "buttons", Component.literal(label), width = 20) {
+                val next = change(Cosmetics.myFit(tab))
+                Cosmetics.setFit(tab, next.copy(up = CosmeticFit.clamp(next.up), out = CosmeticFit.clamp(next.out)))
+                rebuild()
+            }.tooltip(Component.literal(tip))
+        nudge("▲", "Move up") { it.copy(up = it.up + CosmeticFit.STEP) }
+        nudge("▼", "Move down") { it.copy(up = it.up - CosmeticFit.STEP) }
+        nudge("◀", "Closer to you") { it.copy(out = it.out - CosmeticFit.STEP) }
+        nudge("▶", "Farther from you") { it.copy(out = it.out + CosmeticFit.STEP) }
+        if (!fit.isZero) addButton(root, "buttons", Component.literal("Reset"), width = 40) { Cosmetics.setFit(tab, CosmeticFit.NONE); rebuild() }
     }
 
     /**
@@ -367,23 +390,23 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
 
     private fun sizeCard(c: FlowLayout) = c.sizing(Sizing.fixed(card), Sizing.fixed(card - 4))
 
-    private fun noneCard(me: Account.SignedIn?): FlowLayout {
+    private fun noneCard(me: Boolean): FlowLayout {
         val card = ui!!.expandTemplate(FlowLayout::class.java, "item-card", mapOf("id" to "none")).also(::sizeCard)
-        val wearingNothing = me != null && Cosmetics.wearing(tab) == null
+        val wearingNothing = me && Cosmetics.wearing(tab) == null
         card.childById(FlowLayout::class.java, "icon-none").child(HubIcons.Icon(HubIcons.NONE, 18))
         card.childById(LabelComponent::class.java, "state-none")
             .text(Component.literal(if (wearingNothing) "✔ on" else "None"))
             .color(Color.ofArgb(if (wearingNothing) COLOR_LIVE else JukzSurface.TEXT_DIM))
         card.tooltip(Component.literal(if (tab == Slot.BADGE) "Hide your badge" else "Wear nothing here"))
-        wire(card, if (wearingNothing) Tone.ON else Tone.IDLE, null, clickable = me != null && !wearingNothing) { save(Cosmetics.NO_BADGE) }
+        wire(card, if (wearingNothing) Tone.ON else Tone.IDLE, null, clickable = me && !wearingNothing) { save(Cosmetics.NO_BADGE) }
         return card
     }
 
-    private fun card(item: CosmeticCatalog.Item, me: Account.SignedIn?): FlowLayout {
+    private fun card(item: CosmeticCatalog.Item, me: Boolean): FlowLayout {
         val card = ui!!.expandTemplate(FlowLayout::class.java, "item-card", mapOf("id" to item.id)).also(::sizeCard)
-        val owned = me != null && item.id in me.owned
-        val wearing = me != null && Cosmetics.wearing(item.slot)?.id == item.id
-        val locked = me != null && !owned
+        val owned = me && Cosmetics.owns(item)
+        val wearing = me && Cosmetics.wearing(item.slot)?.id == item.id
+        val locked = me && !owned
 
         card.childById(FlowLayout::class.java, "icon-${item.id}").child(ItemIcon(item, icon, dimmed = locked))
         val (state, stateColor) = when {

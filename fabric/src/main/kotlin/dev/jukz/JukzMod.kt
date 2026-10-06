@@ -4,7 +4,9 @@ import dev.jukz.compat.isOwner
 import dev.jukz.config.JukzState
 import dev.jukz.core.model.WorldId
 import dev.jukz.net.WorldAccessPayload
+import dev.jukz.net.LoadoutPayload
 import dev.jukz.net.SkinPayload
+import dev.jukz.cosmetics.SharedLoadouts
 import dev.jukz.skins.SharedSkins
 import dev.jukz.runtime.HostSession
 import dev.jukz.world.WorldIdSidecar
@@ -50,20 +52,33 @@ object JukzMod : ModInitializer {
         //? if >=26.2 {
         /*PayloadTypeRegistry.clientboundPlay().register(SkinPayload.ID, SkinPayload.CODEC)
         PayloadTypeRegistry.serverboundPlay().register(SkinPayload.ID, SkinPayload.CODEC)
+        PayloadTypeRegistry.clientboundPlay().register(LoadoutPayload.ID, LoadoutPayload.CODEC)
+        PayloadTypeRegistry.serverboundPlay().register(LoadoutPayload.ID, LoadoutPayload.CODEC)
         *///?} else {
         PayloadTypeRegistry.playS2C().register(SkinPayload.ID, SkinPayload.CODEC)
         PayloadTypeRegistry.playC2S().register(SkinPayload.ID, SkinPayload.CODEC)
+        PayloadTypeRegistry.playS2C().register(LoadoutPayload.ID, LoadoutPayload.CODEC)
+        PayloadTypeRegistry.playC2S().register(LoadoutPayload.ID, LoadoutPayload.CODEC)
         //?}
         ServerPlayNetworking.registerGlobalReceiver(SkinPayload.ID) { payload, context ->
             val player = context.player()
             player.level().server?.let { SharedSkins.receive(it, player, payload) }
         }
-        ServerPlayConnectionEvents.DISCONNECT.register { handler, _ -> SharedSkins.forget(handler.player.uuid) }
+        // Same path for the cosmetics of players without a Mojang account (see SharedLoadouts).
+        ServerPlayNetworking.registerGlobalReceiver(LoadoutPayload.ID) { payload, context ->
+            val player = context.player()
+            player.level().server?.let { SharedLoadouts.receive(it, player, payload) }
+        }
+        ServerPlayConnectionEvents.DISCONNECT.register { handler, _ ->
+            SharedSkins.forget(handler.player.uuid)
+            SharedLoadouts.forget(handler.player.uuid)
+        }
 
         // A player the server let in gets the world key + handoff gate, over the game connection.
         ServerPlayConnectionEvents.JOIN.register { handler, _, server ->
             if (!server.isOwner(handler.player.gameProfile)) sendWorldAccess(handler.player)
             SharedSkins.greet(handler.player)
+            SharedLoadouts.greet(handler.player)
         }
 
         ServerLifecycleEvents.SERVER_STARTING.register { _ ->
@@ -84,6 +99,7 @@ object JukzMod : ModInitializer {
 
         ServerLifecycleEvents.SERVER_STOPPING.register { server ->
             SharedSkins.clear()
+            SharedLoadouts.clear()
             HostSession.markServerStopped()
             // Hand the save dir to the session so it can hand off to any connected guest (over the live
             // control channel) before withdrawing. Whether a guest is connected is read from the

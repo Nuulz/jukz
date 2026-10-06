@@ -74,6 +74,19 @@ class JoinController(
     @Volatile private var control: FramedMessageChannel? = null
     @Volatile private var relay: LocalTcpRelay? = null
 
+    /** Set by [attach]: the game is already connected, so a handshake only opens the watch. */
+    @Volatile private var attachOnly = false
+
+    /**
+     * For a player already in the host's world through Minecraft's own LAN list (not through jukz): run
+     * the same handshake, but instead of connecting the game, only keep the control channel open. The
+     * host then counts this guest and hands the world to them when it leaves, like any jukz guest.
+     */
+    suspend fun attach(worldId: WorldId): JoinResult {
+        attachOnly = true
+        return join(worldId)
+    }
+
     /**
      * Run the full join. Safe to call once per controller; build a new one to retry.
      * The record's endpoints are candidates tried in order (LAN address first, then the
@@ -147,6 +160,11 @@ class JoinController(
         target: DialTarget,
         sm: JoinerStateMachine,
     ): JoinResult {
+        if (attachOnly) {
+            sm.markConnected()
+            startLiveness(worldId, record.token, target)
+            return JoinResult.Connected(RELAY_HOST, 0)
+        }
         val relay = LocalTcpRelay(openRemote = {
             runBlocking { dialer.dial(target) }.also { ConnectionType.DATA.writeTo(it) }
         })

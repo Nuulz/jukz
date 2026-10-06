@@ -41,6 +41,7 @@ class CosmeticsFeatureRenderer(
             val bone = if (slot == Slot.BACK) parentModel.body else parentModel.head
             bone.translateAndRotate(matrices)
             matrices.scale(PIXEL, PIXEL, PIXEL) // bone space is in blocks; models are in skin pixels
+            CosmeticFit.apply(matrices, slot, Cosmetics.fitFor(player.uuid, slot))
             VoxelMesh.animate(model, state.ageInTicks, matrices)
             collector.submitCustomGeometry(matrices, renderType) { pose, buffer -> VoxelMesh.emit(pose, buffer, model, light, overlay) }
             matrices.popPose()
@@ -107,6 +108,7 @@ class CosmeticsFeatureRenderer(
             val bone = if (slot == Slot.BACK) parentModel.body else parentModel.head
             bone.translateAndRotate(matrices)
             matrices.scale(PIXEL, PIXEL, PIXEL) // bone space is in blocks; models are in skin pixels
+            CosmeticFit.apply(matrices, slot, Cosmetics.fitFor(entity.uuid, slot))
             VoxelMesh.animate(model, animationProgress, matrices)
             VoxelMesh.emit(matrices.last(), buffer, model, light, overlay)
             matrices.popPose()

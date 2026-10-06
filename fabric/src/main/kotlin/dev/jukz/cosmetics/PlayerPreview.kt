@@ -60,6 +60,7 @@ class PlayerPreview(private val profile: GameProfile, private val override: Pair
             matrices.pushPose()
             (if (slot == Slot.BACK) model.body else model.head).translateAndRotate(matrices)
             matrices.scale(1 / 16f, 1 / 16f, 1 / 16f)
+            CosmeticFit.apply(matrices, slot, Cosmetics.myFit(slot))
             VoxelMesh.animate(piece, ticks, matrices)
             collector.submitCustomGeometry(matrices, renderType) { p, buffer -> VoxelMesh.emit(p, buffer, piece, light, OverlayTexture.NO_OVERLAY) }
             matrices.popPose()
@@ -131,6 +132,7 @@ class PlayerPreview(private val profile: GameProfile, private val override: Pair
             matrices.pushPose()
             (if (slot == Slot.BACK) model.body else model.head).translateAndRotate(matrices)
             matrices.scale(1 / 16f, 1 / 16f, 1 / 16f)
+            CosmeticFit.apply(matrices, slot, Cosmetics.myFit(slot))
             VoxelMesh.animate(piece, ticks, matrices)
             VoxelMesh.emit(matrices.last(), buffer, piece, light, OverlayTexture.NO_OVERLAY)
             matrices.popPose()
@@ -203,6 +205,7 @@ class PlayerPreview(private val profile: GameProfile, private val override: Pair
             matrices.pushPose()
             (if (slot == Slot.BACK) model.body else model.head).translateAndRotate(matrices)
             matrices.scale(1 / 16f, 1 / 16f, 1 / 16f)
+            CosmeticFit.apply(matrices, slot, Cosmetics.myFit(slot))
             VoxelMesh.animate(piece, ticks, matrices)
             VoxelMesh.emit(matrices.last(), buffer, piece, light, OverlayTexture.NO_OVERLAY)
             matrices.popPose()
