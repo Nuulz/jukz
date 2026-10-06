@@ -1,5 +1,6 @@
 package dev.jukz.sync
 
+import dev.jukz.discovery.DeviceIdentity
 import dev.jukz.compat.currentGame
 import dev.jukz.core.model.GameVersion
 import com.google.gson.JsonParser
@@ -94,7 +95,7 @@ object R2SnapshotStore {
         // A world with a key only hands its cloud copy to someone holding that key (a past host, or a
         // player the host let in); without it the rendezvous answers as if there were no backup.
         WorldKeyStore.keyFor(worldId)
-            ?.headers(WorldKey.OP_SNAPSHOT_DOWNLOAD, worldId, "", System.currentTimeMillis())
+            ?.headers(WorldKey.OP_SNAPSHOT_DOWNLOAD, worldId, "", DeviceIdentity.now())
             ?.forEach { (name, value) -> builder.header(name, value) }
         val request = builder.build()
         return runCatching {
@@ -183,7 +184,7 @@ object R2SnapshotStore {
             .timeout(signTimeout)
         // Only the world's key holder may replace its cloud copy (see WorldKey).
         WorldKeyStore.keyFor(worldId)
-            ?.headers(WorldKey.OP_SNAPSHOT_UPLOAD, worldId, body, System.currentTimeMillis())
+            ?.headers(WorldKey.OP_SNAPSHOT_UPLOAD, worldId, body, DeviceIdentity.now())
             ?.forEach { (name, value) -> builder.header(name, value) }
         // Signed in with a Microsoft account: the backup is also remembered on that account, so the
         // player's other PCs bring the world over (see CloudWorlds).

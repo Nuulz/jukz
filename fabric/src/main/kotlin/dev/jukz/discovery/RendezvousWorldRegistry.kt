@@ -207,7 +207,7 @@ class RendezvousWorldRegistry(
 
     /** Sign with the world's ownership key when this install holds it (see [WorldKeyStore]). */
     private fun signed(post: Post, op: String, worldId: WorldId): HttpRequest.Builder {
-        WorldKeyStore.keyFor(worldId)?.headers(op, worldId, post.body, System.currentTimeMillis())
+        WorldKeyStore.keyFor(worldId)?.headers(op, worldId, post.body, DeviceIdentity.now())
             ?.forEach { (name, value) -> post.builder.header(name, value) }
         return post.builder
     }

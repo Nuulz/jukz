@@ -61,10 +61,17 @@ object DeviceIdentity {
         }.onFailure { JukzMod.logger.warn("jukz: no device key ({}); calls go unsigned", it.message) }.getOrNull()
     }
 
+    /**
+     * The time to sign with: this PC's clock corrected by what the rendezvous told us. Every signature
+     * the rendezvous checks against its window (device and world key) must use it, or a PC whose clock
+     * is off gets 401s even after the correction.
+     */
+    fun now(): Long = System.currentTimeMillis() + clockOffsetMs
+
     /** Device signature headers (plus the premium session, which raises the limits) for one call. */
     fun headers(method: String, path: String, body: String): Map<String, String> {
         val k = key ?: return emptyMap()
-        val headers = k.headers(method, path, body, System.currentTimeMillis() + clockOffsetMs).toMutableMap()
+        val headers = k.headers(method, path, body, now()).toMutableMap()
         sessionToken()?.let { headers[SESSION_HEADER] = it }
         return headers
     }
