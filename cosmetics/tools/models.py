@@ -244,9 +244,6 @@ def wings():
 
 MODELS = [
     # id, kind, name, description, availability, palette, builder, origin, animation
-    ("crown_3d", "hat", "Crown", "Heavy is the head that hosts.", "free",
-     {"y": "FFFFD54A", "Y": "FFFFE58A", "d": "FFC98A00", "w": "FFFFFFFF", "r": "FFFF4D6A", "R": "FFE0213F", "b": "FF4D9BFF", "g": "FF3DDC84"},
-     crown, [-5, -7.6, -5], None),
     ("cat_ears", "hat", "Cat ears", "For whoever has six cats.", "free",
      {"c": "FFFFA94D", "d": "FFD9772B", "p": "FFFF9EC0"},
      cat_ears, [-5, -8.0, -1.5], None),

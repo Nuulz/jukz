@@ -668,7 +668,95 @@ def top_hat():
     return model_json(V, O, None, parts)
 
 
+def crown():
+    V = 0.5
+    O = (-6.0, -7.6, -6.0)
+    LO, HI = (-6.0, -16.0, -6.0), (6.0, -7.6, 6.0)
+    BASE, RIM = -7.6, -9.6  # the band runs from BASE up to RIM, points rise above it
+    GEMS = [(0, "R"), (math.pi / 2, "b"), (math.pi, "g"), (-math.pi / 2, "b")]
+    STEP = math.pi / 4
+
+    def near(a, b):
+        return abs((a - b + math.pi) % (2 * math.pi) - math.pi)
+
+    def crown_body(glint):
+        def paint(x, y, z):
+            r, a = math.hypot(x, z), math.atan2(x, -z)
+            # velvet cap, domed, under the arches
+            if r < 4.1 and RIM - 2.4 * math.sqrt(max(0, 1 - (r / 4.1) ** 2)) <= y < BASE - 0.5:
+                return "V" if z > 1.5 else "v"
+            if not 4.1 <= r <= 5.0:
+                return None
+            if RIM <= y < BASE:
+                if y > BASE - 0.5:
+                    return "d"
+                if y < RIM + 0.5:
+                    return "p" if near(a, STEP / 2 + round((a - STEP / 2) / STEP) * STEP) < 0.12 else "Y"
+                for ga, ch in GEMS:
+                    if near(a, ga) < 0.2 and RIM + 0.7 < y < BASE - 0.7:
+                        return "w" if ch == "R" and y < -8.8 and a < 0 else ch
+                if glint is not None and near(a, glint + (y + 8.6) * 0.3) < 0.18:
+                    return "H"
+                # a filigree line around the middle
+                return "Y" if abs(y + 8.6) < 0.25 and near(a, round(a / 0.35) * 0.35) < 0.1 else "y"
+            # eight points, the front and back ones taller
+            k = round(a / STEP)
+            d = near(a, k * STEP) / (STEP / 2)
+            tall = 3.4 if k % 4 == 0 else 2.6
+            h = tall * (1 - d)
+            if RIM - h <= y < RIM and r > 4.3:
+                return "Y" if d < 0.25 else "y"
+            return None
+        s = Sculpt(V, O)
+        s.fill(LO, HI, paint)
+        # a pearl on each tip
+        for k in range(8):
+            a = k * STEP
+            tall = 3.4 if k % 4 == 0 else 2.6
+            s.put(4.6 * math.sin(a), RIM - tall - 0.25, -4.6 * math.cos(a), "p")
+        return s
+
+    # orb and cross on top of the arches
+    orb = Sculpt(V, O)
+    orb.fill((-1.0, -13.4, -1.0), (1.0, -11.4, 1.0),
+             lambda x, y, z: ("Y" if y < -12.6 and x < 0 else "y") if ellipsoid((0, -12.4, 0), (0.9, 0.9, 0.9))(x, y, z) else None)
+    orb.fill((-0.8, -11.6, -4.6), (0.8, -11.0, 4.6),
+             lambda x, y, z: "y" if abs(x) < 0.3 and abs(y + 12.4 + 2.3 * (1 - (z / 4.6) ** 2) - 0.9) < 0.6 and abs(z) <= 4.4 else None)
+    orb.fill((-0.3, -15.0, -0.3), (0.3, -13.3, 0.3), lambda x, y, z: "Y")
+    orb.fill((-0.8, -14.5, -0.3), (0.8, -14.0, 0.3), lambda x, y, z: "Y")
+    orb.put(0.25, -12.75, -0.75, "w")
+
+    def sparkle(k):
+        """A four-point twinkle over the tip of point k."""
+        s = Sculpt(V, O)
+        if k is None:
+            return s
+        a = k * STEP
+        tall = 3.4 if k % 4 == 0 else 2.6
+        cx, cy, cz = 5.2 * math.sin(a), RIM - tall - 1.2, -5.2 * math.cos(a)
+        s.put(cx, cy, cz, "s")
+        for dx, dy in ((V, 0), (-V, 0), (0, V), (0, -V)):
+            s.put(cx + dx, cy + dy, cz, "w")
+        return s
+
+    sweep = [(2, crown_body(g)) for g in (-2.6, -2.0, -1.4, -0.8, -0.2, 0.4, 1.0, 1.6)]
+    twinkles = []
+    for k in (0, 3, 6, 1, 4, 7):
+        twinkles += [(6, sparkle(k)), (24, sparkle(None))]
+    parts = [
+        Part("crown", (0, -7.6, 0), [(80, crown_body(None))] + sweep,
+             {"speed": 0.05, "run": {"speed": 0.66, "amp": [3, 0, 3]}, "sneak": {"base": [0, 0, 8], "amp": [0, 0, 0]}}),
+        Part("orb", (0, -11.6, 0), [(1, orb)], {"speed": 0.08, "amp": [0, 6, 0], "run": {"speed": 0.66, "amp": [5, 0, 5]}}, parent="crown"),
+        Part("twinkle", (0, 0, 0), twinkles, parent="crown", when="still"),
+    ]
+    return model_json(V, O, None, parts)
+
+
 ANIMATED = [
+    ("crown_3d", "hat", "Crown", "Heavy is the head that hosts.", "free",
+     {"y": "FFFFC83A", "Y": "FFFFE58A", "d": "FFB87A00", "H": "FFFFFBE6", "p": "FFF6F1E7", "w": "FFFFFFFF",
+      "R": "FFE0213F", "b": "FF4D9BFF", "g": "FF3DDC84", "v": "FFB0203A", "V": "FF861629", "s": "FFFFF3A8"},
+     crown),
     ("top_hat", "hat", "Top hat", "A classic, with the jukz-blue band and a card tucked in.", "free",
      {"k": "FF262633", "K": "FF1A1A24", "e": "FF3A3A4C", "g": "FF30303F", "h": "FF50506A", "H": "FFC4C8E0",
       "b": "FF5B9BFF", "n": "FF2F64C4", "l": "FFA9CCFF", "B": "FFD9E8FF", "s": "FF8FA3C4",
