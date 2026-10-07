@@ -105,6 +105,11 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
         /** Minecraft name of the community member who designed it (from the creators page), or null. */
         val author: String? = null,
         val particle: Particle? = null,
+        /** Emotes: an animation, one plaque per frame, each shown for [frameMs]. */
+        val frames: List<Model> = emptyList(),
+        val frameMs: Int = 125,
+        /** Only usable while also wearing all of these item ids. */
+        val requires: List<String> = emptyList(),
     ) {
         val plaque: Model? by lazy { art?.let { plaque(it, centered = false) } }
     }
@@ -163,6 +168,9 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
                     }
                     Particle(style, sprites, p.get("size")?.asFloat ?: 0.04f)
                 },
+                frames = json.getAsJsonArray("frames")?.map { f -> plaque(parseArt(id, f.asJsonArray.map { it.asString }, ::color), centered = false) } ?: emptyList(),
+                frameMs = json.get("frameMs")?.asInt ?: 125,
+                requires = json.getAsJsonArray("requires")?.map { it.asString } ?: emptyList(),
             )
         }
 

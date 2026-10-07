@@ -152,7 +152,8 @@ object Trails {
     }
 
     fun drawEmote(matrices: PoseStack, emote: Cosmetics.Emote, emit: (Model, Float) -> Unit) {
-        val plaque = emote.item.plaque ?: return
+        val frames = emote.item.frames
+        val plaque = (if (frames.isEmpty()) emote.item.plaque else frames[(emote.age / emote.item.frameMs).toInt().coerceAtMost(frames.size - 1)]) ?: return
         val size = emote.item.art?.size ?: 16
         val t = (emote.age / 250f).coerceAtMost(1f)
         val pop = 1 + 2.7f * (t - 1).pow(3) + 1.7f * (t - 1).pow(2)

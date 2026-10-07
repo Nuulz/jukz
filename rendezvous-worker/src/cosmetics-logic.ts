@@ -82,6 +82,11 @@ export interface CatalogItem {
   particle?: { style: "fall" | "twinkle" | "bounce"; size?: number; sprites: string[][] };
   /** Minecraft name of the player who designed it (community items, from the creators page). */
   author?: string;
+  /** emote: an animation, square frames the size of `art`, each shown for `frameMs`. */
+  frames?: string[][];
+  frameMs?: number;
+  /** Only usable while also wearing all of these items. */
+  requires?: string[];
 }
 
 export interface Catalog {
@@ -127,6 +132,17 @@ export function validateCatalog(catalog: Catalog): Catalog {
         if (row.length !== size) throw new Error(`${where}: row ${y} is ${row.length} wide, art must be square (${size})`);
         checkRow(row, `row ${y}`);
       });
+      if (item.frames !== undefined) {
+        if (item.kind !== "emote" || item.frames.length < 1 || item.frames.length > 48) throw new Error(`${where}: 1..48 frames, emotes only`);
+        if (!(Number.isInteger(item.frameMs) && item.frameMs! >= 40)) throw new Error(`${where}: frameMs must be an integer >= 40`);
+        item.frames.forEach((f, i) => {
+          if (f.length !== size) throw new Error(`${where}: frame ${i} must match the art size`);
+          f.forEach((row) => {
+            if (row.length !== size) throw new Error(`${where}: frame ${i} must be square`);
+            checkRow(row, `frame ${i}`);
+          });
+        });
+      }
       if (item.kind === "trail") {
         const p = item.particle;
         if (!p || !["fall", "twinkle", "bounce"].includes(p.style)) throw new Error(`${where}: trails need a particle style`);
@@ -145,6 +161,11 @@ export function validateCatalog(catalog: Catalog): Catalog {
     if (!["none", "bob", "spin", undefined].includes(model.animation)) throw new Error(`${where}: unknown animation`);
     checkSlices(model.layers, where, checkRow);
     if (model.rig !== undefined) checkRig(model.rig, where, checkRow);
+  }
+  for (const item of catalog.items) {
+    for (const need of item.requires ?? []) {
+      if (!ids.has(need) || need === item.id) throw new Error(`item ${item.id}: requires unknown item ${need}`);
+    }
   }
   const def = catalog.items.find((i) => i.id === catalog.defaultBadge);
   if (!def || def.kind !== "badge" || def.availability !== "free") throw new Error("defaultBadge must be a free badge");
@@ -227,6 +248,12 @@ export function visibleLoadout(catalog: Catalog, stored: Loadout, grants: Iterab
     const item = pick ? catalog.items.find((i) => i.id === pick) : undefined;
     if (item && item.kind === slot && owned.has(item.id)) out[slot] = item.id;
     else if (slot === "badge") out.badge = catalog.defaultBadge;
+  }
+  // items that need others worn alongside them drop out when those aren't
+  const worn = new Set(Object.values(out));
+  for (const slot of SLOTS) {
+    const item = catalog.items.find((i) => i.id === out[slot]);
+    if (item?.requires?.some((need) => !worn.has(need))) delete out[slot];
   }
   return out;
 }

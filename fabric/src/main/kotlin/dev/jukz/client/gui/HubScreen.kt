@@ -412,11 +412,14 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
         val card = ui!!.expandTemplate(FlowLayout::class.java, "item-card", mapOf("id" to item.id)).also(::sizeCard)
         val owned = me && Cosmetics.owns(item)
         val wearing = me && Cosmetics.wearing(item.slot)?.id == item.id
-        val locked = me && !owned
+        val needs = item.requires.mapNotNull { Cosmetics.catalog.item(it)?.name }
+        val missing = me && owned && !Cosmetics.unlocked(item, Cosmetics.wornIds())
+        val locked = me && (!owned || missing)
 
         card.childById(FlowLayout::class.java, "icon-${item.id}").child(ItemIcon(item, icon, dimmed = locked))
         val (state, stateColor) = when {
             wearing -> "✔ on" to COLOR_LIVE
+            missing -> "Needs ${needs.joinToString(" + ")}" to ACCENT_ACTION
             locked -> (item.price?.label() ?: if (item.availability == Availability.GRANT) "Special" else "Locked") to ACCENT_ACTION
             item.availability == Availability.GRANT -> "Special" to ACCENT_ACTION
             else -> "Free" to COLOR_SUBTLE
@@ -426,6 +429,7 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
             Component.literal(item.name),
             Component.literal(item.description).withColor(COLOR_SUBTLE),
             item.author?.let { Component.literal("by $it").withColor(COLOR_LIVE) },
+            needs.takeIf { it.isNotEmpty() }?.let { Component.literal("Wear ${it.joinToString(" and ")} to use it").withColor(ACCENT_ACTION) },
         ))
         val tone = when { wearing -> Tone.ON; locked -> Tone.LOCKED; else -> Tone.IDLE }
         wire(card, tone, item, clickable = owned && !wearing) { save(item.id) }

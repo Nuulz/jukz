@@ -189,12 +189,17 @@ object Cosmetics {
         if (Minecraft.getInstance().currentScreen != null) return null
         val age = System.currentTimeMillis() - start
         if (age > EMOTE_MS) { emotes.remove(player); return null }
-        return catalog.item(loadoutFor(player)[Slot.EMOTE])?.let { Emote(it, age) }
+        val loadout = loadoutFor(player)
+        return catalog.item(loadout[Slot.EMOTE])?.takeIf { unlocked(it, loadout) }?.let { Emote(it, age) }
     }
+
+    /** Whether everything [item] requires is worn in [loadout]. */
+    fun unlocked(item: Item, loadout: Map<Slot, String>): Boolean = item.requires.all { it in loadout.values }
 
     fun emote() {
         val me = Minecraft.getInstance().gameProfile?.id ?: return
-        if (catalog.item(loadoutFor(me)[Slot.EMOTE]) == null) return
+        val loadout = loadoutFor(me)
+        if (catalog.item(loadout[Slot.EMOTE])?.takeIf { unlocked(it, loadout) } == null) return
         emotes[me] = System.currentTimeMillis()
         emoteCount++
         share()
@@ -258,6 +263,9 @@ object Cosmetics {
         val picks = myPicks() ?: return null
         return catalog.item(visible(picks)[slot])
     }
+
+    /** Everything you wear right now, by slot. */
+    fun wornIds(): Map<Slot, String> = myPicks()?.let(::visible) ?: emptyMap()
 
     /** Picks as others see them: the badge defaults to the catalog's; "none" and unknown ids drop out. */
     private fun visible(picks: Map<Slot, String>): Map<Slot, String> = Slot.entries.mapNotNull { slot ->

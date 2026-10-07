@@ -173,6 +173,13 @@ test("the visible loadout keeps owned picks, defaults the badge, and drops the r
   assert.deepEqual(visibleLoadout(cat(), { hat: "a" }, []), { badge: "a" }); // a badge in the hat slot is ignored
 });
 
+test("an item that requires others only shows while they're worn", () => {
+  const visible = (l: object) => visibleLoadout(shipped, l, []);
+  assert.equal(visible({ hat: "halo", back: "wings", emote: "emote_coin" }).emote, "emote_coin");
+  assert.equal(visible({ hat: "halo", emote: "emote_coin" }).emote, undefined);
+  assert.equal(visible({ hat: "crown_3d", back: "wings", emote: "emote_coin" }).emote, undefined);
+});
+
 test("stored loadouts read the JSON column, or the original badge column", () => {
   assert.deepEqual(readLoadout('{"badge":"b","hat":"tophat","feet":"x"}', "a"), { badge: "b", hat: "tophat" });
   assert.deepEqual(readLoadout(null, "a"), { badge: "a" });

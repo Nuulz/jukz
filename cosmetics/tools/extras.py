@@ -156,6 +156,70 @@ SMILE = [
     "...........",
 ]
 
+def coin_frames():
+    """The angel's coin toss: a gold coin flips up spinning (halo on one face, wings on the other),
+    lands on the halo side and shines. 32x32 frames, played one after the other over the 3 s."""
+    import math
+    N = 32
+    WING = ["w.....w", "ww...ww", "www.www", ".wwwww."]
+
+    def frame(cy, spin, glow=0):
+        g = [["."] * N for _ in range(N)]
+        R = 7.5
+        w = abs(math.cos(spin)) * R
+        heads = math.cos(spin) >= 0
+        for y in range(N):
+            for x in range(N):
+                dx, dy = x + 0.5 - 16, y + 0.5 - cy
+                if w < 1.2:
+                    if abs(dx) < 1 and abs(dy) < R:
+                        g[y][x] = "d"
+                    continue
+                e = (dx / w) ** 2 + (dy / R) ** 2
+                if e > 1:
+                    continue
+                if e > 0.68:
+                    g[y][x] = "d"
+                    continue
+                g[y][x] = "Y" if dx / w + dy / R < -0.9 else "y"
+                if w < 3.5:
+                    continue
+                if heads:
+                    # the halo: a ring floating over the face
+                    u = dx / w * R
+                    h = (u / 3.2) ** 2 + ((dy + 2.5) / 1.3) ** 2
+                    if 0.3 < h < 1.7 and not (abs(u) < 2.2 and abs(dy + 2.5) < 0.6):
+                        g[y][x] = "w"
+                    elif u * u + (dy - 1.5) ** 2 < 3.2:
+                        g[y][x] = "o"
+        if not heads and w >= 3.5:
+            for j, row in enumerate(WING):
+                for i, ch in enumerate(row):
+                    xx = 16 + round((i - 3) * w / R)
+                    if ch == "w" and 0 <= xx < N:
+                        g[int(cy) - 2 + j][xx] = "w"
+        # sparkles once it lands
+        for k in range(glow):
+            a = k * 2 * math.pi / 6 + glow * 0.4
+            px, py = int(16 + 10 * math.cos(a)), int(cy + 9 * math.sin(a))
+            for ox, oy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)):
+                if 0 <= px + ox < N and 0 <= py + oy < N and g[py + oy][px + ox] == ".":
+                    g[py + oy][px + ox] = "s" if (ox, oy) == (0, 0) else "S"
+        return ["".join(r) for r in g]
+
+    frames = [frame(23.5, 0)] * 3
+    T = 14
+    for k in range(T):
+        t = (k + 1) / T
+        frames.append(frame(23.5 - 56 * t * (1 - t), t * 5 * math.pi))
+    frames += [frame(23.5, 0.4), frame(23.5, -0.2), frame(23.5, 0)]
+    frames += [frame(23.5, 0, glow=n) for n in (2, 4, 6, 6)]
+    return frames
+
+
+COIN = coin_frames()
+
+
 EMOTES = [
     ("emote_gg", "gg", "Good game.", bubble("gg"), {"t": "FF2F64C4", "T": "FF9DBDF5"}),
     ("emote_lag", "lag", "It's not you, it's the wifi.", bubble("lag"), {"t": "FFE0213F", "T": "FFF5A3AF"}),
@@ -182,6 +246,13 @@ def build():
         check(iid, art, pal)
         items.append({"id": iid, "kind": "emote", "name": name, "description": desc, "availability": "free",
                       "palette": pal, "art": art})
+    pal = {"y": "FFFFD54A", "Y": "FFFFF0A0", "d": "FFC98A12", "w": "FFFFFFFF", "o": "FFFFF6C8", "s": "FFFFFFFF", "S": "B0FFF0A0"}
+    for f in COIN:
+        check("emote_coin", f, pal)
+    items.append({"id": "emote_coin", "kind": "emote", "name": "Angel's coin",
+                  "description": "Only for those who wear the halo and the wings. Heads, always.",
+                  "availability": "free", "palette": pal, "art": COIN[-1], "frames": COIN, "frameMs": 125,
+                  "requires": ["halo", "wings"]})
     return items
 
 
