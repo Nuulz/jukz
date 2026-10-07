@@ -911,7 +911,80 @@ def halo():
     return model_json(V, O, None, parts)
 
 
+def mushroom_cap():
+    V = 0.5
+    O = (-6.5, -16.0, -6.5)
+    BASE = -7.5  # the brim sits just under the top of the head
+    rng = __import__("random").Random(11)
+    spots = [(rng.uniform(-math.pi, math.pi), rng.uniform(0.2, 0.75), rng.uniform(1.1, 1.5)) for _ in range(7)]
+
+    def cap():
+        """Squarish at the brim so it hugs the head, a round dome above, raised white spots, gills under it."""
+        def paint(x, y, z):
+            h = BASE - y
+            if not -0.5 <= h <= 6.0:
+                return None
+            t = max(h, 0) / 6.0
+            p = 5 - 3 * t
+            R = 6.2 * math.sqrt(max(0.0, 1 - t * t)) + 0.2
+            d = (abs(x) ** p + abs(z) ** p) ** (1 / p)
+            if h < 0:
+                # gills: ridges under the brim, between the head and the edge
+                if 4.3 < d < 6.0 and h > -0.5:
+                    a = math.atan2(x, -z)
+                    return "G" if round(a * 7) % 2 else "c"
+                return None
+            if d > R or d < R - 1.0:
+                return None
+            a, lat = math.atan2(x, -z), t
+            for sa, sl, sr in spots:
+                da = abs((a - sa + math.pi) % (2 * math.pi) - math.pi) * 6.2 * math.cos(lat * 1.2)
+                if math.hypot(da, (lat - sl) * 7) < sr:
+                    return "W"
+            if h < 0.6:
+                return "c"
+            return "R" if (x + z) > 5 and h < 3 else "r"
+        s = Sculpt(V, O)
+        s.fill((-6.4, BASE - 6.0, -6.4), (6.4, BASE + 0.5, 6.4), paint)
+        return s
+
+    def sprout():
+        """A baby mushroom growing off the side of the cap."""
+        s = Sculpt(V, O)
+        s.fill((3.5, -13.5, -1.5), (4.5, -11.0, -0.5), lambda x, y, z: "c")
+        s.fill((2.5, -14.5, -2.5), (5.5, -13.0, 0.5),
+               lambda x, y, z: ("W" if (x > 4.4 and z < -1.4) else "r") if ellipsoid((4.0, -13.6, -1.0), (1.6, 0.8, 1.6))(x, y, z) else None)
+        return s
+
+    puffs = [(rng.uniform(0, 2 * math.pi), rng.uniform(1.0, 5.0), rng.uniform(0, 1)) for _ in range(8)]
+
+    def spores(t):
+        """Spores drifting up and out from the cap while still, t = 0..1 through the loop."""
+        s = Sculpt(V, O)
+        for a, d, ph in puffs:
+            u = (t + ph) % 1
+            if u > 0.85:
+                continue
+            rr = d + u * 1.5
+            s.put(rr * math.sin(a + u), BASE - 6.0 - u * 4.5, -rr * math.cos(a + u), "s" if u < 0.45 else "S")
+        return s
+
+    parts = [
+        Part("cap", (0, BASE, 0), [(1, cap())],
+             {"speed": 0.05, "amp": [1.5, 0, 1.5],
+              "run": {"speed": 0.66, "amp": [4, 0, 3], "move": [0, 0.4, 0]}, "sneak": {"base": [6, 0, 0], "amp": [0, 0, 0]}}),
+        Part("sprout", (4.0, -11.0, -1.0), [(1, sprout())],
+             {"speed": 0.09, "amp": [0, 0, 8], "run": {"speed": 0.66, "amp": [10, 0, 14]}}, parent="cap"),
+        Part("spores", (0, 0, 0), [(3, spores(k / 14)) for k in range(14)], parent="cap", when="still"),
+    ]
+    return model_json(V, O, None, parts)
+
+
 ANIMATED = [
+    ("mushroom_cap", "hat", "Mushroom cap", "Grown in the dark oak forest.", "free",
+     {"r": "FFFF4A3D", "R": "FFE0322A", "w": "FFFFF8EC", "W": "FFFFFFFF", "c": "FFF2D7B0", "G": "FFD9B98C",
+      "s": "D0E8FFC0", "S": "80E8FFC0"},
+     mushroom_cap),
     ("halo", "hat", "Halo", "Floats over the host who never griefs.", "free",
      {"y": "FFFFD54A", "Y": "FFFFEB99", "d": "FFE0A526", "W": "FFFFFFFF", "g": "70FFF6C8",
       "s": "D0FFF6C8", "S": "80FFF6C8"},

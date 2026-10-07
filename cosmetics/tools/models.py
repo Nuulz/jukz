@@ -244,9 +244,6 @@ def wings():
 
 MODELS = [
     # id, kind, name, description, availability, palette, builder, origin, animation
-    ("mushroom_cap", "hat", "Mushroom cap", "Grown in the dark oak forest.", "free",
-     {"r": "FFE53935", "R": "FFFF5A4F", "w": "FFFFF8EC", "c": "FFF2D7B0"},
-     mushroom, [-6, -7.8, -6], None),
     ("founder_hat", "hat", "Founder's hat", "Made jukz. Wears gold.", "grant",
      {"y": "FFFFC24A", "d": "FFE5A82E", "b": "FF5B9BFF", "Y": "FFFFE58A", "w": "FFFFF3C4", "W": "FFFFFFFF"},
      lambda: top_hat(gold=True), [-6, -8.2, -6], None),
