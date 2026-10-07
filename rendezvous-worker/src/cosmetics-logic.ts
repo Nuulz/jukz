@@ -26,7 +26,41 @@ export interface VoxelModel {
   voxel: number;
   origin: [number, number, number];
   animation?: "none" | "bob" | "spin";
+  /** The whole piece at rest: what mods without rig support (≤ 0.4.4) and the icons draw. */
   layers: string[][];
+  rig?: Rig;
+}
+
+/** An animated piece: a still body plus parts, each turning around its pivot (in bone pixels). */
+export interface Rig {
+  layers?: string[][];
+  origin?: [number, number, number];
+  parts: RigPart[];
+}
+
+export interface RigPart {
+  name: string;
+  /** An earlier part this one moves with. */
+  parent?: string;
+  pivot: [number, number, number];
+  /** Shown only in that state; leave out for always. */
+  when?: "still" | "moving" | "sneaking" | "standing";
+  origin?: [number, number, number];
+  layers?: string[][];
+  /** Rotation order: "xyz" (default) or "zyx" (Blockbench). */
+  order?: "xyz" | "zyx";
+  /** Swapped in turn, each for `ticks`. */
+  frames?: { ticks: number; layers: string[][] }[];
+  /** angle = base + amp·sin(ticks·speed + phase) per axis (degrees); `move` in pixels. run/sneak override fields. */
+  motion?: Motion & { run?: Motion; sneak?: Motion };
+}
+
+export interface Motion {
+  speed?: number;
+  phase?: number;
+  base?: [number, number, number];
+  amp?: [number, number, number];
+  move?: [number, number, number];
 }
 
 export interface CatalogItem {
@@ -97,22 +131,72 @@ export function validateCatalog(catalog: Catalog): Catalog {
     if (!(model.voxel > 0 && model.voxel <= 2)) throw new Error(`${where}: voxel must be in (0, 2]`);
     if (model.origin?.length !== 3 || !model.origin.every(Number.isFinite)) throw new Error(`${where}: origin is [x, y, z]`);
     if (!["none", "bob", "spin", undefined].includes(model.animation)) throw new Error(`${where}: unknown animation`);
-    const layers = model.layers ?? [];
-    if (layers.length < 1 || layers.length > 32) throw new Error(`${where}: 1..32 layers`);
-    const depth = layers[0].length;
-    const width = layers[0][0]?.length ?? 0;
-    if (depth < 1 || depth > 32 || width < 1 || width > 32) throw new Error(`${where}: slices are 1..32 on each side`);
-    layers.forEach((layer, l) => {
-      if (layer.length !== depth) throw new Error(`${where}: layer ${l} has ${layer.length} rows, the model is ${depth} deep`);
-      layer.forEach((row, z) => {
-        if (row.length !== width) throw new Error(`${where}: layer ${l} row ${z} is ${row.length} wide, the model is ${width}`);
-        checkRow(row, `layer ${l} row ${z}`);
-      });
-    });
+    checkSlices(model.layers, where, checkRow);
+    if (model.rig !== undefined) checkRig(model.rig, where, checkRow);
   }
   const def = catalog.items.find((i) => i.id === catalog.defaultBadge);
   if (!def || def.kind !== "badge" || def.availability !== "free") throw new Error("defaultBadge must be a free badge");
   return catalog;
+}
+
+const MAX_SIDE = 96;
+const isVec = (v: unknown) => Array.isArray(v) && v.length === 3 && v.every((n) => Number.isFinite(n) && Math.abs(n) <= 96);
+
+function checkSlices(layers: string[][] | undefined, where: string, checkRow: (row: string, at: string) => void) {
+  layers = layers ?? [];
+  if (layers.length < 1 || layers.length > MAX_SIDE) throw new Error(`${where}: 1..${MAX_SIDE} layers`);
+  const depth = layers[0].length;
+  const width = layers[0][0]?.length ?? 0;
+  if (depth < 1 || depth > MAX_SIDE || width < 1 || width > MAX_SIDE) throw new Error(`${where}: slices are 1..${MAX_SIDE} on each side`);
+  layers.forEach((layer, l) => {
+    if (layer.length !== depth) throw new Error(`${where}: layer ${l} has ${layer.length} rows, the model is ${depth} deep`);
+    layer.forEach((row, z) => {
+      if (row.length !== width) throw new Error(`${where}: layer ${l} row ${z} is ${row.length} wide, the model is ${width}`);
+      checkRow(row, `layer ${l} row ${z}`);
+    });
+  });
+}
+
+function checkMotion(m: Motion, where: string) {
+  for (const key of ["speed", "phase"] as const) {
+    if (m[key] !== undefined && !(Number.isFinite(m[key]) && Math.abs(m[key]!) <= 10)) throw new Error(`${where}: ${key} out of range`);
+  }
+  for (const key of ["base", "amp", "move"] as const) {
+    if (m[key] !== undefined && !(isVec(m[key]) && (key === "move" || m[key]!.every((n) => Math.abs(n) <= 360)))) throw new Error(`${where}: ${key} is [x, y, z]`);
+  }
+}
+
+function checkRig(rig: Rig, where: string, checkRow: (row: string, at: string) => void) {
+  if (rig.layers !== undefined) {
+    if (!isVec(rig.origin ?? [0, 0, 0])) throw new Error(`${where}: rig origin is [x, y, z]`);
+    checkSlices(rig.layers, `${where} rig`, checkRow);
+  }
+  if (!Array.isArray(rig.parts) || rig.parts.length < 1 || rig.parts.length > 24) throw new Error(`${where}: rig needs 1..24 parts`);
+  const names = new Set<string>();
+  for (const part of rig.parts) {
+    const at = `${where} part ${part.name}`;
+    if (typeof part.name !== "string" || !/^[a-z0-9_]{1,24}$/.test(part.name) || names.has(part.name)) throw new Error(`${at}: bad or duplicate name`);
+    if (part.parent !== undefined && !names.has(part.parent)) throw new Error(`${at}: parent must come first`);
+    names.add(part.name);
+    if (!isVec(part.pivot)) throw new Error(`${at}: pivot is [x, y, z]`);
+    if (part.origin !== undefined && !isVec(part.origin)) throw new Error(`${at}: origin is [x, y, z]`);
+    if (part.order !== undefined && !["xyz", "zyx"].includes(part.order)) throw new Error(`${at}: order is xyz or zyx`);
+    if (part.when !== undefined && !["still", "moving", "sneaking", "standing"].includes(part.when)) throw new Error(`${at}: unknown when`);
+    if (part.frames !== undefined) {
+      if (!Array.isArray(part.frames) || part.frames.length < 1 || part.frames.length > 16) throw new Error(`${at}: 1..16 frames`);
+      part.frames.forEach((f, i) => {
+        if (!Number.isInteger(f.ticks) || f.ticks < 1 || f.ticks > 1200) throw new Error(`${at}: frame ${i} ticks 1..1200`);
+        checkSlices(f.layers, `${at} frame ${i}`, checkRow);
+      });
+    } else {
+      checkSlices(part.layers, at, checkRow);
+    }
+    if (part.motion !== undefined) {
+      checkMotion(part.motion, at);
+      if (part.motion.run) checkMotion(part.motion.run, `${at} run`);
+      if (part.motion.sneak) checkMotion(part.motion.sneak, `${at} sneak`);
+    }
+  }
 }
 
 /** Item ids a player may wear: every free item plus whatever it was granted (unknown grants are ignored). */

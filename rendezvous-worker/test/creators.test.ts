@@ -68,6 +68,19 @@ test("uploaded models must look like Blockbench files of a wearable size", () =>
   assert.throws(() => checkBbmodel(bb([cube([0, 0, 0], [1, 1, 1])], { textures: Array(9).fill({}) })), /8 textures/);
 });
 
+test("the template's reference player is left out of the size, Blockbench 4 and 5 files alike", () => {
+  const player = { ...cube([-4, 0, -2], [4, 32, 2]), uuid: "p" };
+  const hat = { ...cube([-4, 32, -4], [4, 60, 4]), uuid: "h" };
+  const anims = [{ name: "idle" }, { name: "animation.model.walk" }, { name: "other" }];
+  const v4 = bb([player, hat], { outliner: [{ name: "reference", uuid: "g", children: ["p"] }, "h"], animations: anims });
+  assert.deepEqual(checkBbmodel(v4), { elements: 1, textures: 0, size: [8, 28, 8], animations: 2 });
+  const v5 = bb([player, hat], { groups: [{ uuid: "g", name: "Reference" }], outliner: [{ uuid: "g", children: ["p"] }, "h"] });
+  assert.deepEqual(checkBbmodel(v5).size, [8, 28, 8]);
+  // without the reference group the player counts, and 60 pixels is too tall
+  assert.throws(() => checkBbmodel(bb([player, hat], { outliner: ["p", "h"] })), /within/);
+  assert.throws(() => checkBbmodel(bb([player], { outliner: [{ name: "reference", children: ["p"] }] })), /no cubes/);
+});
+
 test("submission fields", () => {
   assert.equal(parseSubmissionSlot("hat"), "hat");
   assert.throws(() => parseSubmissionSlot("cape"), BadRequest, "capes are not allowed by Mojang's rules");

@@ -62,7 +62,7 @@ class PlayerPreview(private val profile: GameProfile, private val override: Pair
             matrices.scale(1 / 16f, 1 / 16f, 1 / 16f)
             CosmeticFit.apply(matrices, slot, Cosmetics.myFit(slot))
             VoxelMesh.animate(piece, ticks, matrices)
-            collector.submitCustomGeometry(matrices, renderType) { p, buffer -> VoxelMesh.emit(p, buffer, piece, light, OverlayTexture.NO_OVERLAY) }
+            collector.submitCustomGeometry(matrices, renderType) { p, buffer -> VoxelMesh.emit(p, buffer, piece, light, OverlayTexture.NO_OVERLAY, pose = VoxelMesh.Pose(ticks)) }
             matrices.popPose()
         }
     }
@@ -134,7 +134,7 @@ class PlayerPreview(private val profile: GameProfile, private val override: Pair
             matrices.scale(1 / 16f, 1 / 16f, 1 / 16f)
             CosmeticFit.apply(matrices, slot, Cosmetics.myFit(slot))
             VoxelMesh.animate(piece, ticks, matrices)
-            VoxelMesh.emit(matrices.last(), buffer, piece, light, OverlayTexture.NO_OVERLAY)
+            VoxelMesh.emit(matrices.last(), buffer, piece, light, OverlayTexture.NO_OVERLAY, pose = VoxelMesh.Pose(ticks))
             matrices.popPose()
         }
     }
@@ -207,7 +207,7 @@ class PlayerPreview(private val profile: GameProfile, private val override: Pair
             matrices.scale(1 / 16f, 1 / 16f, 1 / 16f)
             CosmeticFit.apply(matrices, slot, Cosmetics.myFit(slot))
             VoxelMesh.animate(piece, ticks, matrices)
-            VoxelMesh.emit(matrices.last(), buffer, piece, light, OverlayTexture.NO_OVERLAY)
+            VoxelMesh.emit(matrices.last(), buffer, piece, light, OverlayTexture.NO_OVERLAY, pose = VoxelMesh.Pose(ticks))
             matrices.popPose()
         }
         context.flush()

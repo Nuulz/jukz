@@ -8,6 +8,7 @@ gets its section as notes. Write them for players, not developers.
 
 - Faster connections over IPv6: if you and the host both have IPv6, you now connect directly instead of going through the relay, with less lag. Nothing to set up.
 - jukz 0.3.0 and older can no longer play online: update to keep playing.
+- Animated cosmetics: two new back pieces that move. Ender wings breathe while you stand, flap when you run and fold when you sneak. The sleeping cat snores on your shoulder, flicks its ears and wakes up when you walk.
 
 ## 0.4.3
 

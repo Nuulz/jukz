@@ -125,9 +125,39 @@ export interface ModelSummary {
   elements: number;
   textures: number;
   size: [number, number, number];
+  /** Animations named idle / walk / sneak (the guide's names), so review can tell an animated model. */
+  animations?: number;
 }
 
-type Element = { from?: unknown; to?: unknown; type?: unknown };
+type Element = { from?: unknown; to?: unknown; type?: unknown; uuid?: unknown };
+type OutlinerNode = string | { name?: unknown; uuid?: unknown; children?: unknown };
+
+/** Group names the guide's template uses for its reference player: never part of the cosmetic. */
+const REFERENCE_GROUPS = new Set(["reference", "referencia", "jukz_reference"]);
+
+/** Cube uuids inside a reference group (Blockbench 4 keeps names in the outliner, 5 in `groups`). */
+export function referenceCubes(model: { outliner?: unknown; groups?: unknown }): Set<string> {
+  const names = new Map<string, string>();
+  if (Array.isArray(model.groups)) {
+    for (const g of model.groups as { uuid?: unknown; name?: unknown }[]) {
+      if (typeof g?.uuid === "string" && typeof g.name === "string") names.set(g.uuid, g.name);
+    }
+  }
+  const out = new Set<string>();
+  const walk = (nodes: unknown, inside: boolean, depth: number) => {
+    if (!Array.isArray(nodes) || depth > 32) return;
+    for (const n of nodes as OutlinerNode[]) {
+      if (typeof n === "string") {
+        if (inside) out.add(n);
+        continue;
+      }
+      const name = typeof n?.name === "string" ? n.name : typeof n?.uuid === "string" ? names.get(n.uuid) : undefined;
+      walk(n?.children, inside || REFERENCE_GROUPS.has(String(name ?? "").toLowerCase()), depth + 1);
+    }
+  };
+  walk(model.outliner, false, 0);
+  return out;
+}
 
 /**
  * A plausible Blockbench model: JSON with Blockbench's `meta`, 1..1024 cube elements and up to 8
@@ -135,7 +165,7 @@ type Element = { from?: unknown; to?: unknown; type?: unknown };
  * nothing here runs it — so this keeps out junk, not cleverness.
  */
 export function checkBbmodel(text: string): ModelSummary {
-  let model: { meta?: { format_version?: unknown }; elements?: unknown; textures?: unknown };
+  let model: { meta?: { format_version?: unknown }; elements?: unknown; textures?: unknown; outliner?: unknown; groups?: unknown; animations?: unknown };
   try {
     model = JSON.parse(text);
   } catch {
@@ -143,8 +173,9 @@ export function checkBbmodel(text: string): ModelSummary {
   }
   if (typeof model?.meta?.format_version !== "string") throw new BadRequest("that isn't a Blockbench .bbmodel file (no meta.format_version)");
   const elements = Array.isArray(model.elements) ? (model.elements as Element[]) : [];
-  const cubes = elements.filter((e) => e && (e.type === undefined || e.type === "cube"));
-  if (cubes.length === 0) throw new BadRequest("the model has no cubes");
+  const reference = referenceCubes(model);
+  const cubes = elements.filter((e) => e && (e.type === undefined || e.type === "cube") && !(typeof e.uuid === "string" && reference.has(e.uuid)));
+  if (cubes.length === 0) throw new BadRequest("the model has no cubes (besides the reference player)");
   if (elements.length > 1024) throw new BadRequest("the model has more than 1024 elements");
   const textures = Array.isArray(model.textures) ? model.textures.length : 0;
   if (textures > 8) throw new BadRequest("use at most 8 textures");
@@ -163,7 +194,10 @@ export function checkBbmodel(text: string): ModelSummary {
   }
   const size = [0, 1, 2].map((i) => Math.round((hi[i] - lo[i]) * 100) / 100) as [number, number, number];
   if (size.some((n) => n > MAX_MODEL_PIXELS)) throw new BadRequest(`the model is ${size.join("×")} pixels; keep it within ${MAX_MODEL_PIXELS} on each side`);
-  return { elements: cubes.length, textures, size };
+  const animations = Array.isArray(model.animations)
+    ? (model.animations as { name?: unknown }[]).filter((a) => ["idle", "walk", "run", "sneak"].includes(String(a?.name ?? "").toLowerCase().split(".").pop()!)).length
+    : 0;
+  return { elements: cubes.length, textures, size, ...(animations ? { animations } : {}) };
 }
 
 /** A small PNG preview from the page (a data: URL), or null. */

@@ -13,6 +13,10 @@ import com.google.gson.JsonParser
  * - **hats, face and back pieces** are voxel models written as horizontal slices, bottom first; each
  *   slice's rows run front to back and its characters left to right as seen from the front. [Model.quads]
  *   holds only the faces that touch empty space, ready to draw.
+ *
+ * An animated piece adds a `rig` next to its `layers`: a still body plus [Part]s that each turn around
+ * a pivot, swap frames, or show only while still/moving/sneaking. `layers` stays as the whole piece at
+ * rest, which is what older mods (and the icons) draw.
  */
 class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: List<Item>) {
 
@@ -51,7 +55,41 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
 
     enum class Animation { NONE, BOB, SPIN }
 
-    class Model(val quads: List<Quad>, val animation: Animation, val centerX: Float, val centerZ: Float)
+    class Model(val quads: List<Quad>, val animation: Animation, val centerX: Float, val centerZ: Float, val rig: Rig? = null)
+
+    /** Animated version of a model: [body] never moves, each part moves on its own (parents come first). */
+    class Rig(val body: List<Quad>, val parts: List<Part>)
+
+    class Part(
+        val parent: Int,
+        val pivot: FloatArray,
+        val shown: Shown,
+        val frames: List<Frame>,
+        val idle: Motion?,
+        val run: Motion?,
+        val sneak: Motion?,
+        /** Blockbench turns bones Z, then Y, then X; our own pieces X, Y, Z. */
+        val zyx: Boolean = false,
+    ) {
+        private val cycle = frames.sumOf { it.ticks }
+
+        fun frameAt(ticks: Float): List<Quad> {
+            if (frames.size == 1) return frames[0].quads
+            var t = (ticks % cycle).toInt()
+            for (f in frames) {
+                if (t < f.ticks) return f.quads
+                t -= f.ticks
+            }
+            return frames.last().quads
+        }
+    }
+
+    class Frame(val ticks: Int, val quads: List<Quad>)
+
+    enum class Shown { ALWAYS, STILL, MOVING, SNEAKING, STANDING, NEVER }
+
+    /** angle = base + amp * sin(ticks * speed + phase) per axis (degrees), and the same wave for [move] (pixels). */
+    class Motion(val speed: Float, val phase: Float, val base: FloatArray, val amp: FloatArray, val move: FloatArray)
 
     class Item(
         val id: String,
@@ -133,9 +171,60 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
 
         private fun parseModel(id: String, json: JsonObject, color: (Char, String) -> Int): Model {
             val voxel = json.get("voxel").asFloat
-            val origin = json.getAsJsonArray("origin").map { it.asFloat }
-            require(origin.size == 3) { "$id: origin is [x, y, z]" }
-            val layers = json.getAsJsonArray("layers").map { layer -> layer.asJsonArray.map { it.asString } }
+            val origin = vec(json, "origin") ?: error("$id: origin is [x, y, z]")
+            val layers = slices(json)
+            val quads = quads(id, layers, voxel, origin, color)
+            val animation = json.get("animation")?.asString?.uppercase()?.let { Animation.valueOf(it) } ?: Animation.NONE
+            val rig = json.getAsJsonObject("rig")?.let { parseRig(id, it, voxel, origin, color) }
+            val width = layers.first().first().length
+            val depth = layers.first().size
+            return Model(quads, animation, centerX = origin[0] + width * voxel / 2, centerZ = origin[2] + depth * voxel / 2, rig)
+        }
+
+        private fun parseRig(id: String, json: JsonObject, voxel: Float, origin: FloatArray, color: (Char, String) -> Int): Rig {
+            val body = json.getAsJsonArray("layers")?.let { quads(id, slices(json), voxel, vec(json, "origin") ?: origin, color) } ?: emptyList()
+            val names = mutableListOf<String>()
+            val parts = json.getAsJsonArray("parts").map { it.asJsonObject }.map { p ->
+                val name = p.get("name").asString
+                val where = "$id/$name"
+                val at = vec(p, "origin") ?: origin
+                val frames = p.getAsJsonArray("frames")?.map { it.asJsonObject }?.map { f ->
+                    Frame(f.get("ticks").asInt.coerceAtLeast(1), quads(where, slices(f), voxel, at, color))
+                } ?: listOf(Frame(1, quads(where, slices(p), voxel, at, color)))
+                require(frames.isNotEmpty()) { "$where: no frames" }
+                val parent = p.get("parent")?.asString?.let { names.indexOf(it).also { i -> require(i >= 0) { "$where: parent $it must come first" } } } ?: -1
+                val shown = p.get("when")?.asString?.let { w -> Shown.entries.firstOrNull { it.name == w.uppercase() } ?: Shown.NEVER } ?: Shown.ALWAYS
+                val motion = p.getAsJsonObject("motion")
+                val idle = motion?.let { motion(it, null) }
+                names += name
+                Part(
+                    parent, vec(p, "pivot") ?: floatArrayOf(0f, 0f, 0f), shown, frames, idle,
+                    run = motion?.getAsJsonObject("run")?.let { motion(it, idle) },
+                    sneak = motion?.getAsJsonObject("sneak")?.let { motion(it, idle) },
+                    zyx = p.get("order")?.asString == "zyx",
+                )
+            }
+            return Rig(body, parts)
+        }
+
+        /** A state's motion; fields it leaves out come from [base] (the idle motion). */
+        private fun motion(json: JsonObject, base: Motion?) = Motion(
+            speed = json.get("speed")?.asFloat ?: base?.speed ?: 0f,
+            phase = json.get("phase")?.asFloat ?: base?.phase ?: 0f,
+            base = vec(json, "base") ?: base?.base ?: FloatArray(3),
+            amp = vec(json, "amp") ?: base?.amp ?: FloatArray(3),
+            move = vec(json, "move") ?: base?.move ?: FloatArray(3),
+        )
+
+        private fun vec(json: JsonObject, key: String): FloatArray? = json.getAsJsonArray(key)?.map { it.asFloat }?.let {
+            require(it.size == 3) { "$key is [x, y, z]" }
+            it.toFloatArray()
+        }
+
+        private fun slices(json: JsonObject): List<List<String>> =
+            json.getAsJsonArray("layers").map { layer -> layer.asJsonArray.map { it.asString } }
+
+        private fun quads(id: String, layers: List<List<String>>, voxel: Float, origin: FloatArray, color: (Char, String) -> Int): List<Quad> {
             val depth = layers.first().size
             val width = layers.first().first().length
             layers.forEachIndexed { l, layer ->
@@ -169,8 +258,7 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
                 if (open(x - 1, l, z)) quads += Quad(floatArrayOf(x0, y0, z1, x0, y0, z0, x0, y1, z0, x0, y1, z1), -1f, 0f, 0f, argb) // left
                 if (open(x + 1, l, z)) quads += Quad(floatArrayOf(x1, y0, z0, x1, y0, z1, x1, y1, z1, x1, y1, z0), 1f, 0f, 0f, argb) // right
             }
-            val animation = json.get("animation")?.asString?.uppercase()?.let { Animation.valueOf(it) } ?: Animation.NONE
-            return Model(quads, animation, centerX = ox + width * voxel / 2, centerZ = oz + depth * voxel / 2)
+            return quads
         }
     }
 }

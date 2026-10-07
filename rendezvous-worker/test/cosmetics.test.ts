@@ -32,6 +32,32 @@ test("the shipped catalog is valid", () => {
   assert.ok(shipped.items.length > 0);
 });
 
+test("rigged models: parents come first, frames and states are checked", () => {
+  const rigged = () => {
+    const c = cat();
+    const m = c.items.find((i) => i.id === "tophat")!.model!;
+    const slices = m.layers;
+    m.rig = { parts: [
+      { name: "base", pivot: [0, 0, 0], layers: slices, motion: { speed: 0.1, amp: [0, 0, 10], run: { amp: [0, 0, 30] } } },
+      { name: "tip", parent: "base", pivot: [0, -1, 0], when: "still", frames: [{ ticks: 20, layers: slices }, { ticks: 4, layers: slices }] },
+    ] };
+    return c;
+  };
+  validateCatalog(rigged());
+  const orphan = rigged();
+  orphan.items.find((i) => i.id === "tophat")!.model!.rig!.parts.reverse();
+  assert.throws(() => validateCatalog(orphan), /parent/);
+  const state = rigged();
+  (state.items.find((i) => i.id === "tophat")!.model!.rig!.parts[1] as { when: string }).when = "flying";
+  assert.throws(() => validateCatalog(state), /when/);
+  const ticks = rigged();
+  ticks.items.find((i) => i.id === "tophat")!.model!.rig!.parts[1].frames![0].ticks = 0;
+  assert.throws(() => validateCatalog(ticks), /ticks/);
+  const order = rigged();
+  (order.items.find((i) => i.id === "tophat")!.model!.rig!.parts[0] as { order: string }).order = "yxz";
+  assert.throws(() => validateCatalog(order), /order/);
+});
+
 test("catalog validation catches broken art and pricing", () => {
   const ragged = cat();
   ragged.items[0].art![3] = "x.x";

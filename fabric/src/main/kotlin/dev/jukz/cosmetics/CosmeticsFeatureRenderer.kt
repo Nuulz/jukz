@@ -34,6 +34,7 @@ class CosmeticsFeatureRenderer(
         if (loadout.size <= 1 && Slot.BADGE in loadout) return
         val overlay = LivingEntityRenderer.getOverlayCoords(state, 0f)
         val renderType = RenderTypes.entityTranslucent(WHITE)
+        val pose = VoxelMesh.Pose(state.ageInTicks, state.walkAnimationSpeed, state.isCrouching)
         for ((slot, itemId) in loadout) {
             if (slot == Slot.BADGE || hiddenBy(slot, state)) continue
             val model = Cosmetics.catalog.item(itemId)?.model ?: continue
@@ -43,7 +44,7 @@ class CosmeticsFeatureRenderer(
             matrices.scale(PIXEL, PIXEL, PIXEL) // bone space is in blocks; models are in skin pixels
             CosmeticFit.apply(matrices, slot, Cosmetics.fitFor(player.uuid, slot))
             VoxelMesh.animate(model, state.ageInTicks, matrices)
-            collector.submitCustomGeometry(matrices, renderType) { pose, buffer -> VoxelMesh.emit(pose, buffer, model, light, overlay) }
+            collector.submitCustomGeometry(matrices, renderType) { p, buffer -> VoxelMesh.emit(p, buffer, model, light, overlay, pose = pose) }
             matrices.popPose()
         }
     }
@@ -101,6 +102,7 @@ class CosmeticsFeatureRenderer(
         if (loadout.size <= 1 && Slot.BADGE in loadout) return
         val buffer = vertexConsumers.getBuffer(RenderType.entityTranslucent(WHITE))
         val overlay = LivingEntityRenderer.getOverlayCoords(entity, 0f)
+        val pose = VoxelMesh.Pose(animationProgress, limbDistance, entity.isCrouching)
         for ((slot, id) in loadout) {
             if (slot == Slot.BADGE || hiddenBy(slot, entity)) continue
             val model = Cosmetics.catalog.item(id)?.model ?: continue
@@ -110,7 +112,7 @@ class CosmeticsFeatureRenderer(
             matrices.scale(PIXEL, PIXEL, PIXEL) // bone space is in blocks; models are in skin pixels
             CosmeticFit.apply(matrices, slot, Cosmetics.fitFor(entity.uuid, slot))
             VoxelMesh.animate(model, animationProgress, matrices)
-            VoxelMesh.emit(matrices.last(), buffer, model, light, overlay)
+            VoxelMesh.emit(matrices.last(), buffer, model, light, overlay, pose = pose)
             matrices.popPose()
         }
     }

@@ -62,6 +62,33 @@ class CosmeticCatalogTest {
     }
 
     @Test
+    fun `rigs keep the rest pose for old mods and parse parts, frames and states`() {
+        val text = """
+            {"version":1,"defaultBadge":"t","items":[{"id":"w","kind":"back","name":"W","availability":"free",
+             "palette":{"a":"FF112233"},"model":{"voxel":0.5,"origin":[0,4,2],"layers":[["aa"]],
+             "rig":{"layers":[["a"]],"origin":[5,4,2],"parts":[
+               {"name":"arm","pivot":[0,4,2],"order":"zyx","layers":[["a"]],"motion":{"speed":0.1,"amp":[0,0,20],"run":{"amp":[0,0,40]}}},
+               {"name":"hand","parent":"arm","pivot":[0.5,4,2],"origin":[0.5,4,2],"when":"moving",
+                "frames":[{"ticks":3,"layers":[["a"]]},{"ticks":2,"layers":[["."]]}]},
+               {"name":"later","pivot":[0,0,0],"when":"flying","layers":[["a"]]}]}}}]}
+        """.trimIndent()
+        val model = CosmeticCatalog.parse(text).items.single().model!!
+        assertEquals(10, model.quads.size) // the flat rest pose is still there
+        assertEquals(5f, model.rig!!.body.minOf { q -> (0 until 4).minOf { q.corners[it * 3] } }) // the body has its own origin
+        val (arm, hand, later) = model.rig!!.parts
+        assertEquals(-1, arm.parent)
+        assertTrue(arm.zyx && !hand.zyx) // Blockbench's rotation order, only where asked
+        assertEquals(0, hand.parent)
+        assertEquals(40f, arm.run!!.amp[2])
+        assertEquals(0.1f, arm.run!!.speed) // run inherits what it leaves out
+        assertEquals(CosmeticCatalog.Shown.MOVING, hand.shown)
+        assertEquals(CosmeticCatalog.Shown.NEVER, later.shown) // a state from a newer catalog: hidden, not fatal
+        assertEquals(6, hand.frameAt(0f).size)
+        assertTrue(hand.frameAt(3.5f).isEmpty())
+        assertEquals(6, hand.frameAt(5f).size) // loops
+    }
+
+    @Test
     fun `prices read as money`() {
         assertEquals("$1.99", CosmeticCatalog.Price(199, "USD").label())
         assertEquals("3.00 EUR", CosmeticCatalog.Price(300, "EUR").label())
