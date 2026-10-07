@@ -993,6 +993,113 @@ def mushroom_cap():
     return model_json(V, O, None, parts)
 
 
+def jukz_pack():
+    V = 0.5
+    O = (-5.0, -1.0, -3.0)
+    X, Y0, Y1, Z0, Z1 = 3.5, 1.0, 10.0, 2.0, 5.5  # the bag, sitting on the back
+
+    def bag(x, y, z):
+        if not (abs(x) <= X and Y0 <= y <= Y1 and Z0 <= z <= Z1):
+            return None
+        # rounded edges, not a brick
+        ex, ey, ez = max(0, abs(x) - (X - 1)), max(0, max(Y0 + 1 - y, y - (Y1 - 1))), max(0, z - (Z1 - 1))
+        if ex * ex + ey * ey + ez * ez > 1.0:
+            return None
+        if z < Z1 - 0.5:
+            return "d" if abs(x) > X - 0.5 else "b"
+        # the J, read from behind (so x is mirrored), and a pocket with a zipper below it
+        J = ["..ww.", "...w.", "...w.", "w..w.", ".ww.."]
+        i, j = math.floor(2.5 - x), math.floor(y - 2.5)
+        if 0 <= j < 5 and 0 <= i < 5 and J[j][i] == "w":
+            return "w"
+        if 7.5 <= y <= 9.5 and abs(x) <= 2.5:
+            return "y" if (abs(x) < 0.3 and y < 8.0) else ("n" if y < 8.0 else "p")
+        return "b"
+
+    body = Sculpt(V, O)
+    body.fill((-X, Y0, Z0), (X, Y1, Z1), bag)
+    # straps over the shoulders and down the chest
+    for sx in (-2.25, 2.25):
+        body.fill((sx - 0.5, -0.3, -2.3), (sx + 0.5, 0.2, 2.0), lambda x, y, z: "n")
+        body.fill((sx - 0.5, 0.0, -2.6), (sx + 0.5, 7.0, -2.1), lambda x, y, z: "n" if y < 6.5 else "s")
+    # side bottle pocket
+    body.fill((X, 6.0, 2.5), (X + 1.0, 9.5, 4.5), lambda x, y, z: "l" if y > 7.0 else ("g" if z > 3.2 else "G"))
+
+    def flap(open_):
+        f = Sculpt(V, O)
+        f.fill((-X, Y0 - 0.5, Z0), (X, Y0 + 2.0, Z1 + 0.5),
+               lambda x, y, z: (("y" if abs(x) < 0.6 and y > Y0 + 1.4 else "l") if (z > Z1 - 0.2 or y < Y0) else None)
+               if abs(x) <= X - 0.3 else None)
+        return f
+
+    def world(peek):
+        """A tiny grass block peeking out from under the flap: it carries the world around."""
+        w = Sculpt(V, O)
+        if peek:
+            w.fill((-1.0, Y0 - peek, 3.0), (1.0, Y0 - peek + 2.0, 5.0),
+                   lambda x, y, z: "G" if y < Y0 - peek + 0.6 else "D")
+        return w
+
+    parts = [
+        Part("bag", (0, 1.0, 2.0), [(1, body)],
+             {"speed": 0.09, "move": [0, -0.1, 0],
+              "run": {"speed": 0.66, "base": [-4, 0, 0], "amp": [4, 0, 2], "move": [0, -0.4, 0.2]}}),
+        Part("flap", (0, Y0, Z0), [(1, flap(False))],
+             {"speed": 0.05, "run": {"speed": 0.66, "phase": -0.8, "base": [-8, 0, 0], "amp": [-8, 0, 0]}}, parent="bag"),
+        Part("world", (0, Y0, 4.0), [(160, world(0)), (3, world(1.0)), (40, world(2.0)), (3, world(1.0))], parent="bag", when="still"),
+    ]
+    return model_json(V, O, None, parts)
+
+
+def angel_wings():
+    V = 0.5
+    O = (-16.0, -6.0, 1.5)
+
+    def wing(s):
+        """s = 1 right, -1 left (seen from the front). Layered feathers: coverts on top, long primaries below."""
+        def paint(x, y, z):
+            u = s * x - 1.0  # out from the spine
+            if u < 0 or not 2.5 <= z <= 3.5:
+                return None
+            # the top edge arcs up then sweeps down to the tip
+            top = -2.0 - 4.5 * math.sin(min(u, 14) / 14 * math.pi * 0.9) + 0.02 * u * u
+            # long feathers hanging down, each its own length
+            fi = int(u / 1.5)
+            length = 9.5 - 0.45 * fi + (0.8 if fi % 2 else 0)
+            bottom = top + max(2.0, length - 0.25 * u)
+            if u > 14.5 or not top <= y <= bottom:
+                return None
+            d = y - top
+            if d < 1.0:
+                return "W"
+            if d < 3.2:
+                return "w" if (int(u / 1.0) + int(d)) % 2 else "c"
+            edge = (u % 1.5) < 0.5
+            return "g" if edge else ("b" if y > bottom - 1.0 else "w")
+        sc = Sculpt(V, O)
+        sc.fill((min(s, s * 16.0), -8.0, 2.5), (max(s, s * 16.0), 12.0, 3.5), paint)
+        return sc
+
+    def feather(t):
+        """A loose feather drifting down while flying, t = 0..1."""
+        f = Sculpt(V, O)
+        if t is None:
+            return f
+        x, y = -8.0 + 3.0 * math.sin(t * 9), 4.0 + 20 * t
+        for k in range(4):
+            f.put(x + k * 0.5 * math.cos(t * 6), y - k * 0.5, 5.0, "W" if k else "g")
+        return f
+
+    parts = []
+    for name, s, phase in (("wing_r", 1, 0.0), ("wing_l", -1, 0.0)):
+        parts.append(Part(name, (s * 1.0, 2.0, 3.0), [(1, wing(s))],
+                          {"base": [0, s * -20, 0], "speed": 0.05, "amp": [0, s * 5, s * 2],
+                           "run": {"speed": 0.5, "base": [0, s * -25, 0], "amp": [0, s * 30, s * 6]},
+                           "sneak": {"base": [10, s * -60, s * 5], "amp": [0, s * 2, 0]}}))
+    parts.append(Part("feather", (0, 0, 0), [(60, feather(None))] + [(2, feather(k / 13)) for k in range(14)], when="moving"))
+    return model_json(V, O, None, parts)
+
+
 ANIMATED = [
     ("mushroom_cap", "hat", "Mushroom cap", "Grown in the dark oak forest.", "free",
      {"r": "FFFF4A3D", "R": "FFE0322A", "w": "FFFFF8EC", "W": "FFFFFFFF", "c": "FFF2D7B0", "G": "FFD9B98C",
@@ -1024,6 +1131,13 @@ ANIMATED = [
       "b": "FF5B9BFF", "n": "FF2F64C4", "l": "FFA9CCFF", "B": "FFD9E8FF", "s": "FF8FA3C4",
       "w": "FFF4F6FF", "c": "FF2F64C4"},
      top_hat),
+    ("jukz_pack", "back", "jukz pack", "Carries the world around.", "free",
+     {"b": "FF5B9BFF", "d": "FF2F64C4", "l": "FF8DBBFF", "n": "FF22488F", "p": "FF4A86E8", "w": "FFFFFFFF",
+      "y": "FFFFC24A", "s": "FFC9CED8", "g": "C0BEE6FF", "G": "FF5FC24A", "D": "FF8A5A35"},
+     jukz_pack),
+    ("wings", "back", "Wings", "Not a cape. Promise.", "free",
+     {"W": "FFFFFFFF", "w": "FFF6F8FC", "c": "FFE6EBF4", "g": "FFC8D0E0", "b": "FFA9CCFF"},
+     angel_wings),
     ("dragon_wings", "back", "Ender wings", "Torn from the End. They flap when you run.", "free",
      {"m": "D83A145E", "M": "D0662A96", "r": "E0A552E6", "b": "FF1B1226", "h": "FF3C2A55",
       "c": "FFE8DEF4", "s": "FF241832", "S": "FFB46BFF"},

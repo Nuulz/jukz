@@ -253,12 +253,6 @@ MODELS = [
     ("mustache", "face", "Mustache", "Distinguished.", "free",
      {"m": "FF4A2C17", "d": "FF2E1A0C"},
      mustache, [-4, -0.75, -4.75], None),
-    ("jukz_pack", "back", "jukz pack", "Carries the world around.", "free",
-     {"b": "FF5B9BFF", "d": "FF2F64C4", "l": "FF8DBBFF", "w": "FFFFFFFF", "y": "FFFFC24A"},
-     backpack, [-3, 10, 2], None),
-    ("wings", "back", "Wings", "Not a cape. Promise.", "free",
-     {"w": "FFFFFFFF", "g": "FFD6DCE8", "b": "FFA9CCFF"},
-     wings, [-11, 10, 2.6], None),
 ]
 
 
