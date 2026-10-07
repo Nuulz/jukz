@@ -39,6 +39,9 @@ class CosmeticsFeatureRenderer(
             collector.submitCustomGeometry(matrices, renderType) { p, buffer -> VoxelMesh.emit(p, buffer, model, VoxelMesh.FULL_BRIGHT, overlay, opacity) }
         }
         emote?.let { Trails.drawEmote(matrices, it, glow) }
+        Gestures.drawProp(matrices, player.uuid, parentModel.rightArm) { model ->
+            collector.submitCustomGeometry(matrices, renderType) { p, buffer -> VoxelMesh.emit(p, buffer, model, light, overlay) }
+        }
         val pose = VoxelMesh.Pose(state.ageInTicks, state.walkAnimationSpeed, state.isCrouching)
         for ((slot, itemId) in loadout) {
             if (slot.flat || hiddenBy(slot, state)) continue
@@ -110,6 +113,7 @@ class CosmeticsFeatureRenderer(
         val overlay = LivingEntityRenderer.getOverlayCoords(entity, 0f)
         val glow: (CosmeticCatalog.Model, Float) -> Unit = { model, opacity -> VoxelMesh.emit(matrices.last(), buffer, model, VoxelMesh.FULL_BRIGHT, overlay, opacity) }
         emote?.let { Trails.drawEmote(matrices, it, glow) }
+        Gestures.drawProp(matrices, entity.uuid, parentModel.rightArm) { model -> VoxelMesh.emit(matrices.last(), buffer, model, light, overlay) }
         val pose = VoxelMesh.Pose(animationProgress, limbDistance, entity.isCrouching)
         for ((slot, id) in loadout) {
             if (slot.flat || hiddenBy(slot, entity)) continue

@@ -218,6 +218,8 @@ def coin_frames():
 
 
 COIN = coin_frames()
+# the coin held in the hand: the halo face, tight around it
+COIN_PROP = [r[8:24] for r in COIN[0][15:31]]
 
 
 EMOTES = [
@@ -247,11 +249,12 @@ def build():
         items.append({"id": iid, "kind": "emote", "name": name, "description": desc, "availability": "free",
                       "palette": pal, "art": art})
     pal = {"y": "FFFFD54A", "Y": "FFFFF0A0", "d": "FFC98A12", "w": "FFFFFFFF", "o": "FFFFF6C8", "s": "FFFFFFFF", "S": "B0FFF0A0"}
-    for f in COIN:
-        check("emote_coin", f, pal)
+    check("emote_coin", COIN[-1], pal)
+    check("emote_coin", COIN_PROP, pal)
+    # a gesture: the wearer flicks the coin up with the thumb and catches it (no bubble)
     items.append({"id": "emote_coin", "kind": "emote", "name": "Angel's coin",
-                  "description": "Only for those who wear the halo and the wings. Heads, always.",
-                  "availability": "free", "palette": pal, "art": COIN[-1], "frames": COIN, "frameMs": 125,
+                  "description": "Only for those who wear the halo and the wings. Flip it, heads always.",
+                  "availability": "free", "palette": pal, "art": COIN[-1], "gesture": "coin_flip", "prop": COIN_PROP,
                   "requires": ["halo", "wings"]})
     return items
 

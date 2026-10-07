@@ -152,6 +152,7 @@ object Trails {
     }
 
     fun drawEmote(matrices: PoseStack, emote: Cosmetics.Emote, emit: (Model, Float) -> Unit) {
+        if (emote.item.gesture != null) return // the player does it, no bubble
         val frames = emote.item.frames
         val plaque = (if (frames.isEmpty()) emote.item.plaque else frames[(emote.age / emote.item.frameMs).toInt().coerceAtMost(frames.size - 1)]) ?: return
         val size = emote.item.art?.size ?: 16

@@ -13,7 +13,8 @@
     "WorldListEntryMixin",
     "PlayerInfoSkinMixin",
     "AbstractClientPlayerSkinMixin",
-    "ClientHandshakeMixin"
+    "ClientHandshakeMixin",
+    "PlayerModelGestureMixin"
   ],
   "injectors": {
     "defaultRequire": 1

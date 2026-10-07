@@ -110,6 +110,10 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
         val frameMs: Int = 125,
         /** Only usable while also wearing all of these item ids. */
         val requires: List<String> = emptyList(),
+        /** Emotes that move the player ("coin_flip"), and the small art held in the hand for it. */
+        val gesture: String? = null,
+        val prop: Model? = null,
+        val propSize: Int = 1,
     ) {
         val plaque: Model? by lazy { art?.let { plaque(it, centered = false) } }
     }
@@ -171,6 +175,9 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
                 frames = json.getAsJsonArray("frames")?.map { f -> plaque(parseArt(id, f.asJsonArray.map { it.asString }, ::color), centered = false) } ?: emptyList(),
                 frameMs = json.get("frameMs")?.asInt ?: 125,
                 requires = json.getAsJsonArray("requires")?.map { it.asString } ?: emptyList(),
+                gesture = json.get("gesture")?.asString,
+                prop = json.getAsJsonArray("prop")?.let { rows -> plaque(parseArt(id, rows.map { it.asString }, ::color), centered = true) },
+                propSize = json.getAsJsonArray("prop")?.size() ?: 1,
             )
         }
 

@@ -87,6 +87,9 @@ export interface CatalogItem {
   frameMs?: number;
   /** Only usable while also wearing all of these items. */
   requires?: string[];
+  /** emote: moves the wearer instead of showing a bubble, holding `prop` (square art) in the hand. */
+  gesture?: "coin_flip";
+  prop?: string[];
 }
 
 export interface Catalog {
@@ -141,6 +144,15 @@ export function validateCatalog(catalog: Catalog): Catalog {
             if (row.length !== size) throw new Error(`${where}: frame ${i} must be square`);
             checkRow(row, `frame ${i}`);
           });
+        });
+      }
+      if (item.gesture !== undefined || item.prop !== undefined) {
+        if (item.kind !== "emote" || item.gesture !== "coin_flip") throw new Error(`${where}: unknown gesture`);
+        const prop = item.prop ?? [];
+        if (prop.length < 4 || prop.length > 16) throw new Error(`${where}: prop must be 4..16 rows`);
+        prop.forEach((row, y) => {
+          if (row.length !== prop.length) throw new Error(`${where}: prop must be square`);
+          checkRow(row, `prop row ${y}`);
         });
       }
       if (item.kind === "trail") {
