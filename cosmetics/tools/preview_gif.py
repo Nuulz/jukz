@@ -1,4 +1,4 @@
-"""Joins the in-game screenshots (front_NNN.png, back_NNN.png) into one GIF, front and back side by side.
+"""Joins the in-game screenshots (front_NNN_<move>.png, back_NNN_<move>.png) into one GIF, front and back side by side.
 Used by preview-in-game.sh.  python3 preview_gif.py <shots dir> <out.gif> <label>"""
 import glob, os, sys
 from PIL import Image, ImageDraw
@@ -21,6 +21,9 @@ for f, b in zip(front, back or front):
     a, c = crop(f), crop(b)
     sheet = Image.new("RGB", (a.width * 2, a.height))
     sheet.paste(a, (0, 0)); sheet.paste(c, (a.width, 0))
-    ImageDraw.Draw(sheet).text((8, 6), label, fill="white")
+    move = os.path.basename(f).rsplit("_", 1)[-1].removesuffix(".png")
+    d = ImageDraw.Draw(sheet)
+    d.text((8, 6), label, fill="white")
+    d.text((8, a.height - 16), move, fill="white")
     frames.append(sheet)
 frames[0].save(out, save_all=True, append_images=frames[1:], duration=50, loop=0)

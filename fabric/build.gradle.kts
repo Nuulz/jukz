@@ -125,7 +125,7 @@ if (mc != "1.21.1") {
     }
     tasks.matching { it.name == "runClientGameTest" }.configureEach {
         val exec = this as JavaExec
-        for (key in listOf("jukz.preview.items", "jukz.preview.out", "jukz.preview.frames")) {
+        for (key in listOf("jukz.preview.items", "jukz.preview.out", "jukz.preview.frames", "jukz.preview.moves")) {
             findProperty(key)?.let { exec.systemProperty(key, it.toString()) }
         }
     }

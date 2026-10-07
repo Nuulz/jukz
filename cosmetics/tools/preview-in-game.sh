@@ -7,7 +7,8 @@
 #   <minecraft>  1.21.11 or 26.2 (1.21.1 has no client gametest API)
 #   <item>       catalog ids to wear together, e.g. halo wings emote_coin. An emote plays from frame 0.
 #
-#   FRAMES=60    game ticks to film per camera (20 = 1 s). Default 60.
+#   MOVES=still,walk,run,sneak   what the player does, in order, holding the real keys. Default all four.
+#   FRAMES=40                    game ticks to film per move (20 = 1 s). Default 40.
 #
 # Output: cosmetics/previews/<items>-<minecraft>.gif, front and back side by side.
 # A Minecraft window opens and closes by itself (about a minute); don't touch it while it films.
@@ -18,7 +19,7 @@
 set -euo pipefail
 
 if [[ $# -lt 2 || ! "$1" =~ ^(1\.21\.11|26\.2)$ ]]; then
-  sed -n '4,16p' "$0"; exit 1
+  sed -n '4,17p' "$0"; exit 1
 fi
 MC=$1; shift
 ITEMS=$(IFS=,; echo "$*")
@@ -32,7 +33,7 @@ mkdir -p "$ROOT/cosmetics/previews"
 LOG="$ROOT/cosmetics/previews/last-run.log"
 echo "filming $* on $MC... (game log: $LOG)"
 if ! (cd "$ROOT" && ./gradlew --no-daemon -q ":fabric:$MC:runClientGameTest" \
-  "-Pjukz.preview.items=$ITEMS" "-Pjukz.preview.out=$SHOTS" "-Pjukz.preview.frames=${FRAMES:-60}") >"$LOG" 2>&1; then
+  "-Pjukz.preview.items=$ITEMS" "-Pjukz.preview.out=$SHOTS" "-Pjukz.preview.frames=${FRAMES:-40}" "-Pjukz.preview.moves=${MOVES:-still,walk,run,sneak}") >"$LOG" 2>&1; then
   grep -E "^e: |Exception|FAILED|went wrong" "$LOG" | head -20
   echo "the game run failed, full log: $LOG"; exit 1
 fi
