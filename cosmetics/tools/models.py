@@ -244,9 +244,6 @@ def wings():
 
 MODELS = [
     # id, kind, name, description, availability, palette, builder, origin, animation
-    ("party_hat", "hat", "Party hat", "Someone joined. Celebrate.", "free",
-     {"p": "FFFF5CA8", "y": "FFFFD54A", "b": "FF5BC8FF", "w": "FFFFFFFF", "W": "FFF2F2F2"},
-     party_hat, [-4, -8.0, -4], None),
     ("halo", "hat", "Halo", "Floats over the host who never griefs.", "free",
      {"y": "FFFFE066", "w": "FFFFF6C8"},
      halo, [-5, -11, -5], "bob"),

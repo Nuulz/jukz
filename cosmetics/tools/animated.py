@@ -796,6 +796,65 @@ def cat_ears():
     return model_json(V, O, None, parts)
 
 
+def party_hat():
+    V = 0.5
+    O = (-4.5, -18.0, -4.5)
+    BASE, H = -8.0, 7.0
+
+    def cone():
+        def paint(x, y, z):
+            h = BASE - y
+            if not 0 <= h < H:
+                return None
+            t = h / H
+            # square at the brim so it sits flat on the head, round towards the tip
+            p = 6 - 4 * t
+            R = 3.6 * (1 - t) + 0.25
+            d = (abs(x) ** p + abs(z) ** p) ** (1 / p)
+            if d > R or d < R - 0.8:
+                return None
+            if h < 0.6:
+                return "w"
+            a = math.atan2(x, -z)
+            # three stripes winding up, with white dots on the pink
+            band = int((a / (2 * math.pi) * 3 + h * 0.3) % 3)
+            if band == 0 and (round(a * 4.5) + round(h)) % 3 == 0 and abs(a * 4.5 - round(a * 4.5)) < 0.3 and abs(h - round(h)) < 0.3:
+                return "w"
+            return ("p", "y", "b")[band]
+        s = Sculpt(V, O)
+        s.fill((-4.0, BASE - H, -4.0), (4.0, BASE, 4.0), paint)
+        return s
+
+    pom = Sculpt(V, O)
+    pom.fill((-1.2, -16.6, -1.2), (1.2, -14.4, 1.2),
+             lambda x, y, z: ("W" if x + y < -15.6 else "w") if ellipsoid((0, -15.5, 0), (1.1, 1.0, 1.1))(x, y, z) else None)
+
+    COLS = "pybgo"
+    rng = __import__("random").Random(7)
+    bits = [(rng.uniform(0, 2 * math.pi), rng.uniform(2.0, 4.0), rng.uniform(3.0, 5.5), rng.choice(COLS)) for _ in range(20)]
+
+    def confetti(t):
+        """t = 0..1 through a burst from the tip: pieces fly out and up, then fall."""
+        s = Sculpt(V, O)
+        if t is None:
+            return s
+        for a, sp, up, ch in bits:
+            r = sp * t * 2.2
+            y = -15.5 - up * t + 6.5 * t * t
+            s.put(r * math.sin(a), y, -r * math.cos(a), ch)
+        return s
+
+    burst = [(140, confetti(None))] + [(2, confetti(k / 9)) for k in range(10)]
+    parts = [
+        Part("hat", (0, BASE, 0), [(1, cone())],
+             {"base": [0, 0, 6], "speed": 0.05, "amp": [0, 0, 2],
+              "run": {"speed": 0.66, "base": [0, 0, 6], "amp": [5, 0, 3]}, "sneak": {"base": [12, 0, 6], "amp": [0, 0, 0]}}),
+        Part("pom", (0, -14.6, 0), [(1, pom)], {"speed": 0.1, "amp": [0, 0, 6], "run": {"speed": 0.66, "amp": [12, 0, 8]}}, parent="hat"),
+        Part("confetti", (0, 0, 0), burst, parent="hat", when="still"),
+    ]
+    return model_json(V, O, None, parts)
+
+
 ANIMATED = [
     ("crown_3d", "hat", "Crown", "Heavy is the head that hosts.", "free",
      {"y": "FFFFC83A", "Y": "FFFFE58A", "d": "FFB87A00", "H": "FFFFFBE6", "p": "FFF6F1E7", "w": "FFFFFFFF",
@@ -805,6 +864,10 @@ ANIMATED = [
      {"c": "FFFFA94D", "C": "FFFFC27A", "d": "FFA8521A", "D": "FFD9772B", "p": "FFFF9EC0", "P": "FFFF7AA8",
       "w": "FFFFF1E0"},
      cat_ears),
+    ("party_hat", "hat", "Party hat", "Someone joined. Celebrate.", "free",
+     {"p": "FFFF5CA8", "P": "FFE0408C", "y": "FFFFD54A", "b": "FF5BC8FF", "g": "FF6BE07B", "o": "FFFF9A3D",
+      "w": "FFFFFFFF", "W": "FFF2F2F2"},
+     party_hat),
     ("top_hat", "hat", "Top hat", "A classic, with the jukz-blue band and a card tucked in.", "free",
      {"k": "FF262633", "K": "FF1A1A24", "e": "FF3A3A4C", "g": "FF30303F", "h": "FF50506A", "H": "FFC4C8E0",
       "b": "FF5B9BFF", "n": "FF2F64C4", "l": "FFA9CCFF", "B": "FFD9E8FF", "s": "FF8FA3C4",
