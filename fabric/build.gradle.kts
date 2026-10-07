@@ -111,6 +111,26 @@ loom {
     }
 }
 
+// In-game previews of cosmetics (client gametest, 1.21.11+ only): a real client films the items and
+// cosmetics/tools/preview-in-game.sh turns the screenshots into a GIF. Run it through that script.
+if (mc != "1.21.1") {
+    fabricApi {
+        configureTests {
+            createSourceSet = true
+            modId = "jukz-preview"
+            enableGameTests = false
+            enableClientGameTests = true
+            eula = true
+        }
+    }
+    tasks.matching { it.name == "runClientGameTest" }.configureEach {
+        val exec = this as JavaExec
+        for (key in listOf("jukz.preview.items", "jukz.preview.out", "jukz.preview.frames")) {
+            findProperty(key)?.let { exec.systemProperty(key, it.toString()) }
+        }
+    }
+}
+
 java {
     toolchain { languageVersion = JavaLanguageVersion.of(javaVersion) }
     withSourcesJar()

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "jukz-preview",
+  "version": "1",
+  "name": "jukz in-game previews",
+  "description": "Client gametest that films cosmetics in the real game. See cosmetics/tools/preview-in-game.sh.",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": [{ "adapter": "kotlin", "value": "dev.jukz.preview.CosmeticPreview" }]
+  },
+  "depends": { "jukz": "*", "fabric-client-gametest-api-v1": "*" }
+}

@@ -68,6 +68,10 @@ object Cosmetics {
     @Volatile var account: Account = Account.SignedOut
         private set
 
+    /** In-game previews (the client gametest): what you wear, and the clock emotes play by (game ticks there). */
+    @Volatile var previewLoadout: Map<Slot, String>? = null
+    @Volatile var clock: () -> Long = System::currentTimeMillis
+
     private class Known(val loadout: Map<Slot, String>, val at: Long)
 
     private val known = ConcurrentHashMap<UUID, Known>()
@@ -187,7 +191,7 @@ object Cosmetics {
     fun emoting(player: UUID): Emote? {
         val start = emotes[player] ?: return null
         if (Minecraft.getInstance().currentScreen != null) return null
-        val age = System.currentTimeMillis() - start
+        val age = clock() - start
         if (age > EMOTE_MS) { emotes.remove(player); return null }
         val loadout = loadoutFor(player)
         return catalog.item(loadout[Slot.EMOTE])?.takeIf { unlocked(it, loadout) }?.let { Emote(it, age) }
@@ -200,7 +204,7 @@ object Cosmetics {
         val me = Minecraft.getInstance().gameProfile?.id ?: return
         val loadout = loadoutFor(me)
         if (catalog.item(loadout[Slot.EMOTE])?.takeIf { unlocked(it, loadout) } == null) return
-        emotes[me] = System.currentTimeMillis()
+        emotes[me] = clock()
         emoteCount++
         share()
     }
@@ -213,7 +217,7 @@ object Cosmetics {
         val emote = payload.loadout["*"]
         val before = lastEmote.put(payload.owner, emote ?: "0")
         if (emote != null && before != null && before != emote) {
-            emotes[payload.owner] = System.currentTimeMillis()
+            emotes[payload.owner] = clock()
         }
     }
 
@@ -246,6 +250,7 @@ object Cosmetics {
 
     /** What [player] wears (slot → item id; empty = nothing, or not known yet — a lookup is then queued). */
     fun loadoutFor(player: UUID): Map<Slot, String> {
+        previewLoadout?.let { if (player == Minecraft.getInstance().gameProfile?.id) return visible(it) }
         if (!enabled) return emptyMap()
         (account as? Account.SignedIn)?.takeIf { it.id == player }?.let { return visible(it.picks) }
         if (player == Minecraft.getInstance().gameProfile?.id && local) return visible(localPicks)
