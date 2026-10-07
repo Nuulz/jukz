@@ -829,12 +829,12 @@ def party_hat():
     pom.fill((-1.2, -16.6, -1.2), (1.2, -14.4, 1.2),
              lambda x, y, z: ("W" if x + y < -15.6 else "w") if ellipsoid((0, -15.5, 0), (1.1, 1.0, 1.1))(x, y, z) else None)
 
-    # the elastic: down both sides of the head from the brim and under the chin
+    # the elastic: flat on the sides of the head, from the brim down to the jaw and across under the mouth
     elastic = Sculpt(V, O)
     for sx in (-1, 1):
-        elastic.fill((sx * 4.25 - 0.2, -8.0, -0.2), (sx * 4.25 + 0.2, 0.2, 0.2), lambda x, y, z: "e")
-        elastic.fill((sx * 3.75 - 0.2, -8.2, -0.2), (sx * 3.75 + 0.2, -7.8, 0.2), lambda x, y, z: "e")
-    elastic.fill((-4.2, 0.05, -0.2), (4.2, 0.45, 0.2), lambda x, y, z: "e")
+        elastic.fill((sx * 4.25 - 0.2, -8.0, -4.0), (sx * 4.25 + 0.2, -0.3, 0.5),
+                     lambda x, y, z: "e" if abs(z - (-0.5 - 3.25 * (y + 8.0) / 7.7)) < 0.3 else None)
+    elastic.fill((-4.0, -0.5, -4.45), (4.0, -0.05, -4.05), lambda x, y, z: "e")
 
     COLS = "pybgo"
     rng = __import__("random").Random(7)
@@ -873,7 +873,7 @@ ANIMATED = [
       "w": "FFFFF1E0"},
      cat_ears),
     ("party_hat", "hat", "Party hat", "Someone joined. Celebrate.", "free",
-     {"p": "FFFF5CA8", "P": "FFE0408C", "y": "FFFFD54A", "b": "FF5BC8FF", "g": "FF6BE07B", "o": "FFFF9A3D", "e": "FFE8E8F0",
+     {"p": "FFFF5CA8", "P": "FFE0408C", "y": "FFFFD54A", "b": "FF5BC8FF", "g": "FF6BE07B", "o": "FFFF9A3D", "e": "B0F4F4FA",
       "w": "FFFFFFFF", "W": "FFF2F2F2"},
      party_hat),
     ("top_hat", "hat", "Top hat", "A classic, with the jukz-blue band and a card tucked in.", "free",
