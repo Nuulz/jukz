@@ -244,9 +244,6 @@ def wings():
 
 MODELS = [
     # id, kind, name, description, availability, palette, builder, origin, animation
-    ("halo", "hat", "Halo", "Floats over the host who never griefs.", "free",
-     {"y": "FFFFE066", "w": "FFFFF6C8"},
-     halo, [-5, -11, -5], "bob"),
     ("mushroom_cap", "hat", "Mushroom cap", "Grown in the dark oak forest.", "free",
      {"r": "FFE53935", "R": "FFFF5A4F", "w": "FFFFF8EC", "c": "FFF2D7B0"},
      mushroom, [-6, -7.8, -6], None),

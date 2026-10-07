@@ -863,7 +863,59 @@ def party_hat():
     return model_json(V, O, None, parts)
 
 
+def halo():
+    V = 0.5
+    O = (-5.0, -13.0, -5.0)
+    Y = -12.0  # floats a bit above the head
+
+    def ring(glint):
+        """Gold ring with a soft glow inside; glint = angle of the bright spot running around it."""
+        def paint(x, y, z):
+            d = math.hypot(x, z)
+            if abs(y - Y) > 0.3 or not 3.0 <= d <= 4.6:
+                return None
+            if d < 3.5:
+                return "g"
+            a = math.atan2(x, -z)
+            off = abs((a - glint + math.pi) % (2 * math.pi) - math.pi)
+            if off < 0.25:
+                return "W"
+            if off < 0.55:
+                return "Y"
+            return "y" if d < 4.1 else "d"
+        s = Sculpt(V, O)
+        s.fill((-4.8, Y - 0.3, -4.8), (4.8, Y + 0.3, 4.8), paint)
+        return s
+
+    rng = __import__("random").Random(3)
+    motes = [(rng.uniform(0, 2 * math.pi), rng.uniform(2.8, 4.4), rng.uniform(0, 1)) for _ in range(6)]
+
+    def dust(t):
+        """Light motes slipping off the ring and drifting down, t = 0..1 through the loop."""
+        s = Sculpt(V, O)
+        for a, d, ph in motes:
+            u = (t + ph) % 1
+            if u > 0.8:
+                continue
+            s.put(d * math.sin(a), Y + 0.5 + u * 5, -d * math.cos(a), "s" if u < 0.4 else "S")
+        return s
+
+    spin = [(3, ring(k * 2 * math.pi / 12)) for k in range(12)]
+    parts = [
+        Part("ring", (0, Y, 0), spin,
+             {"speed": 0.07, "amp": [3, 0, 3], "move": [0, 0.5, 0],
+              "run": {"speed": 0.66, "base": [-14, 0, 0], "amp": [3, 0, 2], "move": [0, 0.3, 0]},
+              "sneak": {"base": [10, 0, 0], "amp": [2, 0, 2], "move": [0, 0.2, 0]}}),
+        Part("dust", (0, Y, 0), [(3, dust(k / 12)) for k in range(12)], parent="ring", when="still"),
+    ]
+    return model_json(V, O, None, parts)
+
+
 ANIMATED = [
+    ("halo", "hat", "Halo", "Floats over the host who never griefs.", "free",
+     {"y": "FFFFD54A", "Y": "FFFFEB99", "d": "FFE0A526", "W": "FFFFFFFF", "g": "70FFF6C8",
+      "s": "D0FFF6C8", "S": "80FFF6C8"},
+     halo),
     ("crown_3d", "hat", "Crown", "Heavy is the head that hosts.", "free",
      {"y": "FFFFC83A", "Y": "FFFFE58A", "d": "FFB87A00", "H": "FFFFFBE6", "p": "FFF6F1E7", "w": "FFFFFFFF",
       "R": "FFE0213F", "b": "FF4D9BFF", "g": "FF3DDC84", "v": "FFB0203A", "V": "FF861629", "s": "FFFFF3A8"},
