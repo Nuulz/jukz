@@ -1,5 +1,6 @@
 {
   "modmenu.kofi": "Apoyar en Ko-fi",
   "modmenu.summaryTranslation.jukz": "Juega con tus amigos en el mismo mundo, sin servidor.",
-  "modmenu.descriptionTranslation.jukz": "Abre un mundo y tus amigos entran: sin servidor ni abrir puertos. Cuando el anfitrión se va, otro toma el relevo; cuando todos se van, el mundo espera en la nube. Además: tus mundos en cada PC con una cuenta de Microsoft y cosméticos gratis. El botón de configuración abre tu cuenta de jukz."
+  "modmenu.descriptionTranslation.jukz": "Abre un mundo y tus amigos entran: sin servidor ni abrir puertos. Cuando el anfitrión se va, otro toma el relevo; cuando todos se van, el mundo espera en la nube. Además: tus mundos en cada PC con una cuenta de Microsoft y cosméticos gratis. El botón de configuración abre tu cuenta de jukz.",
+  "key.jukz.emote": "Mostrar emote"
 }

@@ -19,6 +19,7 @@ import net.minecraft.client.gui.screens.ConfirmLinkScreen
 import net.minecraft.client.gui.screens.TitleScreen
 import dev.jukz.client.gui.HostInfoScreen
 import dev.jukz.cosmetics.Cosmetics
+import dev.jukz.cosmetics.Trails
 import dev.jukz.client.gui.LimitedScreen
 import dev.jukz.compat.toast
 import dev.jukz.config.JukzConfig
@@ -202,7 +203,8 @@ object JukzClient : ClientModInitializer {
         LocalSkins.init()
         ClientPlayNetworking.registerGlobalReceiver(SkinPayload.ID) { payload, _ -> LocalSkins.receive(payload) }
         ClientPlayNetworking.registerGlobalReceiver(LoadoutPayload.ID) { payload, _ -> Cosmetics.receive(payload) }
-        ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { LocalSkins.tick(); Cosmetics.tick() })
+        Trails.init()
+        ClientTickEvents.END_CLIENT_TICK.register(ClientTickEvents.EndTick { client -> LocalSkins.tick(); Cosmetics.tick(); Trails.tick(client) })
 
         ClientPlayConnectionEvents.JOIN.register { _, _, client ->
             LocalSkins.shareSoon()

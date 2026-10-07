@@ -299,7 +299,7 @@ def render(item, ticks, state, yaw, size=360, scale=9.0, cy=0.40):
     head, body, legs = player(state)
     piece = posed_quads(item, ticks, state)
     lean = affine(rot_xyz(28.6 if state == "sneak" else 0, 0, 0), [0, 0, 0])
-    on_body = item["kind"] == "back"
+    on_body = item["kind"] in ("back", "pet")
     qs = head + transform(body, lean) + legs + (transform(piece, lean) if on_body else piece)
     # camera: turn the world by yaw around y, tilt it a little, look along +z of the camera (orthographic).
     view = rot_xyz(-12, 0, 0) @ rot_xyz(0, yaw, 0)

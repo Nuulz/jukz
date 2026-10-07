@@ -332,11 +332,11 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
 
         val tabs = root.childById(FlowLayout::class.java, "tabs")
         Slot.entries.forEach { slot ->
-            val icon = when (slot) { Slot.BADGE -> HubIcons.SHIELD; Slot.HAT -> HubIcons.HAT; Slot.FACE -> HubIcons.FACE; Slot.BACK -> HubIcons.BACKPACK }
+            val icon = when (slot) { Slot.BADGE -> HubIcons.SHIELD; Slot.HAT -> HubIcons.HAT; Slot.FACE -> HubIcons.FACE; Slot.BACK -> HubIcons.BACKPACK; Slot.PET -> HubIcons.PAW; Slot.TRAIL -> HubIcons.SPARKLE; Slot.EMOTE -> HubIcons.BUBBLE }
             val button = JukzSurface.iconButton(if (compact) "" else slot.label, icon, { tab == slot }, centred = true, pointer = JukzSurface.Pointer.DOWN) {
                 tab = slot; trying = null; rebuild()
             }
-            button.sizing(Sizing.fixed(if (compact) 28 else 72), Sizing.fixed(22))
+            button.sizing(Sizing.fixed(if (compact) 28 else 62), Sizing.fixed(22))
             if (compact) button.tooltip(Component.literal(slot.label))
             tabs.child(button)
         }
@@ -346,10 +346,12 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
             content.child(UIContainers.horizontalFlow(Sizing.content(), Sizing.content()).gap(CARD_GAP).also { r -> row.forEach(r::child) })
         }
 
-        val fitting = me && tab != Slot.BADGE && Cosmetics.wearing(tab) != null
+        val fitting = me && !tab.flat && Cosmetics.wearing(tab) != null
         val fit = Cosmetics.myFit(tab)
         hint(root, when {
             tab == Slot.BADGE -> "Your badge sits left of your name in the tab list, for everyone running jukz."
+            tab == Slot.TRAIL -> "Your trail floats around you while you stand and follows you when you move."
+            tab == Slot.EMOTE -> "Press G in game to show it over your head (change the key in Controls)."
             fitting -> "Position: up ${fit.up} · out ${fit.out} px. ▲▼ move it up or down, ◀▶ closer to or farther from you."
             else -> "Everyone running jukz sees what you wear. All cosmetics are free for now."
         })
@@ -832,8 +834,14 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
     }
 
     /** The 3D you: sways, turns when dragged, and hops when you put something on. */
+    private object View {
+        var dragYaw = 0f
+        var dragged = false
+        var zoom = 1f
+        const val MIN_ZOOM = 0.45f
+    }
+
     class PreviewComponent(private val preview: PlayerPreview, private val loadout: () -> Map<Slot, String>) : BaseUIComponent() {
-        private var dragYaw = 0f
         private var hopAt = 0L
 
         init {
@@ -843,7 +851,6 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
 
         /** Keep the turn and a running hop across a rebuild. */
         fun carryOver(old: PreviewComponent) {
-            dragYaw = old.dragYaw
             hopAt = old.hopAt
         }
 
@@ -859,11 +866,11 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
         }
 
         override fun draw(context: OwoUIGraphics, mouseX: Int, mouseY: Int, partialTicks: Float, delta: Float) {
-            val sway = 20f * sin(System.currentTimeMillis() / 1600.0).toFloat()
+            val sway = if (View.dragged) 0f else 20f * sin(System.currentTimeMillis() / 1600.0).toFloat()
             val t = (System.currentTimeMillis() - hopAt) / HOP_MS.toDouble()
             val lift = if (t in 0.0..1.0) (6 * sin(t * PI)).toInt() else 0
             platform(context, x + width / 2, y + height - 6)
-            preview.draw(context, x, y - lift, width, height, -25f + sway + dragYaw, loadout())
+            preview.draw(context, x, y - lift, width, height, -25f + sway + View.dragYaw, loadout(), View.zoom)
         }
 
         //? if >=1.21.11 {
@@ -871,7 +878,13 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
         *///?} else {
         override fun onMouseDrag(mouseX: Double, mouseY: Double, deltaX: Double, deltaY: Double, button: Int): Boolean {
         //?}
-            dragYaw += deltaX.toFloat() * 2f
+            View.dragYaw += deltaX.toFloat() * 2f
+            View.dragged = true
+            return true
+        }
+
+        override fun onMouseScroll(mouseX: Double, mouseY: Double, amount: Double): Boolean {
+            View.zoom = (View.zoom + amount.toFloat() * 0.1f).coerceIn(View.MIN_ZOOM, 1f)
             return true
         }
 

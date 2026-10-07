@@ -12,6 +12,8 @@ object VoxelMesh {
     class Pose(val ticks: Float, val walk: Float = 0f, val sneaking: Boolean = false)
 
     private const val MOVING = 0.15f
+    const val FULL_BRIGHT = 0xF000F0
+
 
     fun emit(
         entry: PoseStack.Pose, buffer: VertexConsumer, model: CosmeticCatalog.Model, light: Int, overlay: Int,

@@ -1,5 +1,6 @@
 {
   "modmenu.kofi": "Support on Ko-fi",
   "modmenu.summaryTranslation.jukz": "Play with friends in the same world, with no server.",
-  "modmenu.descriptionTranslation.jukz": "Open a world and your friends can jump in: no server, no port forwarding. When the host leaves, someone else takes over; when everyone leaves, the world waits in the cloud. Also: your worlds on every PC with a Microsoft account, and free cosmetics. The Config button opens the jukz settings."
+  "modmenu.descriptionTranslation.jukz": "Open a world and your friends can jump in: no server, no port forwarding. When the host leaves, someone else takes over; when everyone leaves, the world waits in the cloud. Also: your worlds on every PC with a Microsoft account, and free cosmetics. The Config button opens the jukz settings.",
+  "key.jukz.emote": "Show emote"
 }

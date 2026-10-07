@@ -19,8 +19,10 @@ sys.path.insert(0, HERE)
 import badges  # noqa: E402
 import models  # noqa: E402
 import animated  # noqa: E402
+import extras  # noqa: E402
+import pets  # noqa: E402
 
-items = badges.build() + [{k: v for k, v in it.items() if k != "_vox"} for it in models.build()] + animated.build()
+items = badges.build() + [{k: v for k, v in it.items() if k != "_vox"} for it in models.build()] + animated.build() + pets.build() + extras.build()
 # Community items from the creators page (creations.py pull writes them), in a stable order.
 creations = os.path.join(HERE, "..", "creations")
 if os.path.isdir(creations):

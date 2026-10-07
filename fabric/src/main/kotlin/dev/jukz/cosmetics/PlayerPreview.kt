@@ -37,10 +37,10 @@ class PlayerPreview(private val profile: GameProfile, private val override: Pair
      * Draw the player standing in the [w]×[h] box at ([x], [y]), turned [yaw] degrees from facing
      * the viewer, wearing [loadout] (slot → item id).
      */
-    fun draw(context: GuiGraphics, x: Int, y: Int, w: Int, h: Int, yaw: Float, loadout: Map<Slot, String>) {
+    fun draw(context: GuiGraphics, x: Int, y: Int, w: Int, h: Int, yaw: Float, loadout: Map<Slot, String>, zoom: Float = 1f) {
         // Model space is in blocks: head top at -0.5, feet at +1.5; tall hats reach about -1.15, so the
         // box is fitted to that whole span. The picture's origin is its bottom centre.
-        val scale = h * 0.94f / 2.65f
+        val scale = h * 0.94f / 2.65f * zoom
         GuiModelRenderer.submit(context, x, y, x + w, y + h, scale) { matrices, collector ->
             matrices.translate(0f, -1.585f, 0f) // feet a little above the bottom edge
             matrices.mulPose(Axis.XP.rotationDegrees(-8f))
@@ -55,10 +55,10 @@ class PlayerPreview(private val profile: GameProfile, private val override: Pair
         val ticks = (System.currentTimeMillis() % 1_000_000L) / 50f
         val renderType = RenderTypes.entityTranslucent(WHITE)
         for ((slot, itemId) in loadout) {
-            if (slot == Slot.BADGE) continue
+            if (slot.flat) continue
             val piece = Cosmetics.catalog.item(itemId)?.model ?: continue
             matrices.pushPose()
-            (if (slot == Slot.BACK) model.body else model.head).translateAndRotate(matrices)
+            (if (slot.onBody) model.body else model.head).translateAndRotate(matrices)
             matrices.scale(1 / 16f, 1 / 16f, 1 / 16f)
             CosmeticFit.apply(matrices, slot, Cosmetics.myFit(slot))
             VoxelMesh.animate(piece, ticks, matrices)
@@ -109,10 +109,10 @@ class PlayerPreview(private val profile: GameProfile, private val override: Pair
      * Draw the player standing in the [w]×[h] box at ([x], [y]), turned [yaw] degrees from facing
      * the viewer, wearing [loadout] (slot → item id).
      */
-    fun draw(context: GuiGraphics, x: Int, y: Int, w: Int, h: Int, yaw: Float, loadout: Map<Slot, String>) {
+    fun draw(context: GuiGraphics, x: Int, y: Int, w: Int, h: Int, yaw: Float, loadout: Map<Slot, String>, zoom: Float = 1f) {
         // Model space is in blocks: head top at -0.5, feet at +1.5; tall hats reach about -1.15, so the
         // box is fitted to that whole span. The picture's origin is its bottom centre.
-        val scale = h * 0.94f / 2.65f
+        val scale = h * 0.94f / 2.65f * zoom
         GuiModelRenderer.submit(context, x, y, x + w, y + h, scale) { matrices, buffers ->
             matrices.translate(0f, -1.585f, 0f) // feet a little above the bottom edge
             matrices.mulPose(Axis.XP.rotationDegrees(-8f))
@@ -127,10 +127,10 @@ class PlayerPreview(private val profile: GameProfile, private val override: Pair
         val ticks = (System.currentTimeMillis() % 1_000_000L) / 50f
         val buffer = buffers.getBuffer(RenderTypes.entityTranslucent(WHITE))
         for ((slot, itemId) in loadout) {
-            if (slot == Slot.BADGE) continue
+            if (slot.flat) continue
             val piece = Cosmetics.catalog.item(itemId)?.model ?: continue
             matrices.pushPose()
-            (if (slot == Slot.BACK) model.body else model.head).translateAndRotate(matrices)
+            (if (slot.onBody) model.body else model.head).translateAndRotate(matrices)
             matrices.scale(1 / 16f, 1 / 16f, 1 / 16f)
             CosmeticFit.apply(matrices, slot, Cosmetics.myFit(slot))
             VoxelMesh.animate(piece, ticks, matrices)
@@ -183,12 +183,12 @@ class PlayerPreview(private val profile: GameProfile, private val override: Pair
      * Draw the player standing in the [w]×[h] box at ([x], [y]), turned [yaw] degrees from facing
      * the viewer, wearing [loadout] (slot → item id).
      */
-    fun draw(context: GuiGraphics, x: Int, y: Int, w: Int, h: Int, yaw: Float, loadout: Map<Slot, String>) {
+    fun draw(context: GuiGraphics, x: Int, y: Int, w: Int, h: Int, yaw: Float, loadout: Map<Slot, String>, zoom: Float = 1f) {
         val matrices = context.pose()
         matrices.pushPose()
         // Model space (blocks, y down like the GUI): head top at -0.5, feet at +1.5; tall hats reach about
         // -1.15, so the box is fitted to that whole span.
-        val scale = h * 0.94f / 2.65f
+        val scale = h * 0.94f / 2.65f * zoom
         matrices.translate(x + w / 2f, y + h * 0.03f + 1.15f * scale, 100f)
         matrices.scale(scale, scale, scale)
         matrices.mulPose(Axis.XP.rotationDegrees(-8f))
@@ -200,10 +200,10 @@ class PlayerPreview(private val profile: GameProfile, private val override: Pair
         val ticks = (System.currentTimeMillis() % 1_000_000L) / 50f
         val buffer = consumers.getBuffer(RenderType.entityTranslucent(WHITE))
         for ((slot, id) in loadout) {
-            if (slot == Slot.BADGE) continue
+            if (slot.flat) continue
             val piece = Cosmetics.catalog.item(id)?.model ?: continue
             matrices.pushPose()
-            (if (slot == Slot.BACK) model.body else model.head).translateAndRotate(matrices)
+            (if (slot.onBody) model.body else model.head).translateAndRotate(matrices)
             matrices.scale(1 / 16f, 1 / 16f, 1 / 16f)
             CosmeticFit.apply(matrices, slot, Cosmetics.myFit(slot))
             VoxelMesh.animate(piece, ticks, matrices)

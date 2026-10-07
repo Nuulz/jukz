@@ -31,15 +31,20 @@ class CosmeticsFeatureRenderer(
         // The render state only carries the entity id; mannequins and other avatars aren't players.
         val player = Minecraft.getInstance().level?.getEntity(state.id) as? AbstractClientPlayer ?: return
         val loadout = Cosmetics.loadoutFor(player.uuid)
-        if (loadout.size <= 1 && Slot.BADGE in loadout) return
+        val emote = Cosmetics.emoting(player.uuid)
+        if (loadout.keys.all { it.flat } && emote == null) return
         val overlay = LivingEntityRenderer.getOverlayCoords(state, 0f)
         val renderType = RenderTypes.entityTranslucent(WHITE)
+        val glow: (CosmeticCatalog.Model, Float) -> Unit = { model, opacity ->
+            collector.submitCustomGeometry(matrices, renderType) { p, buffer -> VoxelMesh.emit(p, buffer, model, VoxelMesh.FULL_BRIGHT, overlay, opacity) }
+        }
+        emote?.let { Trails.drawEmote(matrices, it, glow) }
         val pose = VoxelMesh.Pose(state.ageInTicks, state.walkAnimationSpeed, state.isCrouching)
         for ((slot, itemId) in loadout) {
-            if (slot == Slot.BADGE || hiddenBy(slot, state)) continue
+            if (slot.flat || hiddenBy(slot, state)) continue
             val model = Cosmetics.catalog.item(itemId)?.model ?: continue
             matrices.pushPose()
-            val bone = if (slot == Slot.BACK) parentModel.body else parentModel.head
+            val bone = if (slot.onBody) parentModel.body else parentModel.head
             bone.translateAndRotate(matrices)
             matrices.scale(PIXEL, PIXEL, PIXEL) // bone space is in blocks; models are in skin pixels
             CosmeticFit.apply(matrices, slot, Cosmetics.fitFor(player.uuid, slot))
@@ -52,7 +57,7 @@ class CosmeticsFeatureRenderer(
     private fun hiddenBy(slot: Slot, state: AvatarRenderState): Boolean = when (slot) {
         Slot.HAT, Slot.FACE -> !state.headEquipment.isEmpty
         Slot.BACK -> state.chestEquipment.`is`(Items.ELYTRA)
-        Slot.BADGE -> true
+        else -> slot.flat
     }
 
     companion object {
@@ -99,15 +104,18 @@ class CosmeticsFeatureRenderer(
     ) {
         if (entity.isInvisible) return
         val loadout = Cosmetics.loadoutFor(entity.uuid)
-        if (loadout.size <= 1 && Slot.BADGE in loadout) return
+        val emote = Cosmetics.emoting(entity.uuid)
+        if (loadout.keys.all { it.flat } && emote == null) return
         val buffer = vertexConsumers.getBuffer(RenderType.entityTranslucent(WHITE))
         val overlay = LivingEntityRenderer.getOverlayCoords(entity, 0f)
+        val glow: (CosmeticCatalog.Model, Float) -> Unit = { model, opacity -> VoxelMesh.emit(matrices.last(), buffer, model, VoxelMesh.FULL_BRIGHT, overlay, opacity) }
+        emote?.let { Trails.drawEmote(matrices, it, glow) }
         val pose = VoxelMesh.Pose(animationProgress, limbDistance, entity.isCrouching)
         for ((slot, id) in loadout) {
-            if (slot == Slot.BADGE || hiddenBy(slot, entity)) continue
+            if (slot.flat || hiddenBy(slot, entity)) continue
             val model = Cosmetics.catalog.item(id)?.model ?: continue
             matrices.pushPose()
-            val bone = if (slot == Slot.BACK) parentModel.body else parentModel.head
+            val bone = if (slot.onBody) parentModel.body else parentModel.head
             bone.translateAndRotate(matrices)
             matrices.scale(PIXEL, PIXEL, PIXEL) // bone space is in blocks; models are in skin pixels
             CosmeticFit.apply(matrices, slot, Cosmetics.fitFor(entity.uuid, slot))
@@ -120,7 +128,7 @@ class CosmeticsFeatureRenderer(
     private fun hiddenBy(slot: Slot, entity: AbstractClientPlayer): Boolean = when (slot) {
         Slot.HAT, Slot.FACE -> !entity.getItemBySlot(EquipmentSlot.HEAD).isEmpty
         Slot.BACK -> entity.getItemBySlot(EquipmentSlot.CHEST).`is`(Items.ELYTRA)
-        Slot.BADGE -> true
+        else -> slot.flat
     }
 
     companion object {

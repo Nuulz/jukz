@@ -1,6 +1,7 @@
 package dev.jukz.cosmetics
 
 import dev.jukz.compat.jukzSessionService
+import dev.jukz.compat.currentScreen
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import dev.jukz.JukzMod
@@ -123,7 +124,7 @@ object Cosmetics {
     private fun parseFits(raw: Map<String, String>, prefixed: Boolean): Map<Slot, CosmeticFit> = raw.mapNotNull { (k, v) ->
         if (prefixed && !k.startsWith("~")) return@mapNotNull null
         val slot = Slot.of(k.removePrefix("~")) ?: return@mapNotNull null
-        if (slot == Slot.BADGE) return@mapNotNull null
+        if (slot.flat) return@mapNotNull null
         CosmeticFit.decode(v)?.takeUnless { it.isZero }?.let { slot to it }
     }.toMap()
 
@@ -165,13 +166,38 @@ object Cosmetics {
     private fun share(): Boolean {
         val local = local
         if (!local && account !is Account.SignedIn && MojangSkins.account == MojangSkins.Account.CHECKING) return false
-        if (!local && myFits.isEmpty()) return true
         val me = Minecraft.getInstance().gameProfile?.id ?: return false
         if (!ClientPlayNetworking.canSend(LoadoutPayload.ID)) return false
         val data = myFits.entries.associate { "~${it.key.key}" to it.value.encode() } +
-            (if (local) localPicks.mapKeys { it.key.key } + ("!" to "1") else emptyMap())
+            (if (local) localPicks.mapKeys { it.key.key } + ("!" to "1") else emptyMap()) +
+            (if (emoteCount > 0) mapOf("*" to emoteCount.toString()) else emptyMap())
         ClientPlayNetworking.send(LoadoutPayload(me, data))
         return true
+    }
+
+    private const val EMOTE_MS = 3_000L
+    private val emotes = ConcurrentHashMap<UUID, Long>()
+    private val lastEmote = ConcurrentHashMap<UUID, String>()
+    private var emoteCount = 0
+
+    class Emote(val item: Item, val age: Long) {
+        val left: Long get() = EMOTE_MS - age
+    }
+
+    fun emoting(player: UUID): Emote? {
+        val start = emotes[player] ?: return null
+        if (Minecraft.getInstance().currentScreen != null) return null
+        val age = System.currentTimeMillis() - start
+        if (age > EMOTE_MS) { emotes.remove(player); return null }
+        return catalog.item(loadoutFor(player)[Slot.EMOTE])?.let { Emote(it, age) }
+    }
+
+    fun emote() {
+        val me = Minecraft.getInstance().gameProfile?.id ?: return
+        if (catalog.item(loadoutFor(me)[Slot.EMOTE]) == null) return
+        emotes[me] = System.currentTimeMillis()
+        emoteCount++
+        share()
     }
 
     /** A friend's positions (and picks, without a Mojang account) arrived over the game connection. */
@@ -179,11 +205,18 @@ object Cosmetics {
         if (payload.owner == Minecraft.getInstance().gameProfile?.id) return
         friendFits[payload.owner] = parseFits(payload.loadout, prefixed = true)
         if (payload.loadout["!"] == "1") friends[payload.owner] = parsePicks(payload.loadout)
+        val emote = payload.loadout["*"]
+        val before = lastEmote.put(payload.owner, emote ?: "0")
+        if (emote != null && before != null && before != emote) {
+            emotes[payload.owner] = System.currentTimeMillis()
+        }
     }
 
     fun forgetFriends() {
         friends.clear()
         friendFits.clear()
+        emotes.clear()
+        lastEmote.clear()
     }
 
     /** Known slots only, and only free items (nobody gets a paid or special one this way). */

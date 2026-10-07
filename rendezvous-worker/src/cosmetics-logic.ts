@@ -12,7 +12,8 @@ import { BadRequest } from "./logic.ts";
 
 export type Availability = "free" | "paid" | "grant";
 
-export const SLOTS = ["badge", "hat", "face", "back"] as const;
+export const SLOTS = ["badge", "hat", "face", "back", "pet", "trail", "emote"] as const;
+export const FLAT_SLOTS: readonly Slot[] = ["badge", "trail", "emote"];
 export type Slot = (typeof SLOTS)[number];
 
 /**
@@ -77,6 +78,8 @@ export interface CatalogItem {
   art?: string[];
   /** hat / face / back: the 3D model. */
   model?: VoxelModel;
+  /** trail: how its particles move, and their small square sprites. */
+  particle?: { style: "fall" | "twinkle" | "bounce"; size?: number; sprites: string[][] };
   /** Minecraft name of the player who designed it (community items, from the creators page). */
   author?: string;
 }
@@ -116,7 +119,7 @@ export function validateCatalog(catalog: Catalog): Catalog {
     const checkRow = (row: string, at: string) => {
       for (const ch of row) if (ch !== "." && !(ch in item.palette)) throw new Error(`${where}: ${at} uses '${ch}', not in the palette`);
     };
-    if (item.kind === "badge") {
+    if (FLAT_SLOTS.includes(item.kind)) {
       const art = item.art ?? [];
       const size = art.length;
       if (size < 8 || size > 32) throw new Error(`${where}: art must be 8..32 rows`);
@@ -124,6 +127,15 @@ export function validateCatalog(catalog: Catalog): Catalog {
         if (row.length !== size) throw new Error(`${where}: row ${y} is ${row.length} wide, art must be square (${size})`);
         checkRow(row, `row ${y}`);
       });
+      if (item.kind === "trail") {
+        const p = item.particle;
+        if (!p || !["fall", "twinkle", "bounce"].includes(p.style)) throw new Error(`${where}: trails need a particle style`);
+        if (!Array.isArray(p.sprites) || p.sprites.length < 1 || p.sprites.length > 8) throw new Error(`${where}: 1..8 sprites`);
+        p.sprites.forEach((sprite, i) => sprite.forEach((row) => {
+          if (row.length !== sprite.length || sprite.length > 9) throw new Error(`${where}: sprite ${i} must be square, up to 9`);
+          checkRow(row, `sprite ${i}`);
+        }));
+      }
       continue;
     }
     const model = item.model;

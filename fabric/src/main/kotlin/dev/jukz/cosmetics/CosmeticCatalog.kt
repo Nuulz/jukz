@@ -27,10 +27,11 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
     enum class Availability { FREE, PAID, GRANT }
 
     /** Where an item goes. The JSON `kind` is the lower-case name. */
-    enum class Slot(val label: String) {
-        BADGE("Badges"), HAT("Hats"), FACE("Face"), BACK("Back");
+    enum class Slot(val label: String, val flat: Boolean = false) {
+        BADGE("Badges", true), HAT("Hats"), FACE("Face"), BACK("Back"), PET("Pets"), TRAIL("Trails", true), EMOTE("Emotes", true);
 
         val key: String get() = name.lowercase()
+        val onBody: Boolean get() = this == BACK || this == PET
 
         companion object {
             fun of(key: String): Slot? = entries.firstOrNull { it.key == key }
@@ -102,7 +103,14 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
         val model: Model?,
         /** Minecraft name of the community member who designed it (from the creators page), or null. */
         val author: String? = null,
-    )
+        val particle: Particle? = null,
+    ) {
+        val plaque: Model? by lazy { art?.let { plaque(it, centered = false) } }
+    }
+
+    enum class Style { FALL, TWINKLE, BOUNCE }
+
+    class Particle(val style: Style, val sprites: List<Model>, val size: Float)
 
     companion object {
         private const val RESOURCE = "/assets/jukz/cosmetics/catalog.json"
@@ -133,7 +141,7 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
 
             val art = json.getAsJsonArray("art")?.map { it.asString }?.let { rows -> parseArt(id, rows, ::color) }
             val model = json.getAsJsonObject("model")?.let { parseModel(id, it, ::color) }
-            require(if (slot == Slot.BADGE) art != null else model != null) { "$id: ${slot.key} items need ${if (slot == Slot.BADGE) "art" else "a model"}" }
+            require(if (slot.flat) art != null else model != null) { "$id: ${slot.key} items need ${if (slot.flat) "art" else "a model"}" }
             val price = json.getAsJsonObject("price")?.let { Price(it.get("amount").asInt, it.get("currency").asString) }
             return Item(
                 id = id,
@@ -145,12 +153,35 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
                 art = art,
                 model = model,
                 author = json.get("author")?.asString,
+                particle = json.getAsJsonObject("particle")?.let { p ->
+                    val style = Style.valueOf(p.get("style").asString.uppercase())
+                    val sprites = p.getAsJsonArray("sprites").map { sprite ->
+                        val rows = sprite.asJsonArray.map { it.asString }
+                        if (style != Style.BOUNCE) plaque(parseArt(id, rows, ::color), centered = true)
+                        else (rows.size / 2f).let { h -> Model(quads(id, List(rows.size) { rows }, 1f, floatArrayOf(-h, h, -h), ::color), Animation.NONE, 0f, 0f) }
+                    }
+                    Particle(style, sprites, p.get("size")?.asFloat ?: 0.04f)
+                },
             )
         }
 
         /** ASCII art drawn outside the catalog (UI icons): rows of characters keyed to [palette]. */
         fun art(rows: List<String>, palette: Map<Char, Int>): Art =
             parseArt("icon", rows) { ch, where -> palette[ch] ?: error("icon: $where uses '$ch', not in the palette") }
+
+        private fun plaque(art: Art, centered: Boolean): Model {
+            val half = art.size / 2f
+            val top = if (centered) half else 0f
+            val quads = art.runs.flatMap { r ->
+                val x0 = r.x - half; val x1 = x0 + r.length
+                val y0 = r.y - top; val y1 = y0 + 1
+                listOf(
+                    Quad(floatArrayOf(x0, y0, 0f, x0, y1, 0f, x1, y1, 0f, x1, y0, 0f), 0f, 0f, 1f, r.argb),
+                    Quad(floatArrayOf(x0, y0, 0f, x1, y0, 0f, x1, y1, 0f, x0, y1, 0f), 0f, 0f, -1f, r.argb),
+                )
+            }
+            return Model(quads, Animation.NONE, 0f, 0f)
+        }
 
         private fun parseArt(id: String, art: List<String>, color: (Char, String) -> Int): Art {
             val size = art.size

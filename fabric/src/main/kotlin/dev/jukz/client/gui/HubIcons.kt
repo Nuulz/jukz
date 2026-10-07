@@ -51,6 +51,12 @@ object HubIcons {
     val BACKPACK = icon(
         "...WWW...", "..W...W..", ".WWWWWWW.", "W.......W", "W.WWWWW.W",
         "W.W...W.W", "W.WWWWW.W", "W.......W", ".WWWWWWW.")
+    val PAW = icon(
+        ".........", ".W.....W.", "WW.W.W.WW", "...W.W...", ".........",
+        "...WWW...", "..WWWWW..", "..WWWWW..", "...W.W...")
+    val BUBBLE = icon(
+        ".WWWWWWW.", "W.......W", "W.B.B.B.W", "W.......W", ".WWWWWWW.",
+        "..WW.....", "..W......", ".........", ".........")
     val NONE = icon(
         "..GGGGG..", ".G.....G.", "G.G...G.G", "G..G.G..G", "G...G...G",
         "G..G.G..G", "G.G...G.G", ".G.....G.", "..GGGGG..")

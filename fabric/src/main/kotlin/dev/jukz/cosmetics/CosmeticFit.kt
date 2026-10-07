@@ -31,7 +31,7 @@ data class CosmeticFit(val up: Float = 0f, val out: Float = 0f) {
         /** Move the pose (already in bone pixel space: y points down, z forward is negative) by [fit]. */
         fun apply(matrices: PoseStack, slot: Slot, fit: CosmeticFit) {
             if (fit.isZero) return
-            val z = if (slot == Slot.BACK) fit.out else -fit.out
+            val z = if (slot.onBody) fit.out else -fit.out
             matrices.translate(0f, -fit.up, z)
         }
 
