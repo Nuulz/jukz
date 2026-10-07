@@ -563,7 +563,7 @@ def sleeping_cat():
     return model_json(V, O, None, parts)
 
 
-def top_hat():
+def top_hat(founder=False):
     V = 0.5
     O = (-7.0, -8.2, -7.0)
     LO, HI = (-7.0, -17.0, -7.0), (7.0, -8.2, 7.0)
@@ -662,6 +662,19 @@ def top_hat():
         Part("crown", (0, 0, 0), [(90, crown(None))] + sweep, parent="hat"),
         Part("card", (4.75, -9.2, 0), [(1, card)], {"speed": 0, "base": [0, 0, -10]}, parent="hat", when="still"),
     ]
+    if founder:
+        # gold dust drifting off the brim while still
+        rng = __import__("random").Random(5)
+        dust = [(rng.uniform(0, 2 * math.pi), rng.uniform(4.5, 6.0), rng.uniform(0, 1)) for _ in range(7)]
+
+        def glitter(t):
+            g = Sculpt(V, O)
+            for a, d, ph in dust:
+                u = (t + ph) % 1
+                if u < 0.8:
+                    g.put(d * math.sin(a), -9.5 - u * 5, -d * math.cos(a), "H" if u < 0.4 else "s")
+            return g
+        parts.append(Part("glitter", (0, 0, 0), [(3, glitter(k / 12)) for k in range(12)], parent="hat", when="still"))
     parts += segments("orbit", 0, len(path) * 2, 0)
     # every minute of the wearer's age, a second card joins on the far side for one trip
     parts += segments("twin", 1200 - len(path) * 2, 1200, math.pi)
@@ -1001,6 +1014,11 @@ ANIMATED = [
      {"p": "FFFF5CA8", "P": "FFE0408C", "y": "FFFFD54A", "b": "FF5BC8FF", "g": "FF6BE07B", "o": "FFFF9A3D", "e": "B0F4F4FA",
       "w": "FFFFFFFF", "W": "FFF2F2F2"},
      party_hat),
+    ("founder_hat", "hat", "Founder's hat", "Made jukz. Wears gold.", "grant",
+     {"k": "FFFFD54A", "K": "FFF2B83A", "e": "FFFFE58A", "g": "FFD99A20", "h": "FFFFE58A", "H": "FFFFFFFF",
+      "b": "FF5B9BFF", "n": "FF2F64C4", "l": "FFA9CCFF", "B": "FFD9E8FF", "s": "FFFFF3C4",
+      "w": "FFFFF8E6", "c": "FFE5A82E"},
+     lambda: top_hat(founder=True)),
     ("top_hat", "hat", "Top hat", "A classic, with the jukz-blue band and a card tucked in.", "free",
      {"k": "FF262633", "K": "FF1A1A24", "e": "FF3A3A4C", "g": "FF30303F", "h": "FF50506A", "H": "FFC4C8E0",
       "b": "FF5B9BFF", "n": "FF2F64C4", "l": "FFA9CCFF", "B": "FFD9E8FF", "s": "FF8FA3C4",

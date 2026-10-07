@@ -244,9 +244,6 @@ def wings():
 
 MODELS = [
     # id, kind, name, description, availability, palette, builder, origin, animation
-    ("founder_hat", "hat", "Founder's hat", "Made jukz. Wears gold.", "grant",
-     {"y": "FFFFC24A", "d": "FFE5A82E", "b": "FF5B9BFF", "Y": "FFFFE58A", "w": "FFFFF3C4", "W": "FFFFFFFF"},
-     lambda: top_hat(gold=True), [-6, -8.2, -6], None),
     ("sunglasses", "face", "Sunglasses", "Too cool for the spawn chunks.", "free",
      {"k": "FF15151C", "l": "E01C2B4A", "s": "F0AFC8FF"},
      sunglasses, [-5, -3, -4.75], None),
