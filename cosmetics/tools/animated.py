@@ -755,11 +755,56 @@ def crown():
     return model_json(V, O, None, parts)
 
 
+def cat_ears():
+    V = 0.5
+    O = (-5.0, -13.0, -1.5)
+    TOP = -8.0  # the top of the head; ears stand on it, near the edges like on a real cat
+
+    def ear(s, bend):
+        """s = 1 right, -1 left. bend tips the top forward for a twitch."""
+        def paint(x, y, z):
+            h = TOP - y  # height above the head
+            if not 0 <= h <= 4.2:
+                return None
+            u = s * x - 2.7 - 0.12 * h  # across the ear, leaning out a bit as it rises
+            half = 1.6 * (1 - h / 4.2)
+            if abs(u) > half + 0.05:
+                return None
+            zz = z + (bend * (h - 2.6) if h > 2.6 else 0)
+            if not -0.75 <= zz <= 0.75:
+                return None
+            if h > 3.3:
+                return "d"
+            # pink inside on the front, with a tuft of pale fur at the bottom
+            if zz < -0.25 and abs(u) < half - 0.5:
+                return "w" if h < 1.0 else ("P" if abs(u) < 0.35 else "p")
+            if zz > 0.25 and h < 0.6:
+                return "D"
+            return "C" if h < 1.0 and abs(u) > half - 0.5 else "c"
+        sc = Sculpt(V, O)
+        sc.fill((-5.0, -12.6, -2.0), (5.0, -8.0, 2.0), paint)
+        return sc
+
+    parts = []
+    for name, s, phase in (("ear_r", 1, 0.0), ("ear_l", -1, 2.1)):
+        # every few seconds an ear flicks its tip, the two out of step
+        frames = [(70 + int(phase * 20), ear(s, 0)), (3, ear(s, -0.6)), (3, ear(s, 0)), (3, ear(s, -0.6))]
+        parts.append(Part(name, (s * 2.7, TOP, 0), frames,
+                          {"speed": 0.06, "phase": phase, "amp": [0, 0, s * 3],
+                           "run": {"speed": 0.66, "base": [25, 0, s * 10], "amp": [4, 0, 0]},
+                           "sneak": {"base": [10, 0, s * 35], "amp": [0, 0, 0]}}))
+    return model_json(V, O, None, parts)
+
+
 ANIMATED = [
     ("crown_3d", "hat", "Crown", "Heavy is the head that hosts.", "free",
      {"y": "FFFFC83A", "Y": "FFFFE58A", "d": "FFB87A00", "H": "FFFFFBE6", "p": "FFF6F1E7", "w": "FFFFFFFF",
       "R": "FFE0213F", "b": "FF4D9BFF", "g": "FF3DDC84", "v": "FFB0203A", "V": "FF861629", "s": "FFFFF3A8"},
      crown),
+    ("cat_ears", "hat", "Cat ears", "For whoever has six cats.", "free",
+     {"c": "FFFFA94D", "C": "FFFFC27A", "d": "FFA8521A", "D": "FFD9772B", "p": "FFFF9EC0", "P": "FFFF7AA8",
+      "w": "FFFFF1E0"},
+     cat_ears),
     ("top_hat", "hat", "Top hat", "A classic, with the jukz-blue band and a card tucked in.", "free",
      {"k": "FF262633", "K": "FF1A1A24", "e": "FF3A3A4C", "g": "FF30303F", "h": "FF50506A", "H": "FFC4C8E0",
       "b": "FF5B9BFF", "n": "FF2F64C4", "l": "FFA9CCFF", "B": "FFD9E8FF", "s": "FF8FA3C4",
