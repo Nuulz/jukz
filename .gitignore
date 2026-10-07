@@ -45,3 +45,6 @@ docs/store/
 # Video promocional (Remotion, clips, voz, renders): solo local
 /promo/
 cosmetics/previews/last-run.log
+
+# Cosmetics art lives in the private Nuulz/jukz-cosmetics repo, cloned here.
+/cosmetics/

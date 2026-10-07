@@ -199,8 +199,9 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
   - **World list**, `WorldListEntryMixin` + `WorldListLiveBadge` draw a green "live · N" dot on hosted
     saves (10 s per-world lookup cache, clicking it joins), and a **Copy jukz code** button.
   - **UI**, every screen is an owo-ui model on one shared theme (see *Editing screens* below).
-  - **Cosmetics**, everything is ASCII art in [`cosmetics/catalog.json`](../cosmetics/catalog.json),
-    generated from [`cosmetics/tools`](../cosmetics/tools) (`badges.py`, `models.py`, with previews;
+  - **Cosmetics**, everything is ASCII art in `cosmetics/catalog.json`,
+    generated from `cosmetics/tools`. That folder is the private Nuulz/jukz-cosmetics repo, cloned into
+    `cosmetics/`; CI downloads the live catalog from the Worker instead (`badges.py`, `models.py`, with previews;
     `build_catalog.py` writes the catalog). Badges are 16×16 drawings, one character per pixel (crisp in
     the 8 px tab row at GUI scale 2). Hats, face and back pieces are voxel models written as stacked
     ASCII slices: `CosmeticCatalog` meshes them keeping only the faces that touch empty space, and
@@ -232,7 +233,7 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
   - **Community cosmetics**, `CosmeticsScreen`'s **Make your own** opens nuulm.com/jukz/crear with a
     15-minute link signed by the Worker for the signed-in account, which verifies the page account (that's
     where creator rewards go). Items with an `author` show "by …" in their tooltip.
-    [`cosmetics/tools/creations.py`](../cosmetics/tools/creations.py) turns an approved upload into a
+    `cosmetics/tools/creations.py` turns an approved upload into a
     catalog item (`list`, `pull` = download + voxelize the `.bbmodel` + preview, `publish`).
   - **Ko-fi**, an icon button on the title screen and in the cosmetics screen. `SupportScreen` welcomes a
     fresh install once; `UpdateScreen` shows the `../CHANGELOG.md` sections since the last version played,

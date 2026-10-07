@@ -39,6 +39,12 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "jukz $version"
 
+      - name: Catalog
+        # The cosmetics art is private (Nuulz/jukz-cosmetics); the jar bundles the live copy.
+        run: |
+          mkdir -p cosmetics
+          curl -fsS https://jukz.nuulm.com/v1/cosmetics/catalog -o cosmetics/catalog.json
+
       - name: Build and test
         run: bash gradlew build -Pmod_version=${{ steps.v.outputs.version }}
 
