@@ -244,9 +244,6 @@ def wings():
 
 MODELS = [
     # id, kind, name, description, availability, palette, builder, origin, animation
-    ("top_hat", "hat", "Top hat", "A classic, with the jukz-blue band.", "free",
-     {"k": "FF1A1A22", "e": "FF2C2C38", "b": "FF5B9BFF", "B": "FFD9E8FF", "g": "FF2A2A34", "h": "FF3A3A48"},
-     top_hat, [-6, -8.2, -6], None),
     ("crown_3d", "hat", "Crown", "Heavy is the head that hosts.", "free",
      {"y": "FFFFD54A", "Y": "FFFFE58A", "d": "FFC98A00", "w": "FFFFFFFF", "r": "FFFF4D6A", "R": "FFE0213F", "b": "FF4D9BFF", "g": "FF3DDC84"},
      crown, [-5, -7.6, -5], None),

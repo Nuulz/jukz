@@ -563,7 +563,117 @@ def sleeping_cat():
     return model_json(V, O, None, parts)
 
 
+def top_hat():
+    V = 0.5
+    O = (-7.0, -8.2, -7.0)
+    LO, HI = (-7.0, -17.0, -7.0), (7.0, -8.2, 7.0)
+    BAND_TOP, CROWN_TOP = -10.2, -16.2
+
+    def crown_r(y):
+        return 4.0 + 0.4 * (-8.7 - y) / 7.5  # flares a little towards the top
+
+    def hat_body(x, y, z):
+        r, a = math.hypot(x, z), math.atan2(x, -z)
+        # brim: curls up at the sides, a lip on the outer edge
+        lift = 0 if r < 4.6 else (abs(x) / 6) ** 2
+        if r <= 6.0 and (abs(y - (-8.45 - lift)) <= 0.25 or (r > 5.5 and abs(y - (-8.95 - lift)) <= 0.25)):
+            return "e" if r > 5.4 else ("K" if z > 2 else "k")
+        # band, sticking out a voxel past the silk
+        if r <= 4.5 and BAND_TOP <= y < -8.7:
+            if y > -9.2:
+                return "n"
+            return "l" if abs(a + 0.75) < 0.2 else "b"
+        return None
+
+    def crown(glint):
+        s = Sculpt(V, O)
+
+        def paint(x, y, z):
+            r, a = math.hypot(x, z), math.atan2(x, -z)
+            R = crown_r(y)
+            if not (CROWN_TOP <= y < BAND_TOP and r <= R):
+                return None
+            if y < CROWN_TOP + 0.5:
+                return "e" if r > R - 0.6 else "g"
+            if r < R - 0.6:
+                return "k"
+            if glint is not None and abs(a - (glint + (y + 12) * 0.07)) < 0.3:
+                return "H"
+            if abs(a + 0.75) < 0.3:
+                return "h"
+            return "K" if z > 1.5 else "k"
+        s.fill(LO, HI, paint)
+        return s
+
+    hat = Sculpt(V, O)
+    hat.fill(LO, HI, hat_body)
+    # buckle on the front of the band, a voxel proud of it
+    for i in range(6):
+        for j in range(3):
+            x, y = -1.25 + i * V, -8.95 - j * V
+            edge = i in (0, 5) or j in (0, 2)
+            hat.put(x, y, -4.75, ("s" if j == 0 else "B") if edge else "n")
+
+    card = Sculpt(V, O)
+    art = ["wwwwww",
+           "wcwwww",
+           "wwwwww",
+           "wwccww",
+           "wcllcw",
+           "wwccww",
+           "wwwwww",
+           "wwwwcw"]
+    for j, row in enumerate(art):
+        for i, ch in enumerate(row):
+            card.put(4.75, -12.95 + j * V, -1.25 + i * V, ch)
+
+    def flying_card(angle, rise):
+        """The card circling the whole body face out, spiralling between the hat and the knees."""
+        s = Sculpt(V, O)
+        R, top = 11.0, 3.0 - 13.0 * math.cos(rise)
+        cx, cz = R * math.sin(angle), -R * math.cos(angle)
+        tx, tz = math.cos(angle), math.sin(angle)
+
+        def paint(x, y, z):
+            dx, dz = x - cx, z - cz
+            t = dx * tx + dz * tz
+            if abs(dx * tz - dz * tx) > 0.35 or abs(t) > 1.5 or not top <= y < top + 4:
+                return None
+            return art[min(7, int((y - top) / V))][min(5, int((t + 1.5) / V))]
+        s.fill((cx - 2.5, top, cz - 2.5), (cx + 2.5, top + 4, cz + 2.5), paint)
+        return s
+
+    STEPS, LAPS = 24, 3  # three laps going down and back up
+    path = [(2 * math.pi * n / STEPS, 2 * math.pi * n / (STEPS * LAPS)) for n in range(STEPS * LAPS)]
+    SEG = 12  # a part holds at most 16 frames, so the path is split: each part flies its stretch, empty the rest
+
+    def segments(name, start, cycle, shift):
+        out = []
+        for k in range(len(path) // SEG):
+            on = [(2, flying_card(a + shift, h + shift)) for a, h in path[k * SEG:(k + 1) * SEG]]
+            pre, post = start + k * SEG * 2, cycle - start - (k + 1) * SEG * 2
+            frames = ([(pre, Sculpt(V, O))] if pre else []) + on + ([(post, Sculpt(V, O))] if post else [])
+            out.append(Part(f"{name}_{k}", (0, 0, 0), frames, when="moving"))
+        return out
+
+    sweep = [(2, crown(g)) for g in (-2.2, -1.7, -1.2, -0.7, -0.2, 0.3, 0.8)]
+    parts = [
+        Part("hat", (0, -8.0, 0), [(1, hat)], {"speed": 0.05, "run": {"speed": 0.66, "amp": [3, 0, 2]}}),
+        Part("crown", (0, 0, 0), [(90, crown(None))] + sweep, parent="hat"),
+        Part("card", (4.75, -9.2, 0), [(1, card)], {"speed": 0, "base": [0, 0, -10]}, parent="hat", when="still"),
+    ]
+    parts += segments("orbit", 0, len(path) * 2, 0)
+    # every minute of the wearer's age, a second card joins on the far side for one trip
+    parts += segments("twin", 1200 - len(path) * 2, 1200, math.pi)
+    return model_json(V, O, None, parts)
+
+
 ANIMATED = [
+    ("top_hat", "hat", "Top hat", "A classic, with the jukz-blue band and a card tucked in.", "free",
+     {"k": "FF262633", "K": "FF1A1A24", "e": "FF3A3A4C", "g": "FF30303F", "h": "FF50506A", "H": "FFC4C8E0",
+      "b": "FF5B9BFF", "n": "FF2F64C4", "l": "FFA9CCFF", "B": "FFD9E8FF", "s": "FF8FA3C4",
+      "w": "FFF4F6FF", "c": "FF2F64C4"},
+     top_hat),
     ("dragon_wings", "back", "Ender wings", "Torn from the End. They flap when you run.", "free",
      {"m": "D83A145E", "M": "D0662A96", "r": "E0A552E6", "b": "FF1B1226", "h": "FF3C2A55",
       "c": "FFE8DEF4", "s": "FF241832", "S": "FFB46BFF"},
