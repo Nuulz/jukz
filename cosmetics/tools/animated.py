@@ -671,7 +671,7 @@ def top_hat():
 def crown():
     V = 0.5
     O = (-5.0, -6.6, -5.0)
-    LO, HI = (-5.0, -16.0, -5.0), (5.0, -6.6, 5.0)
+    LO, HI = (-5.0, -17.0, -5.0), (5.0, -6.6, 5.0)
     BASE, RIM = -6.6, -9.0  # the band hugs the top of the head from BASE up to RIM, points rise above it
     HEAD = 4.0  # the head is a cube, so the band is square around it
     GEMS = [(0, "R"), (math.pi / 2, "b"), (math.pi, "g"), (-math.pi / 2, "b")]
@@ -684,7 +684,7 @@ def crown():
         def paint(x, y, z):
             r, a, c = math.hypot(x, z), math.atan2(x, -z), max(abs(x), abs(z))
             # velvet cap, domed over the top of the head, under the arches
-            if c < HEAD and RIM - 2.4 * math.sqrt(max(0, 1 - (r / 5.6) ** 2)) <= y < -8.0:
+            if c < HEAD and RIM - 4.0 * math.sqrt(max(0, 1 - (r / 5.7) ** 2)) <= y < -8.0:
                 return "V" if z > 1.5 else "v"
             if not HEAD <= c <= HEAD + 0.75:
                 return None
@@ -720,13 +720,13 @@ def crown():
 
     # orb and cross on top of the arches
     orb = Sculpt(V, O)
-    orb.fill((-1.0, -12.8, -1.0), (1.0, -10.8, 1.0),
-             lambda x, y, z: ("Y" if y < -12.0 and x < 0 else "y") if ellipsoid((0, -11.8, 0), (0.9, 0.9, 0.9))(x, y, z) else None)
-    orb.fill((-0.8, -11.4, -4.6), (0.8, -8.9, 4.6),
-             lambda x, y, z: "y" if abs(x) < 0.3 and abs(y + 9.0 + 2.6 * (1 - (z / 4.6) ** 2)) < 0.4 and abs(z) <= 4.4 else None)
-    orb.fill((-0.3, -14.4, -0.3), (0.3, -12.7, 0.3), lambda x, y, z: "Y")
-    orb.fill((-0.8, -13.9, -0.3), (0.8, -13.4, 0.3), lambda x, y, z: "Y")
-    orb.put(0.25, -12.15, -0.75, "w")
+    orb.fill((-1.0, -14.4, -1.0), (1.0, -12.4, 1.0),
+             lambda x, y, z: ("Y" if y < -13.6 and x < 0 else "y") if ellipsoid((0, -13.4, 0), (0.9, 0.9, 0.9))(x, y, z) else None)
+    orb.fill((-0.8, -13.1, -4.6), (0.8, -8.9, 4.6),
+             lambda x, y, z: "y" if abs(x) < 0.3 and abs(y + 9.0 + 4.2 * math.sqrt(max(0, 1 - (z / 5.7) ** 2))) < 0.4 and abs(z) <= 4.4 else None)
+    orb.fill((-0.3, -16.0, -0.3), (0.3, -14.3, 0.3), lambda x, y, z: "Y")
+    orb.fill((-0.8, -15.5, -0.3), (0.8, -15.0, 0.3), lambda x, y, z: "Y")
+    orb.put(0.25, -13.75, -0.75, "w")
 
     def sparkle(k):
         """A four-point twinkle over the tip of point k."""
@@ -749,7 +749,7 @@ def crown():
     parts = [
         Part("crown", (0, -8.0, 0), [(80, crown_body(None))] + sweep,
              {"speed": 0.05, "run": {"speed": 0.66, "amp": [3, 0, 3]}, "sneak": {"base": [0, 0, 8], "amp": [0, 0, 0]}}),
-        Part("orb", (0, -11.0, 0), [(1, orb)], {"speed": 0.08, "amp": [0, 6, 0], "run": {"speed": 0.66, "amp": [5, 0, 5]}}, parent="crown"),
+        Part("orb", (0, -12.6, 0), [(1, orb)], {"speed": 0.08, "amp": [0, 6, 0], "run": {"speed": 0.66, "amp": [5, 0, 5]}}, parent="crown"),
         Part("twinkle", (0, 0, 0), twinkles, parent="crown", when="still"),
     ]
     return model_json(V, O, None, parts)
