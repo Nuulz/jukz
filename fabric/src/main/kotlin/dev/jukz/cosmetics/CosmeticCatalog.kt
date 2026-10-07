@@ -56,7 +56,8 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
 
     enum class Animation { NONE, BOB, SPIN }
 
-    class Model(val quads: List<Quad>, val animation: Animation, val centerX: Float, val centerZ: Float, val rig: Rig? = null)
+    /** [quads] merges same-colour neighbours into big faces; [voxels] keeps one face per voxel (icons sort those). */
+    class Model(val quads: List<Quad>, val animation: Animation, val centerX: Float, val centerZ: Float, val rig: Rig? = null, val voxels: List<Quad> = quads)
 
     /** Animated version of a model: [body] never moves, each part moves on its own (parents come first). */
     class Rig(val body: List<Quad>, val parts: List<Part>)
@@ -205,11 +206,12 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
             val origin = vec(json, "origin") ?: error("$id: origin is [x, y, z]")
             val layers = slices(json)
             val quads = quads(id, layers, voxel, origin, color)
+            val voxels = quads(id, layers, voxel, origin, color, merge = false)
             val animation = json.get("animation")?.asString?.uppercase()?.let { Animation.valueOf(it) } ?: Animation.NONE
             val rig = json.getAsJsonObject("rig")?.let { parseRig(id, it, voxel, origin, color) }
             val width = layers.first().first().length
             val depth = layers.first().size
-            return Model(quads, animation, centerX = origin[0] + width * voxel / 2, centerZ = origin[2] + depth * voxel / 2, rig)
+            return Model(quads, animation, centerX = origin[0] + width * voxel / 2, centerZ = origin[2] + depth * voxel / 2, rig, voxels)
         }
 
         private fun parseRig(id: String, json: JsonObject, voxel: Float, origin: FloatArray, color: (Char, String) -> Int): Rig {
@@ -255,7 +257,7 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
         private fun slices(json: JsonObject): List<List<String>> =
             json.getAsJsonArray("layers").map { layer -> layer.asJsonArray.map { it.asString } }
 
-        private fun quads(id: String, layers: List<List<String>>, voxel: Float, origin: FloatArray, color: (Char, String) -> Int): List<Quad> {
+        private fun quads(id: String, layers: List<List<String>>, voxel: Float, origin: FloatArray, color: (Char, String) -> Int, merge: Boolean = true): List<Quad> {
             val depth = layers.first().size
             val width = layers.first().first().length
             layers.forEachIndexed { l, layer ->
@@ -265,31 +267,78 @@ class CosmeticCatalog(val version: Int, val defaultBadge: String, val items: Lis
             fun at(x: Int, l: Int, z: Int): Char =
                 if (l in layers.indices && z in 0 until depth && x in 0 until width) layers[l][z][x] else '.'
 
-            // Bone space has y pointing down: slice l spans [oy - (l+1)v, oy - lv].
-            val (ox, oy, oz) = origin
-            val quads = mutableListOf<Quad>()
+            // A face is drawn only where the neighbour is empty (or see-through and different).
+            fun open(ch: Char, nx: Int, nl: Int, nz: Int): Boolean {
+                val other = at(nx, nl, nz)
+                if (other == '.') return true
+                return other != ch && (color(other, "layer $nl row $nz") ushr 24) < 0xFF
+            }
+
+            // Open faces per side and plane: (u, w) in the plane → colour.
+            val sides = Array(6) { HashMap<Int, HashMap<Long, Int>>() }
             for (l in layers.indices) for (z in 0 until depth) for (x in 0 until width) {
                 val ch = at(x, l, z)
                 if (ch == '.') continue
                 val argb = color(ch, "layer $l row $z")
-                val x0 = ox + x * voxel; val x1 = x0 + voxel
-                val y1 = oy - l * voxel; val y0 = y1 - voxel
-                val z0 = oz + z * voxel; val z1 = z0 + voxel
-                // A face is drawn only where the neighbour is empty (or see-through and different).
-                fun open(nx: Int, nl: Int, nz: Int): Boolean {
-                    val other = at(nx, nl, nz)
-                    if (other == '.') return true
-                    val otherArgb = color(other, "layer $nl row $nz")
-                    return other != ch && (otherArgb ushr 24) < 0xFF
+                for (side in 0 until 6) {
+                    val (dx, dl, dz) = STEPS[side]
+                    if (!open(ch, x + dx, l + dl, z + dz)) continue
+                    val (plane, u, w) = when (side) { 0, 1 -> Triple(l, x, z); 2, 3 -> Triple(z, x, l); else -> Triple(x, z, l) }
+                    sides[side].getOrPut(plane) { HashMap() }[key(u, w)] = argb
                 }
-                if (open(x, l + 1, z)) quads += Quad(floatArrayOf(x0, y0, z0, x0, y0, z1, x1, y0, z1, x1, y0, z0), 0f, -1f, 0f, argb) // top
-                if (open(x, l - 1, z)) quads += Quad(floatArrayOf(x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1), 0f, 1f, 0f, argb) // bottom
-                if (open(x, l, z - 1)) quads += Quad(floatArrayOf(x0, y0, z0, x1, y0, z0, x1, y1, z0, x0, y1, z0), 0f, 0f, -1f, argb) // front
-                if (open(x, l, z + 1)) quads += Quad(floatArrayOf(x1, y0, z1, x0, y0, z1, x0, y1, z1, x1, y1, z1), 0f, 0f, 1f, argb) // back
-                if (open(x - 1, l, z)) quads += Quad(floatArrayOf(x0, y0, z1, x0, y0, z0, x0, y1, z0, x0, y1, z1), -1f, 0f, 0f, argb) // left
-                if (open(x + 1, l, z)) quads += Quad(floatArrayOf(x1, y0, z0, x1, y0, z1, x1, y1, z1, x1, y1, z0), 1f, 0f, 0f, argb) // right
+            }
+
+            // Bone space has y pointing down: slices a..b span [oy - (b+1)v, oy - av].
+            val (ox, oy, oz) = origin
+            val quads = mutableListOf<Quad>()
+            for (side in 0 until 6) for ((plane, cells) in sides[side]) {
+                for (rect in if (merge) greedy(cells) else cells.map { (k, c) -> intArrayOf(uOf(k), wOf(k), uOf(k), wOf(k), c) }) {
+                    val (u0, w0, u1, w1, argb) = rect
+                    val (xa, xb, la, lb, za, zb) = when (side) {
+                        0, 1 -> listOf(u0, u1, plane, plane, w0, w1)
+                        2, 3 -> listOf(u0, u1, w0, w1, plane, plane)
+                        else -> listOf(plane, plane, w0, w1, u0, u1)
+                    }
+                    val x0 = ox + xa * voxel; val x1 = ox + (xb + 1) * voxel
+                    val y0 = oy - (lb + 1) * voxel; val y1 = oy - la * voxel
+                    val z0 = oz + za * voxel; val z1 = oz + (zb + 1) * voxel
+                    quads += when (side) {
+                        0 -> Quad(floatArrayOf(x0, y0, z0, x0, y0, z1, x1, y0, z1, x1, y0, z0), 0f, -1f, 0f, argb) // top
+                        1 -> Quad(floatArrayOf(x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1), 0f, 1f, 0f, argb) // bottom
+                        2 -> Quad(floatArrayOf(x0, y0, z0, x1, y0, z0, x1, y1, z0, x0, y1, z0), 0f, 0f, -1f, argb) // front
+                        3 -> Quad(floatArrayOf(x1, y0, z1, x0, y0, z1, x0, y1, z1, x1, y1, z1), 0f, 0f, 1f, argb) // back
+                        4 -> Quad(floatArrayOf(x0, y0, z1, x0, y0, z0, x0, y1, z0, x0, y1, z1), -1f, 0f, 0f, argb) // left
+                        else -> Quad(floatArrayOf(x1, y0, z0, x1, y0, z1, x1, y1, z1, x1, y1, z0), 1f, 0f, 0f, argb) // right
+                    }
+                }
             }
             return quads
+        }
+
+        /** top, bottom, front, back, left, right: the neighbour each face looks at (x, slice, z). */
+        private val STEPS = arrayOf(Triple(0, 1, 0), Triple(0, -1, 0), Triple(0, 0, -1), Triple(0, 0, 1), Triple(-1, 0, 0), Triple(1, 0, 0))
+
+        private fun key(u: Int, w: Int) = (u.toLong() shl 32) or (w.toLong() and 0xFFFFFFFFL)
+        private fun uOf(k: Long) = (k shr 32).toInt()
+        private fun wOf(k: Long) = k.toInt()
+
+        private operator fun <T> List<T>.component6() = this[5]
+
+        /** Same-colour cells as rectangles [u0, w0, u1, w1, argb]: grow along u, then along w while whole rows match. */
+        private fun greedy(cells: Map<Long, Int>): List<IntArray> {
+            val left = HashMap(cells)
+            val out = mutableListOf<IntArray>()
+            for (k in cells.keys.sortedWith(compareBy({ wOf(it) }, { uOf(it) }))) {
+                val argb = left[k] ?: continue
+                val u0 = uOf(k); val w0 = wOf(k)
+                var u1 = u0
+                while (left[key(u1 + 1, w0)] == argb) u1++
+                var w1 = w0
+                while ((u0..u1).all { left[key(it, w1 + 1)] == argb }) w1++
+                for (w in w0..w1) for (u in u0..u1) left.remove(key(u, w))
+                out += intArrayOf(u0, w0, u1, w1, argb)
+            }
+            return out
         }
     }
 }

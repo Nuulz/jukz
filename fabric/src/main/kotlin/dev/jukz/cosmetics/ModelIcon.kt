@@ -24,10 +24,10 @@ object ModelIcon {
         val turn = Matrix3f()
             .rotate(Axis.XP.rotationDegrees(-28f))
             .rotate(Axis.YP.rotationDegrees(35f + if (fromBehind) 0f else 180f)) // back pieces show their outside
-        val faces = ArrayList<FlatQuads.Face>(model.quads.size)
+        val faces = ArrayList<FlatQuads.Face>(model.voxels.size)
         val p = Vector3f()
         val n = Vector3f()
-        for (q in model.quads) {
+        for (q in model.voxels) {
             turn.transform(n.set(q.nx, q.ny, q.nz))
             if (n.z < 0f) continue // facing away from the viewer
             val xs = FloatArray(4); val ys = FloatArray(4); var depth = 0f
@@ -56,7 +56,7 @@ object ModelIcon {
     private fun boundsOf(model: CosmeticCatalog.Model): Bounds {
         var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE; var minZ = Float.MAX_VALUE
         var maxX = -Float.MAX_VALUE; var maxY = -Float.MAX_VALUE; var maxZ = -Float.MAX_VALUE
-        for (q in model.quads) for (i in 0 until 4) {
+        for (q in model.voxels) for (i in 0 until 4) {
             val (x, y, z) = Triple(q.corners[i * 3], q.corners[i * 3 + 1], q.corners[i * 3 + 2])
             minX = minOf(minX, x); maxX = maxOf(maxX, x)
             minY = minOf(minY, y); maxY = maxOf(maxY, y)
@@ -106,7 +106,7 @@ object ModelIcon {
     private fun boundsOf(model: CosmeticCatalog.Model): Bounds {
         var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE; var minZ = Float.MAX_VALUE
         var maxX = -Float.MAX_VALUE; var maxY = -Float.MAX_VALUE; var maxZ = -Float.MAX_VALUE
-        for (q in model.quads) for (i in 0 until 4) {
+        for (q in model.voxels) for (i in 0 until 4) {
             val (x, y, z) = Triple(q.corners[i * 3], q.corners[i * 3 + 1], q.corners[i * 3 + 2])
             minX = minOf(minX, x); maxX = maxOf(maxX, x)
             minY = minOf(minY, y); maxY = maxOf(maxY, y)

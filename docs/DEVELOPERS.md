@@ -356,6 +356,9 @@ confirm each step.
 - **Cleanup:** taking over a never-seen world leaves a `jukz-<code>` save folder; consider naming.
 - **Polish:** World info briefly shows "not announced" right after a world opens, until the first
   announce lands (it re-polls on its own).
+- **Cosmetics at a distance:** skip small rigged parts, or the whole piece, past ~32 blocks.
+- **Cosmetics per frame:** `VoxelMesh` (rig matrices) and `Trails` (quaternions, vectors) allocate a few
+  small objects every frame; reusing them would spare the garbage collector.
 
 ## Support
 

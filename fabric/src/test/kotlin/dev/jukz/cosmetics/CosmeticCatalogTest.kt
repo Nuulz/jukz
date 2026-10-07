@@ -39,9 +39,10 @@ class CosmeticCatalogTest {
 
     @Test
     fun `voxel models only keep the faces that touch empty space`() {
-        // Two touching voxels: 12 faces, minus the 2 they share.
+        // Two touching voxels: 12 faces, minus the 2 they share; same colour, so merged into one box.
         val model = CosmeticCatalog.parse(hat(listOf(listOf("aa")))).items.single().model!!
-        assertEquals(10, model.quads.size)
+        assertEquals(10, model.voxels.size)
+        assertEquals(6, model.quads.size)
         // A see-through voxel next to an opaque one keeps the shared face, so the opaque one shows through.
         val glass = CosmeticCatalog.parse(hat(listOf(listOf("ag")))).items.single().model!!
         assertEquals(11, glass.quads.size)
@@ -73,7 +74,7 @@ class CosmeticCatalogTest {
                {"name":"later","pivot":[0,0,0],"when":"flying","layers":[["a"]]}]}}}]}
         """.trimIndent()
         val model = CosmeticCatalog.parse(text).items.single().model!!
-        assertEquals(10, model.quads.size) // the flat rest pose is still there
+        assertEquals(6, model.quads.size) // the flat rest pose is still there
         assertEquals(5f, model.rig!!.body.minOf { q -> (0 until 4).minOf { q.corners[it * 3] } }) // the body has its own origin
         val (arm, hand, later) = model.rig!!.parts
         assertEquals(-1, arm.parent)
