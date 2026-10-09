@@ -44,8 +44,8 @@ dependencies {
     implementation(project(":core"))
     include(project(":core"))
     // pane: Chromium off-screen, for the in-game browser (client/web). jar-in-jar like core.
-    implementation("com.github.Nuulz:pane:v0.1.1")
-    include("com.github.Nuulz:pane:v0.1.1")
+    implementation("com.github.Nuulz:pane:v0.2.0")
+    include("com.github.Nuulz:pane:v0.2.0")
 
     // Coroutines for the client join coordinator (runBlocking). fabric-language-kotlin ships the
     // same artifact at runtime; declaring it keeps it on the compile classpath.
