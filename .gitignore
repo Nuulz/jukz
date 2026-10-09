@@ -30,7 +30,6 @@ Thumbs.db
 hs_err_pid*
 
 # Rust (rendezvous server)
-rendezvous/target/
 
 # jukz local
 /local-secret

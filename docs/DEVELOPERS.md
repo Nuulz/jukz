@@ -131,9 +131,8 @@ for the implementation plan.
 | Module | What | Minecraft? |
 |---|---|---|
 | `core` | The deterministic protocol heart, pure Kotlin, fully unit-tested | No |
-| `fabric` | Wires `core` into Minecraft 1.21.1 via Fabric API + network adapters | Yes |
+| `fabric` | Wires `core` into Minecraft 1.21.1, 1.21.11 and 26.2 via Fabric API + network adapters | Yes |
 | `rendezvous-worker` | The production discovery backend at `jukz.nuulm.com` (Cloudflare Worker + Durable Objects + R2), see [`rendezvous-worker/README.md`](../rendezvous-worker/README.md) | No |
-| `rendezvous` | Self-hostable discovery backend with the same `/v1` contract (Rust + Axum, outside Gradle), see [`rendezvous/README.md`](../rendezvous/README.md) | No |
 
 Keeping `core` Minecraft-free means the hard logic (host election, fencing, handshake, registry,
 relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolchain.
@@ -238,10 +237,9 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
   - **Ko-fi**, an icon button on the title screen and in the cosmetics screen. `SupportScreen` welcomes a
     fresh install once; `UpdateScreen` shows the `../CHANGELOG.md` sections since the last version played,
     once per update (`JukzState` keeps the version in `config/jukz-state.properties`).
-- **`rendezvous-worker`**, 48 tests (the rules ported from the Rust unit tests, URL signing, and the
+- **`rendezvous-worker`**, 48 tests (the host-election and lease rules, URL signing, and the
   ownership checks, including a signature made by the JDK, and the cosmetics rules); validated in
-  production. **`rendezvous`**
-  (Rust), 20 `cargo test`s; it does not check world keys (see its README).
+  production.
 
 ## What is flagged (`// requires live-network testing`)
 
@@ -260,7 +258,6 @@ relay) is tested on plain Kotlin + JUnit5 without the heavy Loom/Minecraft toolc
 ./gradlew :fabric:1.21.1:test   # the fabric JUnit tests (snapshot handoff, access flag, UI models, ...)
 ./gradlew build          # compile everything + one jar per Minecraft version in fabric/versions/<mc>/build/libs/
 (cd rendezvous-worker && npm install && npm test)   # the Cloudflare rendezvous
-(cd rendezvous && cargo test)                       # the self-hostable Rust rendezvous
 ```
 
 Gradle runs on **JDK 25** (`JAVA_HOME`; Loom 1.18 needs it) and compiles the 1.21.x jars with JDK 21 (a toolchain,
