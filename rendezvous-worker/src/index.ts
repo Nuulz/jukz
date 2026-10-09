@@ -1,5 +1,4 @@
-// jukz rendezvous on Cloudflare Workers. Same `/v1` contract as the Rust server (rendezvous/src/main.rs),
-// so the mod needs no changes — only the base URL:
+// jukz rendezvous on Cloudflare Workers (jukz.nuulm.com), the mod's only server:
 //  - POST /v1/announce, POST /v1/heartbeat, GET /v1/worlds/{id}, POST /v1/withdraw   (discovery)
 //  - GET  /v1/relay/{host,connect,work}                                             (WebSocket relay)
 //  - POST /v1/snapshot/upload-url, GET /v1/snapshot/{id}                            (ghost snapshots)

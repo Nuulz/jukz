@@ -128,18 +128,19 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
 
     private fun buildSide(root: FlowLayout) {
         val side = root.childById(FlowLayout::class.java, "side")
+        if (compact) side.gap(3) // the sections plus Ko-fi and Done have to fit at GUI scale 4
         Section.entries.forEach { s ->
             side.child(sideButton(s.label, s.icon, { section == s }) { open(s) })
         }
         side.child(UIContainers.verticalFlow(Sizing.fill(100), Sizing.expand(100)))
-        side.child(sideButton("Ko-fi", HubIcons.HEART) { ConfirmLinkScreen.confirmLinkNow(this, KOFI_URL) }
+        side.child(sideButton("Ko-fi", HubIcons.HEART) { dev.jukz.client.web.Web.open(this, KOFI_URL) }
             .tooltip(Component.literal("Support jukz. Thank you!")))
         side.child(sideButton("Done", HubIcons.DOOR) { onClose() })
     }
 
     private fun sideButton(text: String, icon: CosmeticCatalog.Art, selected: () -> Boolean = { false }, onPress: () -> Unit): ButtonComponent =
         if (compact) JukzSurface.iconButton("", icon, selected, centred = true, onPress = onPress)
-            .also { it.sizing(Sizing.fill(100), Sizing.fixed(22)); it.tooltip(Component.literal(text)) }
+            .also { it.sizing(Sizing.fill(100), Sizing.fixed(18)); it.tooltip(Component.literal(text)) }
         else JukzSurface.iconButton(text, icon, selected, pointer = JukzSurface.Pointer.RIGHT, onPress = onPress)
             .also { it.sizing(Sizing.fill(100), Sizing.fixed(24)) }
 
@@ -224,7 +225,7 @@ open class HubScreen(private val parent: Screen?, private var section: Section =
         hint(root, "Password, plans and \"delete my data\" are on the website.")
         if (account is Account.Failed) retryButton(root)
         actionButton(root, "Website", HubIcons.GLOBE, 84) {
-            Cosmetics.accountPageUrl { url -> minecraft?.execute { ConfirmLinkScreen.confirmLinkNow(this, url, true) } }
+            Cosmetics.accountPageUrl { url -> minecraft?.execute { dev.jukz.client.web.Web.open(this, url) } }
         }.tooltip(Component.literal("nuulm.com/jukz/cuenta: your password, the plans, and \"delete my data\""))
     }
 

@@ -15,7 +15,6 @@ import dev.jukz.client.gui.SupportScreen
 import dev.jukz.client.gui.UpdateScreen
 import dev.jukz.client.gui.UiIcons
 import dev.jukz.config.JukzState
-import net.minecraft.client.gui.screens.ConfirmLinkScreen
 import net.minecraft.client.gui.screens.TitleScreen
 import dev.jukz.client.gui.HostInfoScreen
 import dev.jukz.cosmetics.Cosmetics
@@ -330,25 +329,15 @@ object JukzClient : ClientModInitializer {
     private const val COPY_BUTTON_WIDTH = 110
 
     /**
-     * Two icon buttons on the title screen, flanking the Options/Quit row like vanilla's language and
-     * accessibility buttons: jukz cosmetics on the left, Ko-fi on the right. Placed relative to the
-     * Options button, found by its label.
+     * One jukz button on the title screen, left of vanilla's language button: it opens the hub (account,
+     * cosmetics, worlds, news, Ko-fi). Placed relative to the Options button, found by its label.
      */
     private fun addTitleButtons(screen: TitleScreen) {
         val buttons = screenWidgets(screen)
         val optionsLabel = Component.translatable("menu.options").string
         val options = buttons.firstOrNull { it.message.string == optionsLabel } ?: return
-        val y = options.y
-        val left = options.x - 24 - 24 // past vanilla's language button
-        val right = options.x + 200 + 4 + 24 // past vanilla's accessibility button
-        buttons.add(IconButton(left - 24, y, { UiIcons.ACCOUNT }, Component.literal("Your jukz account")) {
-            Minecraft.getInstance().openScreen(AccountScreen(screen))
-        })
-        buttons.add(IconButton(left, y, UiIcons::jukz, Component.literal("jukz cosmetics")) {
-            Minecraft.getInstance().openScreen(CosmeticsScreen(screen))
-        })
-        buttons.add(IconButton(right, y, { UiIcons.KOFI }, Component.literal("Support jukz on Ko-fi")) {
-            ConfirmLinkScreen.confirmLinkNow(screen, CosmeticsScreen.KOFI_URL)
+        buttons.add(IconButton(options.x - 24 - 24, options.y, UiIcons::jukz, Component.literal("jukz")) {
+            Minecraft.getInstance().openScreen(dev.jukz.client.gui.HubScreen(screen))
         })
     }
 

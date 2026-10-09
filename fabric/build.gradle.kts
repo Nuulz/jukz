@@ -43,6 +43,9 @@ dependencies {
     // The deterministic core. include() jar-in-jars it so it ships inside the mod.
     implementation(project(":core"))
     include(project(":core"))
+    // pane: Chromium off-screen, for the in-game browser (client/web). jar-in-jar like core.
+    implementation("com.github.Nuulz:pane:v0.1.0")
+    include("com.github.Nuulz:pane:v0.1.0")
 
     // Coroutines for the client join coordinator (runBlocking). fabric-language-kotlin ships the
     // same artifact at runtime; declaring it keeps it on the compile classpath.

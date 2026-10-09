@@ -27,3 +27,11 @@ stonecutter {
         vcsVersion = "1.21.1"
     }
 }
+
+// The in-game browser engine (github.com/Nuulz/pane). With a checkout next to this one, it builds from
+// there (edit both at once); otherwise JitPack's build of the version in fabric/build.gradle.kts.
+if (file("../pane").isDirectory) {
+    includeBuild("../pane") {
+        dependencySubstitution { substitute(module("com.github.Nuulz:pane")).using(project(":")) }
+    }
+}

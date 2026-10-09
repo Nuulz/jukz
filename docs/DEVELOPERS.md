@@ -132,6 +132,7 @@ for the implementation plan.
 |---|---|---|
 | `core` | The deterministic protocol heart, pure Kotlin, fully unit-tested | No |
 | `fabric` | Wires `core` into Minecraft 1.21.1, 1.21.11 and 26.2 via Fabric API + network adapters | Yes |
+| [`pane`](https://github.com/Nuulz/pane) (separate repo) | Chromium off-screen for the in-game browser (`client/web`): our own library on java-cef, jar-in-jar from JitPack. A checkout at `../pane` is built instead (settings.gradle.kts) | No |
 | `rendezvous-worker` | The production discovery backend at `jukz.nuulm.com` (Cloudflare Worker + Durable Objects + R2), see [`rendezvous-worker/README.md`](../rendezvous-worker/README.md) | No |
 
 Keeping `core` Minecraft-free means the hard logic (host election, fencing, handshake, registry,
